@@ -849,8 +849,8 @@ This implementation plan breaks down the Geoffrussy system into discrete, execut
 - [x] 34. Final Checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 35. Release Preparation
-  - [ ] 35.1 Run full test suite
+- [~] 35. Release Preparation
+  - [x] 35.1 Run full test suite
     - Unit tests
     - Property tests
     - Integration tests
@@ -877,13 +877,13 @@ This implementation plan breaks down the Geoffrussy system into discrete, execut
     - Test with high token usage
     - _Requirements: All_
   
-  - [ ] 35.4 Security audit
+  - [x] 35.4 Security audit
     - Review API key storage
     - Review error messages for sensitive data
     - Review logging for PII
     - _Requirements: 18.1-18.7_
   
-  - [ ] 35.5 Create release notes
+  - [x] 35.5 Create release notes
     - Document features
     - Document known issues
     - Document breaking changes
