@@ -62,6 +62,44 @@ func NewExecutor(store *state.Store, provider provider.Provider) *Executor {
 	}
 }
 
+// ExecuteProject executes all phases in a project
+func (e *Executor) ExecuteProject(projectID string, startPhaseID string, stopAfterPhase bool) error {
+	phaseID := startPhaseID
+
+	for {
+		if err := e.ExecutePhase(phaseID); err != nil {
+			return fmt.Errorf("failed to execute phase %s: %w", phaseID, err)
+		}
+
+		if stopAfterPhase {
+			break
+		}
+
+		phases, err := e.store.ListPhases(projectID)
+		if err != nil {
+			return fmt.Errorf("failed to list phases: %w", err)
+		}
+
+		nextPhaseFound := false
+		for _, p := range phases {
+			if p.ID == phaseID {
+				continue
+			}
+			if p.Status == state.PhaseNotStarted || p.Status == state.PhaseInProgress {
+				phaseID = p.ID
+				nextPhaseFound = true
+				break
+			}
+		}
+
+		if !nextPhaseFound {
+			break
+		}
+	}
+
+	return nil
+}
+
 // ExecutePhase executes all tasks in a phase
 func (e *Executor) ExecutePhase(phaseID string) error {
 	// Get phase from store

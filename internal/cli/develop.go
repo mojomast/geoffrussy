@@ -18,8 +18,9 @@ import (
 )
 
 var (
-	developModel string
-	developPhase string
+	developModel   string
+	developPhase   string
+	stopAfterPhase bool
 )
 
 var developCmd = &cobra.Command{
@@ -33,6 +34,7 @@ Handles detours and blockers automatically.`,
 func init() {
 	developCmd.Flags().StringVar(&developModel, "model", "", "Model to use for development")
 	developCmd.Flags().StringVar(&developPhase, "phase", "", "Specific phase ID to execute")
+	developCmd.Flags().BoolVar(&stopAfterPhase, "stop-after-phase", false, "Stop after completing current phase (default: continue to next phase)")
 }
 
 func runDevelop(cmd *cobra.Command, args []string) error {
@@ -131,9 +133,9 @@ func runDevelop(cmd *cobra.Command, args []string) error {
 		// Give the monitor a moment to start
 		time.Sleep(500 * time.Millisecond)
 
-		if err := exec.ExecutePhase(phaseID); err != nil {
+		if err := exec.ExecuteProject(projectID, phaseID, stopAfterPhase); err != nil {
 			// Errors are reported via the update channel usually,
-			// but we can also log here if needed or if ExecutePhase returns early
+			// but we can also log here if needed or if ExecuteProject returns early
 			// We can't easily log to stdout here because the TUI has taken over
 		}
 		// We might want to close the executor or signal completion here
