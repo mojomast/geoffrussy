@@ -23,7 +23,7 @@ func NewRequestyProvider() *RequestyProvider {
 		BaseProvider: NewBaseProvider("requesty"),
 		baseURL:      "https://router.requesty.ai/v1",
 		httpClient: &http.Client{
-			Timeout: 60 * time.Second,
+			Timeout: 300 * time.Second,
 		},
 	}
 }
