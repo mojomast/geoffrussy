@@ -71,27 +71,27 @@ This implementation plan breaks down the Geoffrussy system into discrete, execut
     - Implement retry with exponential backoff
     - _Requirements: 6.11, 20.1, 20.2_
   
-  - [~] 5.2 Implement OpenAI provider
+  - [x] 5.2 Implement OpenAI provider
     - Authenticate with API key
     - List available models
     - Make API calls with streaming support
     - Extract rate limit and quota information
     - _Requirements: 6.1, 6.15, 6.16_
   
-  - [~] 5.3 Implement Anthropic provider
+  - [x] 5.3 Implement Anthropic provider
     - Authenticate with API key
     - List available models
     - Make API calls with streaming support
     - Extract rate limit and quota information
     - _Requirements: 6.2, 6.15, 6.16_
   
-  - [~] 5.4 Implement Ollama provider
+  - [x] 5.4 Implement Ollama provider
     - Connect to local Ollama instance
     - List available models
     - Make API calls with streaming support
     - _Requirements: 6.3_
   
-  - [~] 5.5 Implement OpenCode provider with dynamic discovery
+  - [x] 5.5 Implement OpenCode provider with dynamic discovery
     - Figure out how to use opencode run to use opencode for tasks
     - Discover available models dynamically
     - ensure opencode run can be used instead of api calls when opencode provider is selected.
@@ -111,21 +111,21 @@ This implementation plan breaks down the Geoffrussy system into discrete, execut
     - Extract rate limit and quota information
     - _Requirements: 6.6, 6.15, 6.16_
   
-  - [~] 5.8 Implement Z.ai provider with coding plan support
+  - [x] 5.8 Implement Z.ai provider with coding plan support
     - Authenticate with API key
     - List available models
     - Make API calls with coding plan capabilities
     - Extract rate limit and quota information
     - _Requirements: 6.7, 6.15, 6.16_
   
-  - [~] 5.9 Implement Kimi provider with coding plan support
+  - [x] 5.9 Implement Kimi provider with coding plan support
     - Authenticate with API key
     - List available models
     - Make API calls with coding plan capabilities
     - Extract rate limit and quota information
     - _Requirements: 6.8, 6.15, 6.16_
   
-  - [~] 5.10 Implement API Bridge
+  - [x] 5.10 Implement API Bridge
     - Normalize responses from different providers
     - Handle provider selection
     - Validate models
