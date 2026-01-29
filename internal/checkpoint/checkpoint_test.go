@@ -18,8 +18,15 @@ func setupTestManager(t *testing.T) (*Manager, *state.Store, *git.Manager, strin
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
 
-	// Create in-memory store
-	store, err := state.NewStore(":memory:")
+	// Create data dir
+	dataDir := filepath.Join(tempDir, "data")
+	if err := os.MkdirAll(dataDir, 0755); err != nil {
+		t.Fatalf("failed to create data dir: %v", err)
+	}
+
+	// Create file-based store
+	dbPath := filepath.Join(dataDir, "state.db")
+	store, err := state.NewStore(dbPath)
 	if err != nil {
 		t.Fatalf("failed to create store: %v", err)
 	}
@@ -40,7 +47,7 @@ func setupTestManager(t *testing.T) (*Manager, *state.Store, *git.Manager, strin
 	}
 
 	// Create checkpoint manager
-	manager := NewManager(store, gitManager)
+	manager := NewManager(store, gitManager, dataDir)
 
 	return manager, store, gitManager, tempDir
 }
@@ -60,6 +67,10 @@ func TestNewManager(t *testing.T) {
 
 	if manager.gitManager == nil {
 		t.Error("expected git manager to be set")
+	}
+
+	if manager.dataDir == "" {
+		t.Error("expected dataDir to be set")
 	}
 }
 

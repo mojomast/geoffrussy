@@ -2,6 +2,7 @@ package resume
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -23,7 +24,8 @@ func TestDetectIncompleteWork(t *testing.T) {
 
 	// Create checkpoint manager
 	gitMgr := git.NewManager(".")
-	checkpointMgr := checkpoint.NewManager(store, gitMgr)
+	dataDir := filepath.Dir(tmpDB)
+	checkpointMgr := checkpoint.NewManager(store, gitMgr, dataDir)
 
 	// Create resume manager
 	mgr := NewManager(store, checkpointMgr)
@@ -73,7 +75,8 @@ func TestDetectCompleteWork(t *testing.T) {
 
 	// Create checkpoint manager
 	gitMgr := git.NewManager(".")
-	checkpointMgr := checkpoint.NewManager(store, gitMgr)
+	dataDir := filepath.Dir(tmpDB)
+	checkpointMgr := checkpoint.NewManager(store, gitMgr, dataDir)
 
 	// Create resume manager
 	mgr := NewManager(store, checkpointMgr)
@@ -119,7 +122,8 @@ func TestResume_FromCurrent(t *testing.T) {
 
 	// Create checkpoint manager
 	gitMgr := git.NewManager(".")
-	checkpointMgr := checkpoint.NewManager(store, gitMgr)
+	dataDir := filepath.Dir(tmpDB)
+	checkpointMgr := checkpoint.NewManager(store, gitMgr, dataDir)
 
 	// Create resume manager
 	mgr := NewManager(store, checkpointMgr)
@@ -172,7 +176,8 @@ func TestResume_RestartStage(t *testing.T) {
 
 	// Create checkpoint manager
 	gitMgr := git.NewManager(".")
-	checkpointMgr := checkpoint.NewManager(store, gitMgr)
+	dataDir := filepath.Dir(tmpDB)
+	checkpointMgr := checkpoint.NewManager(store, gitMgr, dataDir)
 
 	// Create resume manager
 	mgr := NewManager(store, checkpointMgr)
@@ -243,7 +248,8 @@ func TestGetResumeContext(t *testing.T) {
 
 	// Create checkpoint manager
 	gitMgr := git.NewManager(".")
-	checkpointMgr := checkpoint.NewManager(store, gitMgr)
+	dataDir := filepath.Dir(tmpDB)
+	checkpointMgr := checkpoint.NewManager(store, gitMgr, dataDir)
 
 	// Create resume manager
 	mgr := NewManager(store, checkpointMgr)
@@ -309,7 +315,8 @@ func TestDetermineNextAction(t *testing.T) {
 
 	// Create checkpoint manager
 	gitMgr := git.NewManager(".")
-	checkpointMgr := checkpoint.NewManager(store, gitMgr)
+	dataDir := filepath.Dir(tmpDB)
+	checkpointMgr := checkpoint.NewManager(store, gitMgr, dataDir)
 
 	// Create resume manager
 	mgr := NewManager(store, checkpointMgr)

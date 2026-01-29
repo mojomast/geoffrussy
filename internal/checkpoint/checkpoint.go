@@ -2,6 +2,8 @@ package checkpoint
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/mojomast/geoffrussy/internal/git"
@@ -12,13 +14,15 @@ import (
 type Manager struct {
 	store      *state.Store
 	gitManager *git.Manager
+	dataDir    string
 }
 
 // NewManager creates a new checkpoint manager
-func NewManager(store *state.Store, gitManager *git.Manager) *Manager {
+func NewManager(store *state.Store, gitManager *git.Manager, dataDir string) *Manager {
 	return &Manager{
 		store:      store,
 		gitManager: gitManager,
+		dataDir:    dataDir,
 	}
 }
 
@@ -26,18 +30,18 @@ func NewManager(store *state.Store, gitManager *git.Manager) *Manager {
 func (m *Manager) CreateCheckpoint(projectID, name string, metadata map[string]string) (*state.Checkpoint, error) {
 	// Generate checkpoint ID with nanosecond precision
 	checkpointID := fmt.Sprintf("checkpoint-%s-%d", projectID, time.Now().UnixNano())
-	
+
 	// Sanitize name for git tag (replace spaces and special characters)
 	sanitizedName := sanitizeTagName(name)
-	
+
 	// Create Git tag with unique suffix to avoid conflicts
 	tagName := fmt.Sprintf("checkpoint-%s-%d", sanitizedName, time.Now().UnixNano())
 	tagMessage := fmt.Sprintf("Checkpoint: %s", name)
-	
+
 	if err := m.gitManager.CreateTag(tagName, tagMessage); err != nil {
 		return nil, fmt.Errorf("failed to create git tag: %w", err)
 	}
-	
+
 	// Create checkpoint record
 	checkpoint := &state.Checkpoint{
 		ID:        checkpointID,
@@ -47,12 +51,19 @@ func (m *Manager) CreateCheckpoint(projectID, name string, metadata map[string]s
 		CreatedAt: time.Now(),
 		Metadata:  metadata,
 	}
-	
+
 	// Save checkpoint to store
 	if err := m.store.SaveCheckpoint(checkpoint); err != nil {
 		return nil, fmt.Errorf("failed to save checkpoint: %w", err)
 	}
-	
+
+	// Backup database state
+	backupPath := filepath.Join(m.dataDir, "checkpoints", checkpointID+".db")
+	if err := m.store.Backup(backupPath); err != nil {
+		// Log warning but don't fail, as checkpoint record and git tag are created
+		fmt.Printf("Warning: Failed to backup state database: %v\n", err)
+	}
+
 	return checkpoint, nil
 }
 
@@ -119,15 +130,23 @@ func (m *Manager) Rollback(checkpointID string) error {
 	if err != nil {
 		return fmt.Errorf("failed to get checkpoint: %w", err)
 	}
-	
+
+	// Restore database state
+	backupPath := filepath.Join(m.dataDir, "checkpoints", checkpointID+".db")
+	if _, err := os.Stat(backupPath); err == nil {
+		// Restore state
+		if err := m.store.Restore(backupPath); err != nil {
+			return fmt.Errorf("failed to restore state: %w", err)
+		}
+	} else {
+		fmt.Printf("Warning: State backup not found for checkpoint %s. Proceeding with partial rollback (git only).\n", checkpointID)
+	}
+
 	// Reset Git repository to the checkpoint tag
 	if err := m.gitManager.ResetToTag(checkpoint.GitTag); err != nil {
 		return fmt.Errorf("failed to reset git to tag %s: %w", checkpoint.GitTag, err)
 	}
-	
-	// Note: State store data is preserved even after rollback
-	// This allows us to maintain checkpoint history
-	
+
 	return nil
 }
 

@@ -1243,6 +1243,53 @@ func TestInterviewEngine_SummaryAndExport(t *testing.T) {
 	})
 }
 
+func TestSaveSession_ProjectName(t *testing.T) {
+	// Create temporary database
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+
+	store, err := state.NewStore(dbPath)
+	if err != nil {
+		t.Fatalf("Failed to create store: %v", err)
+	}
+	defer store.Close()
+
+	// Create test project with a specific name
+	projectName := "My Awesome Project"
+	project := &state.Project{
+		ID:           "test-project-id",
+		Name:         projectName,
+		CreatedAt:    time.Now(),
+		CurrentStage: state.StageInterview,
+	}
+	if err := store.CreateProject(project); err != nil {
+		t.Fatalf("Failed to create project: %v", err)
+	}
+
+	engine := NewEngine(store, nil, "")
+
+	// Start interview
+	session, err := engine.StartInterview(project.ID)
+	if err != nil {
+		t.Fatalf("Failed to start interview: %v", err)
+	}
+
+	// Save session
+	if err := engine.SaveSession(session); err != nil {
+		t.Fatalf("Failed to save session: %v", err)
+	}
+
+	// Retrieve InterviewData and check ProjectName
+	interviewData, err := store.GetInterviewData(project.ID)
+	if err != nil {
+		t.Fatalf("Failed to get interview data: %v", err)
+	}
+
+	if interviewData.ProjectName != projectName {
+		t.Errorf("Expected ProjectName to be %q, got %q", projectName, interviewData.ProjectName)
+	}
+}
+
 // Helper function to check if a string contains a substring
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) && containsHelper(s, substr))

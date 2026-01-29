@@ -167,14 +167,46 @@ func (s *Store) ListAllPhaseProgress(projectID string) ([]*PhaseProgress, error)
 		return nil, fmt.Errorf("failed to list phases: %w", err)
 	}
 
+	// Get all tasks for the project in one query
+	tasks, err := s.ListProjectTasks(projectID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list project tasks: %w", err)
+	}
+
+	// Group tasks by phase ID
+	tasksByPhase := make(map[string][]Task)
+	for _, task := range tasks {
+		tasksByPhase[task.PhaseID] = append(tasksByPhase[task.PhaseID], task)
+	}
+
 	var progressList []*PhaseProgress
 
 	for _, phase := range phases {
-		progress, err := s.GetPhaseProgress(phase.ID)
-		if err != nil {
-			// Skip phases we can't calculate progress for
-			continue
+		phaseTasks := tasksByPhase[phase.ID]
+
+		progress := &PhaseProgress{
+			PhaseID:     phase.ID,
+			PhaseNumber: phase.Number,
+			PhaseTitle:  phase.Title,
+			Status:      phase.Status,
+			TotalTasks:  len(phaseTasks),
 		}
+
+		for _, task := range phaseTasks {
+			switch task.Status {
+			case TaskCompleted:
+				progress.CompletedTasks++
+			case TaskInProgress:
+				progress.InProgressTasks++
+			case TaskBlocked:
+				progress.BlockedTasks++
+			}
+		}
+
+		if progress.TotalTasks > 0 {
+			progress.Percentage = float64(progress.CompletedTasks) / float64(progress.TotalTasks) * 100
+		}
+
 		progressList = append(progressList, progress)
 	}
 
