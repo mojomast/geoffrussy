@@ -140,7 +140,7 @@ func TestExecutor_SkipTask(t *testing.T) {
 		ProjectID: project.ID,
 		Number:    1,
 		Title:     "Test Phase",
-		Status:    "pending",
+		Status:    state.PhaseNotStarted,
 		CreatedAt: time.Now(),
 	}
 	if err := store.SavePhase(phase); err != nil {
@@ -153,7 +153,7 @@ func TestExecutor_SkipTask(t *testing.T) {
 		PhaseID:     phase.ID,
 		Number:      "1.1",
 		Description: "Test Task",
-		Status:      "pending",
+		Status:      state.TaskNotStarted,
 	}
 	if err := store.SaveTask(task); err != nil {
 		t.Fatalf("failed to save task: %v", err)
@@ -170,8 +170,8 @@ func TestExecutor_SkipTask(t *testing.T) {
 		t.Fatalf("failed to get task: %v", err)
 	}
 
-	if updatedTask.Status != "skipped" {
-		t.Errorf("expected task status to be 'skipped', got %s", updatedTask.Status)
+	if updatedTask.Status != state.TaskSkipped {
+		t.Errorf("expected task status to be '%s', got %s", state.TaskSkipped, updatedTask.Status)
 	}
 }
 
@@ -196,7 +196,7 @@ func TestExecutor_MarkBlocked(t *testing.T) {
 		ProjectID: project.ID,
 		Number:    1,
 		Title:     "Test Phase",
-		Status:    "pending",
+		Status:    state.PhaseNotStarted,
 		CreatedAt: time.Now(),
 	}
 	if err := store.SavePhase(phase); err != nil {
@@ -209,7 +209,7 @@ func TestExecutor_MarkBlocked(t *testing.T) {
 		PhaseID:     phase.ID,
 		Number:      "1.1",
 		Description: "Test Task",
-		Status:      "in_progress",
+		Status:      state.TaskInProgress,
 	}
 	if err := store.SaveTask(task); err != nil {
 		t.Fatalf("failed to save task: %v", err)
@@ -227,8 +227,8 @@ func TestExecutor_MarkBlocked(t *testing.T) {
 		t.Fatalf("failed to get task: %v", err)
 	}
 
-	if updatedTask.Status != "blocked" {
-		t.Errorf("expected task status to be 'blocked', got %s", updatedTask.Status)
+	if updatedTask.Status != state.TaskBlocked {
+		t.Errorf("expected task status to be '%s', got %s", state.TaskBlocked, updatedTask.Status)
 	}
 
 	// Verify blocker was created
@@ -271,7 +271,7 @@ func TestExecutor_ResolveBlocker(t *testing.T) {
 		ProjectID: project.ID,
 		Number:    1,
 		Title:     "Test Phase",
-		Status:    "pending",
+		Status:    state.PhaseNotStarted,
 		CreatedAt: time.Now(),
 	}
 	if err := store.SavePhase(phase); err != nil {
@@ -284,7 +284,7 @@ func TestExecutor_ResolveBlocker(t *testing.T) {
 		PhaseID:     phase.ID,
 		Number:      "1.1",
 		Description: "Test Task",
-		Status:      "blocked",
+		Status:      state.TaskBlocked,
 	}
 	if err := store.SaveTask(task); err != nil {
 		t.Fatalf("failed to save task: %v", err)
@@ -313,8 +313,8 @@ func TestExecutor_ResolveBlocker(t *testing.T) {
 		t.Fatalf("failed to get task: %v", err)
 	}
 
-	if updatedTask.Status != "pending" {
-		t.Errorf("expected task status to be 'pending', got %s", updatedTask.Status)
+	if updatedTask.Status != state.TaskNotStarted {
+		t.Errorf("expected task status to be '%s', got %s", state.TaskNotStarted, updatedTask.Status)
 	}
 
 	// Verify blocker was resolved
@@ -349,7 +349,7 @@ func TestExecutor_ExecuteTask(t *testing.T) {
 		ProjectID: project.ID,
 		Number:    1,
 		Title:     "Test Phase",
-		Status:    "pending",
+		Status:    state.PhaseNotStarted,
 		CreatedAt: time.Now(),
 	}
 	if err := store.SavePhase(phase); err != nil {
@@ -362,7 +362,7 @@ func TestExecutor_ExecuteTask(t *testing.T) {
 		PhaseID:     phase.ID,
 		Number:      "1.1",
 		Description: "Test Task",
-		Status:      "pending",
+		Status:      state.TaskNotStarted,
 	}
 	if err := store.SaveTask(task); err != nil {
 		t.Fatalf("failed to save task: %v", err)
@@ -403,8 +403,8 @@ done:
 		t.Fatalf("failed to get task: %v", err)
 	}
 
-	if updatedTask.Status != "completed" {
-		t.Errorf("expected task status to be 'completed', got %s", updatedTask.Status)
+	if updatedTask.Status != state.TaskCompleted {
+		t.Errorf("expected task status to be '%s', got %s", state.TaskCompleted, updatedTask.Status)
 	}
 }
 
@@ -429,11 +429,23 @@ func TestExecutor_ExecutePhase(t *testing.T) {
 		ProjectID: project.ID,
 		Number:    1,
 		Title:     "Test Phase",
-		Status:    "pending",
+		Status:    state.PhaseNotStarted,
 		CreatedAt: time.Now(),
 	}
 	if err := store.SavePhase(phase); err != nil {
 		t.Fatalf("failed to save phase: %v", err)
+	}
+
+	// Create a task for the phase so ExecutePhase has something to do
+	task := &state.Task{
+		ID:          "task-1",
+		PhaseID:     phase.ID,
+		Number:      "1.1",
+		Description: "Test Task",
+		Status:      state.TaskNotStarted,
+	}
+	if err := store.SaveTask(task); err != nil {
+		t.Fatalf("failed to save task: %v", err)
 	}
 
 	// Execute the phase
@@ -471,7 +483,7 @@ done:
 		t.Fatalf("failed to get phase: %v", err)
 	}
 
-	if updatedPhase.Status != "completed" {
-		t.Errorf("expected phase status to be 'completed', got %s", updatedPhase.Status)
+	if updatedPhase.Status != state.PhaseCompleted {
+		t.Errorf("expected phase status to be '%s', got %s", state.PhaseCompleted, updatedPhase.Status)
 	}
 }
