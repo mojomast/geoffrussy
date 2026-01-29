@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
-	"time"
 
 	"github.com/mojomast/geoffrussy/internal/blocker"
 	"github.com/mojomast/geoffrussy/internal/state"
@@ -249,21 +247,3 @@ func formatStage(stage state.Stage) string {
 	}
 }
 
-func formatDuration(d time.Duration) string {
-	days := int(d.Hours() / 24)
-	hours := int(d.Hours()) % 24
-	minutes := int(d.Minutes()) % 60
-
-	var parts []string
-	if days > 0 {
-		parts = append(parts, fmt.Sprintf("%dd", days))
-	}
-	if hours > 0 || days > 0 {
-		parts = append(parts, fmt.Sprintf("%dh", hours))
-	}
-	if minutes > 0 || len(parts) == 0 {
-		parts = append(parts, fmt.Sprintf("%dm", minutes))
-	}
-
-	return strings.Join(parts, " ")
-}
