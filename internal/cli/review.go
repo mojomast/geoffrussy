@@ -186,29 +186,30 @@ func convertStatePhasesToDevplan(statePhases []*state.Phase) ([]devplan.Phase, e
 }
 
 func formatPhaseContent(phase *devplan.Phase) string {
-	content := fmt.Sprintf("# Phase %d: %s\n\n", phase.Number, phase.Title)
-	content += fmt.Sprintf("## Objective\n\n%s\n\n", phase.Objective)
+	var sb strings.Builder
+	fmt.Fprintf(&sb, "# Phase %d: %s\n\n", phase.Number, phase.Title)
+	fmt.Fprintf(&sb, "## Objective\n\n%s\n\n", phase.Objective)
 	if len(phase.SuccessCriteria) > 0 {
-		content += "## Success Criteria\n\n"
+		sb.WriteString("## Success Criteria\n\n")
 		for _, sc := range phase.SuccessCriteria {
-			content += fmt.Sprintf("- %s\n", sc)
+			fmt.Fprintf(&sb, "- %s\n", sc)
 		}
-		content += "\n"
+		sb.WriteString("\n")
 	}
 	if len(phase.Tasks) > 0 {
-		content += "## Tasks\n\n"
+		sb.WriteString("## Tasks\n\n")
 		for _, task := range phase.Tasks {
-			content += fmt.Sprintf("### %s: %s\n\n", task.Number, task.Description)
+			fmt.Fprintf(&sb, "### %s: %s\n\n", task.Number, task.Description)
 			if len(task.AcceptanceCriteria) > 0 {
-				content += "**Acceptance Criteria:**\n"
+				sb.WriteString("**Acceptance Criteria:**\n")
 				for _, ac := range task.AcceptanceCriteria {
-					content += fmt.Sprintf("- %s\n", ac)
+					fmt.Fprintf(&sb, "- %s\n", ac)
 				}
-				content += "\n"
+				sb.WriteString("\n")
 			}
 		}
 	}
-	return content
+	return sb.String()
 }
 
 func getProviderAndModel(cfgMgr *config.Manager, stage, overrideModel string) (string, string, error) {
