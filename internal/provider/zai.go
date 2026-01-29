@@ -23,9 +23,9 @@ type ZAIProvider struct {
 func NewZAIProvider() *ZAIProvider {
 	return &ZAIProvider{
 		BaseProvider: NewBaseProvider("zai"),
-		baseURL:      "https://api.z.ai/v1",
+		baseURL:      "https://api.z.ai/api/paas/v4",
 		httpClient: &http.Client{
-			Timeout: 120 * time.Second,
+			Timeout: 300 * time.Second,
 		},
 	}
 }
@@ -96,23 +96,31 @@ func (z *ZAIProvider) ListModels() ([]Model, error) {
 		return nil, fmt.Errorf("provider not authenticated")
 	}
 
-	// Z.ai has a limited set of known models
+	// Z.ai available models (updated with GLM-4.7 and GLM-4.6V)
 	models := []Model{
 		{
 			Provider:     "z.ai",
-			Name:         "z-coder-v1",
-			DisplayName:  "Z Coder v1",
+			Name:         "glm-4.7",
+			DisplayName:  "GLM-4.7",
 			Capabilities: []string{"text", "code", "streaming", "coding-plan"},
-			PriceInput:   2.0, // Example pricing
-			PriceOutput:  10.0,
+			PriceInput:   0.0005,
+			PriceOutput:  0.0015,
 		},
 		{
 			Provider:     "z.ai",
-			Name:         "z-coder-v1-turbo",
-			DisplayName:  "Z Coder v1 Turbo",
+			Name:         "glm-4.6",
+			DisplayName:  "GLM-4.6",
 			Capabilities: []string{"text", "code", "streaming", "coding-plan"},
-			PriceInput:   1.0,
-			PriceOutput:  5.0,
+			PriceInput:   0.0006,
+			PriceOutput:  0.0022,
+		},
+		{
+			Provider:     "z.ai",
+			Name:         "glm-4.6v",
+			DisplayName:  "GLM-4.6V (Multimodal)",
+			Capabilities: []string{"text", "code", "streaming", "vision"},
+			PriceInput:   0.0008,
+			PriceOutput:  0.0028,
 		},
 	}
 
@@ -281,7 +289,7 @@ func (z *ZAIProvider) GetRateLimitInfo() (*RateLimitInfo, error) {
 
 	// Make a minimal request to get rate limit headers
 	req := zaiRequest{
-		Model: "z-coder-v1-turbo",
+		Model: "glm-4.7",
 		Messages: []zaiMessage{
 			{
 				Role:    "user",
@@ -348,7 +356,7 @@ func (z *ZAIProvider) GetQuotaInfo() (*QuotaInfo, error) {
 
 	// Make a minimal request to get quota headers
 	req := zaiRequest{
-		Model: "z-coder-v1-turbo",
+		Model: "glm-4.7",
 		Messages: []zaiMessage{
 			{
 				Role:    "user",
