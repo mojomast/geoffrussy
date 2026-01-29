@@ -487,7 +487,16 @@ func (e *Engine) ExportToJSON(session *InterviewSession) (string, error) {
 	
 	data := make(map[string]interface{})
 	data["project_id"] = session.ProjectID
-	data["project_name"] = session.ProjectID // TODO: Get actual project name
+
+	// Get actual project name
+	projectName := session.ProjectID
+	if e.store != nil {
+		if project, err := e.store.GetProject(session.ProjectID); err == nil {
+			projectName = project.Name
+		}
+	}
+	data["project_name"] = projectName
+
 	data["started_at"] = session.StartedAt
 	data["completed_at"] = time.Now()
 	data["is_complete"] = isComplete
@@ -671,16 +680,16 @@ func (e *Engine) SaveSession(session *InterviewSession) error {
 		return fmt.Errorf("failed to marshal session: %w", err)
 	}
 	
-	// Retrieve project to get the actual name
-	project, err := e.store.GetProject(session.ProjectID)
-	if err != nil {
-		return fmt.Errorf("failed to get project: %w", err)
+	// Get actual project name
+	projectName := session.ProjectID
+	if project, err := e.store.GetProject(session.ProjectID); err == nil {
+		projectName = project.Name
 	}
 
 	// Convert session to InterviewData format for storage
 	interviewData := &state.InterviewData{
 		ProjectID:   session.ProjectID,
-		ProjectName: project.Name,
+		ProjectName: projectName,
 		CreatedAt:   session.StartedAt,
 		RawSession:  string(sessionJSON), // Store the full session as JSON
 	}
