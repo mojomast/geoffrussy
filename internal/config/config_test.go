@@ -604,3 +604,71 @@ func TestValidateAPIKey(t *testing.T) {
 		t.Error("Expected validation error")
 	}
 }
+
+func TestFavoriteModels(t *testing.T) {
+	m := NewManager()
+
+	// Initial state
+	if len(m.GetFavoriteModels()) != 0 {
+		t.Error("Expected no favorite models initially")
+	}
+
+	// Add favorites
+	m.AddFavoriteModel("gpt-4")
+	m.AddFavoriteModel("claude-3-opus")
+
+	favorites := m.GetFavoriteModels()
+	if len(favorites) != 2 {
+		t.Errorf("Expected 2 favorite models, got %d", len(favorites))
+	}
+
+	if !m.IsFavoriteModel("gpt-4") {
+		t.Error("Expected gpt-4 to be a favorite")
+	}
+
+	if !m.IsFavoriteModel("claude-3-opus") {
+		t.Error("Expected claude-3-opus to be a favorite")
+	}
+
+	// Add duplicate (should be ignored)
+	m.AddFavoriteModel("gpt-4")
+	if len(m.GetFavoriteModels()) != 2 {
+		t.Error("Expected duplicate model not to be added")
+	}
+
+	// Remove favorite
+	m.RemoveFavoriteModel("gpt-4")
+	if len(m.GetFavoriteModels()) != 1 {
+		t.Error("Expected 1 favorite model after removal")
+	}
+	if m.IsFavoriteModel("gpt-4") {
+		t.Error("Expected gpt-4 to no longer be a favorite")
+	}
+
+	// Remove non-existent (should error)
+	err := m.RemoveFavoriteModel("nonexistent")
+	if err == nil {
+		t.Error("Expected error when removing non-existent model")
+	}
+
+	// Test persistence
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "config.yaml")
+	m.config.ConfigPath = configPath
+
+	if err := m.Save(); err != nil {
+		t.Fatalf("Failed to save config: %v", err)
+	}
+
+	m2 := NewManager()
+	if err := m2.loadFromFile(configPath); err != nil {
+		t.Fatalf("Failed to load config: %v", err)
+	}
+
+	if len(m2.GetFavoriteModels()) != 1 {
+		t.Errorf("Expected 1 favorite model after load, got %d", len(m2.GetFavoriteModels()))
+	}
+	if !m2.IsFavoriteModel("claude-3-opus") {
+		t.Error("Expected persisted favorite model to be loaded")
+	}
+}

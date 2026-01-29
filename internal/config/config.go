@@ -13,6 +13,7 @@ import (
 type Config struct {
 	APIKeys        map[string]string `yaml:"api_keys"`
 	DefaultModels  map[string]string `yaml:"default_models"`
+	FavoriteModels []string          `yaml:"favorite_models"`
 	BudgetLimit    float64           `yaml:"budget_limit"`
 	VerboseLogging bool              `yaml:"verbose_logging"`
 	ConfigPath     string            `yaml:"-"` // Not serialized
@@ -33,8 +34,9 @@ type APIKeyValidator interface {
 func NewManager() *Manager {
 	return &Manager{
 		config: &Config{
-			APIKeys:       make(map[string]string),
-			DefaultModels: make(map[string]string),
+			APIKeys:        make(map[string]string),
+			DefaultModels:  make(map[string]string),
+			FavoriteModels: []string{},
 		},
 		validator: nil, // Will be set when provider system is implemented
 	}
@@ -110,6 +112,9 @@ func (m *Manager) loadFromFile(path string) error {
 				m.config.DefaultModels[k] = v
 			}
 		}
+	}
+	if fileConfig.FavoriteModels != nil {
+		m.config.FavoriteModels = fileConfig.FavoriteModels
 	}
 	if fileConfig.BudgetLimit > 0 {
 		m.config.BudgetLimit = fileConfig.BudgetLimit
@@ -319,6 +324,65 @@ func (m *Manager) SetDefaultModel(stage, model string) error {
 	}
 	m.config.DefaultModels[stage] = model
 	return nil
+}
+
+// AddFavoriteModel adds a model to the favorites list
+func (m *Manager) AddFavoriteModel(model string) error {
+	if model == "" {
+		return fmt.Errorf("model cannot be empty")
+	}
+
+	// Check if already exists
+	for _, m := range m.config.FavoriteModels {
+		if m == model {
+			return nil // Already a favorite
+		}
+	}
+
+	m.config.FavoriteModels = append(m.config.FavoriteModels, model)
+	return nil
+}
+
+// RemoveFavoriteModel removes a model from the favorites list
+func (m *Manager) RemoveFavoriteModel(model string) error {
+	if model == "" {
+		return fmt.Errorf("model cannot be empty")
+	}
+
+	newFavorites := []string{}
+	found := false
+	for _, fav := range m.config.FavoriteModels {
+		if fav == model {
+			found = true
+			continue
+		}
+		newFavorites = append(newFavorites, fav)
+	}
+
+	if !found {
+		return fmt.Errorf("model not found in favorites: %s", model)
+	}
+
+	m.config.FavoriteModels = newFavorites
+	return nil
+}
+
+// IsFavoriteModel checks if a model is in the favorites list
+func (m *Manager) IsFavoriteModel(model string) bool {
+	for _, fav := range m.config.FavoriteModels {
+		if fav == model {
+			return true
+		}
+	}
+	return false
+}
+
+// GetFavoriteModels returns the list of favorite models
+func (m *Manager) GetFavoriteModels() []string {
+	// Return a copy to prevent mutation
+	favorites := make([]string, len(m.config.FavoriteModels))
+	copy(favorites, m.config.FavoriteModels)
+	return favorites
 }
 
 // GetConfigPath returns the path to the config file

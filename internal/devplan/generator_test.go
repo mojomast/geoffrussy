@@ -137,6 +137,38 @@ func TestDevPlanGenerator(t *testing.T) {
 		}
 	})
 
+	t.Run("GeneratePhases_WithCoT", func(t *testing.T) {
+		mockResponseCoT := `
+<scratchpad>
+Thinking about the architecture...
+1. Database layer needs to be first.
+2. Then API.
+</scratchpad>
+
+[
+  {
+    "number": 0,
+    "title": "Setup",
+    "objective": "Init",
+    "success_criteria": ["Done"],
+    "dependencies": [],
+    "tasks": [{"number": "0.1", "description": "Task", "acceptance_criteria": [], "implementation_notes": []}]
+  }
+]
+`
+		mockProviderCoT := &MockProvider{response: mockResponseCoT}
+		generatorCoT := NewGenerator(mockProviderCoT, "test-model")
+
+		phases, err := generatorCoT.GeneratePhases(architecture, interviewData)
+		if err != nil {
+			t.Fatalf("Failed to generate phases with CoT: %v", err)
+		}
+
+		if len(phases) != 1 {
+			t.Errorf("Expected 1 phase, got %d", len(phases))
+		}
+	})
+
 	t.Run("GeneratePhases_InvalidJSON", func(t *testing.T) {
 		// Create a generator with a provider that returns invalid JSON
 		invalidJSONProvider := &MockProvider{response: "This is not JSON"}
