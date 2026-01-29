@@ -1,0 +1,242 @@
+package state
+
+import (
+	"fmt"
+	"time"
+)
+
+// ProgressStats represents overall project progress statistics
+type ProgressStats struct {
+	// Overall stats
+	TotalPhases      int
+	CompletedPhases  int
+	InProgressPhases int
+	BlockedPhases    int
+	PendingPhases    int
+
+	TotalTasks      int
+	CompletedTasks  int
+	InProgressTasks int
+	BlockedTasks    int
+	SkippedTasks    int
+	PendingTasks    int
+
+	// Progress percentage
+	CompletionPercentage float64
+
+	// Time tracking
+	StartedAt         time.Time
+	ElapsedTime       time.Duration
+	EstimatedRemaining time.Duration
+
+	// Current state
+	CurrentStage   Stage
+	CurrentPhaseID string
+}
+
+// PhaseProgress represents progress for a single phase
+type PhaseProgress struct {
+	PhaseID         string
+	PhaseNumber     int
+	PhaseTitle      string
+	Status          PhaseStatus
+	TotalTasks      int
+	CompletedTasks  int
+	InProgressTasks int
+	BlockedTasks    int
+	Percentage      float64
+}
+
+// CalculateProgress calculates overall project progress
+func (s *Store) CalculateProgress(projectID string) (*ProgressStats, error) {
+	// Get project
+	project, err := s.GetProject(projectID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get project: %w", err)
+	}
+
+	stats := &ProgressStats{
+		CurrentStage:   project.CurrentStage,
+		CurrentPhaseID: project.CurrentPhase,
+		StartedAt:      project.CreatedAt,
+		ElapsedTime:    time.Since(project.CreatedAt),
+	}
+
+	// Get all phases for the project
+	phases, err := s.ListPhases(projectID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list phases: %w", err)
+	}
+
+	stats.TotalPhases = len(phases)
+
+	// Count phases by status
+	for _, phase := range phases {
+		switch phase.Status {
+		case PhaseCompleted:
+			stats.CompletedPhases++
+		case PhaseInProgress:
+			stats.InProgressPhases++
+		case PhaseBlocked:
+			stats.BlockedPhases++
+		case PhaseNotStarted:
+			stats.PendingPhases++
+		}
+
+		// Get tasks for this phase
+		tasks, err := s.ListTasks(phase.ID)
+		if err != nil {
+			continue // Skip if can't get tasks
+		}
+
+		stats.TotalTasks += len(tasks)
+
+		for _, task := range tasks {
+			switch task.Status {
+			case TaskCompleted:
+				stats.CompletedTasks++
+			case TaskInProgress:
+				stats.InProgressTasks++
+			case TaskBlocked:
+				stats.BlockedTasks++
+			case TaskSkipped:
+				stats.SkippedTasks++
+			case TaskNotStarted:
+				stats.PendingTasks++
+			}
+		}
+	}
+
+	// Calculate completion percentage
+	if stats.TotalTasks > 0 {
+		stats.CompletionPercentage = float64(stats.CompletedTasks) / float64(stats.TotalTasks) * 100
+	}
+
+	// Estimate remaining time based on completion rate
+	if stats.CompletedTasks > 0 && stats.CompletionPercentage > 0 {
+		avgTimePerTask := stats.ElapsedTime / time.Duration(stats.CompletedTasks)
+		remainingTasks := stats.TotalTasks - stats.CompletedTasks
+		stats.EstimatedRemaining = avgTimePerTask * time.Duration(remainingTasks)
+	}
+
+	return stats, nil
+}
+
+// GetPhaseProgress gets progress for a specific phase
+func (s *Store) GetPhaseProgress(phaseID string) (*PhaseProgress, error) {
+	phase, err := s.GetPhase(phaseID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get phase: %w", err)
+	}
+
+	tasks, err := s.ListTasks(phaseID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list tasks: %w", err)
+	}
+
+	progress := &PhaseProgress{
+		PhaseID:     phase.ID,
+		PhaseNumber: phase.Number,
+		PhaseTitle:  phase.Title,
+		Status:      phase.Status,
+		TotalTasks:  len(tasks),
+	}
+
+	for _, task := range tasks {
+		switch task.Status {
+		case TaskCompleted:
+			progress.CompletedTasks++
+		case TaskInProgress:
+			progress.InProgressTasks++
+		case TaskBlocked:
+			progress.BlockedTasks++
+		}
+	}
+
+	if progress.TotalTasks > 0 {
+		progress.Percentage = float64(progress.CompletedTasks) / float64(progress.TotalTasks) * 100
+	}
+
+	return progress, nil
+}
+
+// ListAllPhaseProgress gets progress for all phases in a project
+func (s *Store) ListAllPhaseProgress(projectID string) ([]*PhaseProgress, error) {
+	phases, err := s.ListPhases(projectID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list phases: %w", err)
+	}
+
+	var progressList []*PhaseProgress
+
+	for _, phase := range phases {
+		progress, err := s.GetPhaseProgress(phase.ID)
+		if err != nil {
+			// Skip phases we can't calculate progress for
+			continue
+		}
+		progressList = append(progressList, progress)
+	}
+
+	return progressList, nil
+}
+
+// FilterProgress filters progress by phase or component
+type ProgressFilter struct {
+	PhaseID      string
+	PhaseNumbers []int
+	StatusFilter []PhaseStatus
+}
+
+// GetFilteredProgress gets progress with filters applied
+func (s *Store) GetFilteredProgress(projectID string, filter *ProgressFilter) ([]*PhaseProgress, error) {
+	allProgress, err := s.ListAllPhaseProgress(projectID)
+	if err != nil {
+		return nil, err
+	}
+
+	if filter == nil {
+		return allProgress, nil
+	}
+
+	var filtered []*PhaseProgress
+
+	for _, progress := range allProgress {
+		// Filter by phase ID
+		if filter.PhaseID != "" && progress.PhaseID != filter.PhaseID {
+			continue
+		}
+
+		// Filter by phase numbers
+		if len(filter.PhaseNumbers) > 0 {
+			found := false
+			for _, num := range filter.PhaseNumbers {
+				if progress.PhaseNumber == num {
+					found = true
+					break
+				}
+			}
+			if !found {
+				continue
+			}
+		}
+
+		// Filter by status
+		if len(filter.StatusFilter) > 0 {
+			found := false
+			for _, status := range filter.StatusFilter {
+				if progress.Status == status {
+					found = true
+					break
+				}
+			}
+			if !found {
+				continue
+			}
+		}
+
+		filtered = append(filtered, progress)
+	}
+
+	return filtered, nil
+}

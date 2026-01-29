@@ -262,12 +262,37 @@ func (m *Manager) SetRepoPath(path string) error {
 	if err != nil {
 		return fmt.Errorf("failed to get absolute path: %w", err)
 	}
-	
+
 	// Check if directory exists
 	if _, err := os.Stat(absPath); os.IsNotExist(err) {
 		return fmt.Errorf("directory does not exist: %s", absPath)
 	}
-	
+
 	m.repoPath = absPath
 	return nil
+}
+
+// CommitAll stages all changes and commits them
+func (m *Manager) CommitAll(message string, metadata map[string]string) error {
+	// Stage all changes
+	cmd := exec.Command("git", "add", "-A")
+	cmd.Dir = m.repoPath
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to stage all changes: %w\nOutput: %s", err, string(output))
+	}
+
+	// Check if there's anything to commit
+	hasChanges, err := m.HasUncommittedChanges()
+	if err != nil {
+		return fmt.Errorf("failed to check for uncommitted changes: %w", err)
+	}
+
+	if !hasChanges {
+		// Nothing to commit, return success
+		return nil
+	}
+
+	// Commit the changes
+	return m.Commit(message, metadata)
 }

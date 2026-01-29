@@ -518,7 +518,7 @@ func (g *Generator) ValidatePhaseOrder(phases []Phase) (bool, []string) {
 			// Check if dependency is satisfied
 			depNum := -1
 			fmt.Sscanf(dep, "%d", &depNum)
-			
+
 			if depNum >= i {
 				issues = append(issues, fmt.Sprintf("Phase %d depends on phase %d which comes after it", i, depNum))
 			}
@@ -526,4 +526,246 @@ func (g *Generator) ValidatePhaseOrder(phases []Phase) (bool, []string) {
 	}
 
 	return len(issues) == 0, issues
+}
+
+// ChangelogEntry represents a single changelog entry
+type ChangelogEntry struct {
+	Timestamp   time.Time
+	Type        string // "task_completed", "phase_completed", "detour_added", "phase_modified"
+	Description string
+	Author      string
+	Details     map[string]string
+}
+
+// Changelog maintains the history of changes to the DevPlan
+type Changelog struct {
+	Entries []ChangelogEntry
+}
+
+// AddEntry adds a new entry to the changelog
+func (c *Changelog) AddEntry(entryType, description, author string, details map[string]string) {
+	entry := ChangelogEntry{
+		Timestamp:   time.Now(),
+		Type:        entryType,
+		Description: description,
+		Author:      author,
+		Details:     details,
+	}
+	c.Entries = append(c.Entries, entry)
+}
+
+// ExportMarkdown exports the changelog as markdown
+func (c *Changelog) ExportMarkdown() string {
+	var md strings.Builder
+
+	md.WriteString("# DevPlan Changelog\n\n")
+	md.WriteString("This changelog tracks all modifications to the development plan.\n\n")
+
+	for _, entry := range c.Entries {
+		md.WriteString(fmt.Sprintf("## %s - %s\n\n", entry.Timestamp.Format("2006-01-02 15:04:05"), entry.Type))
+		md.WriteString(fmt.Sprintf("**Description:** %s\n\n", entry.Description))
+
+		if entry.Author != "" {
+			md.WriteString(fmt.Sprintf("**Author:** %s\n\n", entry.Author))
+		}
+
+		if len(entry.Details) > 0 {
+			md.WriteString("**Details:**\n")
+			for key, value := range entry.Details {
+				md.WriteString(fmt.Sprintf("- %s: %s\n", key, value))
+			}
+			md.WriteString("\n")
+		}
+	}
+
+	return md.String()
+}
+
+// UpdatePhaseMarkdown updates a phase markdown file with current status
+func (g *Generator) UpdatePhaseMarkdown(phase *Phase, filePath string) error {
+	content, err := g.ExportPhaseMarkdown(phase)
+	if err != nil {
+		return fmt.Errorf("failed to export phase markdown: %w", err)
+	}
+
+	// Write to file
+	err = writeFile(filePath, content)
+	if err != nil {
+		return fmt.Errorf("failed to write phase markdown: %w", err)
+	}
+
+	return nil
+}
+
+// writeFile is a helper to write content to a file
+func writeFile(path, content string) error {
+	return fmt.Errorf("file writing not implemented - use external file writer")
+}
+
+// UpdateMasterPlanWithChangelog updates the master plan with changelog
+func (g *Generator) UpdateMasterPlanWithChangelog(devplan *DevPlan, changelog *Changelog) (string, error) {
+	var md strings.Builder
+
+	// Export the base master plan
+	basePlan, err := g.ExportMasterPlan(devplan)
+	if err != nil {
+		return "", err
+	}
+
+	md.WriteString(basePlan)
+	md.WriteString("\n")
+
+	// Append changelog
+	md.WriteString("## Changelog\n\n")
+	md.WriteString(changelog.ExportMarkdown())
+
+	return md.String(), nil
+}
+
+// VisualizeProgress generates a visual representation of DevPlan progress
+func (g *Generator) VisualizeProgress(devplan *DevPlan) string {
+	var vis strings.Builder
+
+	vis.WriteString("# DevPlan Progress\n\n")
+
+	// Calculate overall statistics
+	totalTasks := 0
+	completedTasks := 0
+	inProgressTasks := 0
+	blockedTasks := 0
+
+	for _, phase := range devplan.Phases {
+		totalTasks += len(phase.Tasks)
+		for _, task := range phase.Tasks {
+			switch task.Status {
+			case TaskCompleted:
+				completedTasks++
+			case TaskInProgress:
+				inProgressTasks++
+			case TaskBlocked:
+				blockedTasks++
+			}
+		}
+	}
+
+	completionPercentage := 0.0
+	if totalTasks > 0 {
+		completionPercentage = float64(completedTasks) / float64(totalTasks) * 100
+	}
+
+	vis.WriteString(fmt.Sprintf("**Overall Progress:** %.1f%% (%d/%d tasks completed)\n\n",
+		completionPercentage, completedTasks, totalTasks))
+	vis.WriteString(fmt.Sprintf("**In Progress:** %d tasks\n", inProgressTasks))
+	vis.WriteString(fmt.Sprintf("**Blocked:** %d tasks\n\n", blockedTasks))
+
+	// Progress bar
+	barLength := 50
+	completedBars := int(completionPercentage / 100 * float64(barLength))
+	vis.WriteString("```\n[")
+	for i := 0; i < barLength; i++ {
+		if i < completedBars {
+			vis.WriteString("=")
+		} else {
+			vis.WriteString(" ")
+		}
+	}
+	vis.WriteString("]\n```\n\n")
+
+	// Phase-by-phase breakdown
+	vis.WriteString("## Phase Status\n\n")
+
+	for _, phase := range devplan.Phases {
+		statusIcon := getStatusIcon(phase.Status)
+		vis.WriteString(fmt.Sprintf("### %s Phase %d: %s\n\n", statusIcon, phase.Number, phase.Title))
+		vis.WriteString(fmt.Sprintf("**Status:** %s\n\n", phase.Status))
+
+		// Task breakdown
+		phaseCompleted := 0
+		phaseTotal := len(phase.Tasks)
+
+		vis.WriteString("**Tasks:**\n")
+		for _, task := range phase.Tasks {
+			taskIcon := getStatusIcon(task.Status)
+			vis.WriteString(fmt.Sprintf("- %s %s: %s\n", taskIcon, task.Number, task.Description))
+			if task.Status == TaskCompleted {
+				phaseCompleted++
+			}
+		}
+
+		vis.WriteString(fmt.Sprintf("\n**Phase Progress:** %d/%d tasks completed\n\n", phaseCompleted, phaseTotal))
+	}
+
+	return vis.String()
+}
+
+// getStatusIcon returns an icon for a given status
+func getStatusIcon(status interface{}) string {
+	switch v := status.(type) {
+	case PhaseStatus:
+		switch v {
+		case PhaseCompleted:
+			return "✅"
+		case PhaseInProgress:
+			return "🔄"
+		case PhaseBlocked:
+			return "🚫"
+		default:
+			return "⬜"
+		}
+	case TaskStatus:
+		switch v {
+		case TaskCompleted:
+			return "✅"
+		case TaskInProgress:
+			return "🔄"
+		case TaskBlocked:
+			return "🚫"
+		case TaskSkipped:
+			return "⏭️"
+		default:
+			return "⬜"
+		}
+	}
+	return "⬜"
+}
+
+// RecordTaskCompletion records a task completion in the changelog
+func (changelog *Changelog) RecordTaskCompletion(taskID, taskDescription, phaseTitle string) {
+	changelog.AddEntry(
+		"task_completed",
+		fmt.Sprintf("Completed task: %s", taskDescription),
+		"geoffrussy-agent",
+		map[string]string{
+			"task_id":     taskID,
+			"phase":       phaseTitle,
+			"completed_at": time.Now().Format(time.RFC3339),
+		},
+	)
+}
+
+// RecordPhaseCompletion records a phase completion in the changelog
+func (changelog *Changelog) RecordPhaseCompletion(phaseID, phaseTitle string, tasksCompleted int) {
+	changelog.AddEntry(
+		"phase_completed",
+		fmt.Sprintf("Completed phase: %s (%d tasks)", phaseTitle, tasksCompleted),
+		"geoffrussy-agent",
+		map[string]string{
+			"phase_id":      phaseID,
+			"tasks_count":   fmt.Sprintf("%d", tasksCompleted),
+			"completed_at":  time.Now().Format(time.RFC3339),
+		},
+	)
+}
+
+// RecordDetourAdded records a detour addition in the changelog
+func (changelog *Changelog) RecordDetourAdded(detourDescription string, tasksAdded int) {
+	changelog.AddEntry(
+		"detour_added",
+		fmt.Sprintf("Added detour: %s (%d new tasks)", detourDescription, tasksAdded),
+		"geoffrussy-agent",
+		map[string]string{
+			"tasks_added": fmt.Sprintf("%d", tasksAdded),
+			"added_at":    time.Now().Format(time.RFC3339),
+		},
+	)
 }

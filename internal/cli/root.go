@@ -2,7 +2,14 @@ package cli
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 
+	"github.com/mojomast/geoffrussy/internal/checkpoint"
+	"github.com/mojomast/geoffrussy/internal/config"
+	"github.com/mojomast/geoffrussy/internal/git"
+	"github.com/mojomast/geoffrussy/internal/resume"
+	"github.com/mojomast/geoffrussy/internal/state"
 	"github.com/spf13/cobra"
 )
 
@@ -29,6 +36,7 @@ that reimagines human-AI collaboration on software projects.
 The system prioritizes deep project understanding through a multi-stage iterative
 pipeline: Interview → Architecture Design → DevPlan Generation → Phase Review.`,
 		Version: version,
+		RunE:    runRootWithResumeCheck,
 	}
 
 	// Global flags
@@ -48,6 +56,8 @@ pipeline: Interview → Architecture Design → DevPlan Generation → Phase Rev
 	rootCmd.AddCommand(quotaCmd)
 	rootCmd.AddCommand(checkpointCmd)
 	rootCmd.AddCommand(rollbackCmd)
+	rootCmd.AddCommand(resumeCmd)
+	rootCmd.AddCommand(navigateCmd)
 }
 
 var versionCmd = &cobra.Command{
@@ -56,4 +66,69 @@ var versionCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Printf("Geoffrey version %s\n", version)
 	},
+}
+
+// runRootWithResumeCheck runs when geoffrussy is invoked without a subcommand
+// It checks for incomplete work and offers to resume
+func runRootWithResumeCheck(cmd *cobra.Command, args []string) error {
+	// Try to load configuration
+	cfgMgr := config.NewManager()
+	if err := cfgMgr.Load(nil); err != nil {
+		// If config doesn't exist, show help instead
+		return cmd.Help()
+	}
+	cfg := cfgMgr.GetConfig()
+
+	// Determine project ID from current directory
+	cwd, err := os.Getwd()
+	if err != nil {
+		return cmd.Help()
+	}
+	projectID := filepath.Base(cwd)
+
+	// Initialize state store (use config directory)
+	configDir := filepath.Dir(cfg.ConfigPath)
+	dbPath := filepath.Join(configDir, "geoffrussy.db")
+	store, err := state.NewStore(dbPath)
+	if err != nil {
+		// If state store doesn't exist, show help
+		return cmd.Help()
+	}
+	defer store.Close()
+
+	// Try to get project - if it doesn't exist, just show help
+	_, err = store.GetProject(projectID)
+	if err != nil {
+		return cmd.Help()
+	}
+
+	// Initialize managers
+	gitMgr := git.NewManager(".")
+	checkpointMgr := checkpoint.NewManager(store, gitMgr)
+	resumeMgr := resume.NewManager(store, checkpointMgr)
+
+	// Check for incomplete work
+	info, err := resumeMgr.DetectIncompleteWork(projectID)
+	if err != nil {
+		return cmd.Help()
+	}
+
+	// If no incomplete work, just show help
+	if !info.HasIncompleteWork {
+		fmt.Println("✅ Project is complete!")
+		fmt.Println()
+		return cmd.Help()
+	}
+
+	// Show incomplete work detected
+	fmt.Println("🔔 Incomplete Work Detected")
+	fmt.Println("═══════════════════════════")
+	fmt.Println()
+	fmt.Println(info.Summary)
+	fmt.Println()
+	fmt.Println("💡 Tip: Run 'geoffrussy resume' to continue where you left off")
+	fmt.Println("     Or run 'geoffrussy status' to see detailed progress")
+	fmt.Println()
+
+	return nil
 }

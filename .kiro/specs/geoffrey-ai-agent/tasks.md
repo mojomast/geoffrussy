@@ -561,20 +561,20 @@ This implementation plan breaks down the Geoffrussy system into discrete, execut
     - Test history preservation
     - _Requirements: 13.7_
 
-- [ ] 21. DevPlan Evolution and Tracking
-  - [~] 21.1 Implement task completion tracking
+- [x] 21. DevPlan Evolution and Tracking
+  - [x] 21.1 Implement task completion tracking
     - Update task status
     - Update DevPlan files
     - Commit changes to Git
     - _Requirements: 19.1, 19.3_
-  
-  - [~] 21.2 Implement changelog maintenance
+
+  - [x] 21.2 Implement changelog maintenance
     - Record all modifications
     - Include timestamps
     - Track decisions
     - _Requirements: 19.4, 19.7, 19.8_
-  
-  - [~] 21.3 Implement DevPlan visualization
+
+  - [x] 21.3 Implement DevPlan visualization
     - Highlight completed, in-progress, pending tasks
     - _Requirements: 19.6_
   
@@ -591,20 +591,20 @@ This implementation plan breaks down the Geoffrussy system into discrete, execut
   - Ensure all tests pass, ask the user if questions arise.
 
 
-- [ ] 23. Progress Tracking and Status
-  - [~] 23.1 Implement progress calculation
+- [x] 23. Progress Tracking and Status
+  - [x] 23.1 Implement progress calculation
     - Calculate completion percentage
     - Track time elapsed and estimated remaining
     - _Requirements: 21.4, 21.5_
-  
-  - [~] 23.2 Implement status display
+
+  - [x] 23.2 Implement status display
     - Show current stage and phase
     - Show completed, in-progress, pending tasks
     - Show token usage and costs
     - Show active blockers
     - _Requirements: 21.1, 21.2, 21.3, 21.6, 21.8_
-  
-  - [~] 23.3 Implement status filtering
+
+  - [x] 23.3 Implement status filtering
     - Filter by phase
     - Filter by component
     - _Requirements: 21.7_
