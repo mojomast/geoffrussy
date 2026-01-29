@@ -67,6 +67,43 @@ func (s *Store) Close() error {
 	return nil
 }
 
+// ResetProjectProgress resets InProgress phases and tasks to NotStarted for a project
+func (s *Store) ResetProjectProgress(projectID string) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	// Update phases
+	_, err = tx.Exec(`
+		UPDATE phases
+		SET status = ?
+		WHERE project_id = ? AND status = ?
+	`, PhaseNotStarted, projectID, PhaseInProgress)
+	if err != nil {
+		return fmt.Errorf("failed to reset phases: %w", err)
+	}
+
+	// Update tasks
+	_, err = tx.Exec(`
+		UPDATE tasks
+		SET status = ?
+		WHERE status = ? AND phase_id IN (
+			SELECT id FROM phases WHERE project_id = ?
+		)
+	`, TaskNotStarted, TaskInProgress, projectID)
+	if err != nil {
+		return fmt.Errorf("failed to reset tasks: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return nil
+}
+
 // DB returns the underlying database connection
 func (s *Store) DB() *sql.DB {
 	return s.db
