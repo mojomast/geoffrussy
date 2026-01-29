@@ -91,21 +91,34 @@ func (te *TaskExecutor) ExecuteTask(taskID string) error {
 	modelName := te.getModelForTask(task)
 	fmt.Printf("🤖 Using model: %s\n", modelName)
 
+	// Show task being worked on
+	fmt.Printf("\n🎯 Task: %s\n", task.Description)
+	fmt.Printf("📋 Phase: %s\n", phase.Title)
+	fmt.Println()
+
 	// Call LLM to generate code
-	fmt.Printf("📝 Sending prompt to LLM...\n")
-	fmt.Printf("📏  Prompt length: %d characters\n", len(prompt))
+	fmt.Printf("📝 Calling LLM to generate code...\n")
+	fmt.Printf("   (This may take 30-60 seconds for complex tasks)\n")
+	fmt.Println()
+
 	response, err := te.provider.Call(modelName, prompt)
 	if err != nil {
 		return fmt.Errorf("failed to call LLM: %w", err)
 	}
 
-	fmt.Printf("✓ Received LLM response: %d tokens\n", response.TokensInput+response.TokensOutput)
+	fmt.Printf("\n✓ LLM responded with %d tokens (input: %d, output: %d)\n",
+		response.TokensInput+response.TokensOutput,
+		response.TokensInput,
+		response.TokensOutput)
 
 	// Parse response
 	var codeResp CodeGenerationResponse
 	if err := json.Unmarshal([]byte(response.Content), &codeResp); err != nil {
 		// If JSON parsing fails, treat the entire response as code
 		fmt.Printf("⚠️  JSON parsing failed, treating as markdown\n")
+		fmt.Printf("\n💭 LLM Response Preview:\n")
+		fmt.Printf("%s\n", response.Content[:min(500, len(response.Content))])
+		fmt.Printf("... (truncated, %d total chars)\n\n", len(response.Content))
 		codeResp = CodeGenerationResponse{
 			Explanation: response.Content,
 			Files: []File{
@@ -115,6 +128,13 @@ func (te *TaskExecutor) ExecuteTask(taskID string) error {
 				},
 			},
 		}
+	} else {
+		// Show LLM's explanation
+		if codeResp.Explanation != "" {
+			fmt.Printf("\n💭 LLM Explanation:\n")
+			fmt.Printf("%s\n", codeResp.Explanation)
+			fmt.Println()
+		}
 	}
 
 	fmt.Printf("📦 Generated %d file(s)\n", len(codeResp.Files))
@@ -122,10 +142,18 @@ func (te *TaskExecutor) ExecuteTask(taskID string) error {
 	// Create files
 	for i, file := range codeResp.Files {
 		fmt.Printf("   Writing file %d/%d: %s\n", i+1, len(codeResp.Files), file.Path)
+
+		// Show preview of file content (first 200 chars)
+		preview := file.Content
+		if len(preview) > 200 {
+			preview = preview[:200] + "..."
+		}
+		fmt.Printf("   📝 Content preview: %s\n", preview)
+
 		if err := te.writeFile(file); err != nil {
 			return fmt.Errorf("failed to write file %s: %w", file.Path, err)
 		}
-		fmt.Printf("   ✓ Created: %s\n", file.Path)
+		fmt.Printf("   ✓ Created: %s (%d bytes)\n", file.Path, len(file.Content))
 	}
 
 	// Execute commands (optional - might be dangerous in auto-execution)
