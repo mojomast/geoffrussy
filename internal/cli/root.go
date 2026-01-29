@@ -14,10 +14,10 @@ import (
 )
 
 var (
-	version   string
-	cfgFile   string
-	verbose   bool
-	rootCmd   *cobra.Command
+	version string
+	cfgFile string
+	verbose bool
+	rootCmd *cobra.Command
 )
 
 // Execute runs the root command
@@ -46,6 +46,7 @@ pipeline: Interview → Architecture Design → DevPlan Generation → Phase Rev
 	// Add subcommands
 	rootCmd.AddCommand(initCmd)
 	rootCmd.AddCommand(versionCmd)
+	rootCmd.AddCommand(configCmd)
 	rootCmd.AddCommand(interviewCmd)
 	rootCmd.AddCommand(designCmd)
 	rootCmd.AddCommand(planCmd)

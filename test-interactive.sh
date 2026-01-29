@@ -34,19 +34,20 @@ while true; do
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo "What would you like to do?"
     echo ""
-    echo "1) 🎤 Start Interview (gather requirements)"
-    echo "2) 🏗️  Generate Architecture Design"
-    echo "3) 📋 Generate Development Plan"
-    echo "4) 🔍 Review Development Plan"
-    echo "5) 🚀 Execute Development"
-    echo "6) 📊 Show Status"
-    echo "7) 📈 Show Token Stats"
-    echo "8) 💰 Check Quotas"
-    echo "9) 💾 Create Checkpoint"
-    echo "10) 📋 List Checkpoints"
-    echo "11) 🔄 Rollback to Checkpoint"
-    echo "12) ▶️  Resume from Checkpoint"
-    echo "13) 🧭 Navigate Pipeline Stages"
+    echo "1) ⚙️  Configuration (API keys, models, settings)"
+    echo "2) 🎤 Start Interview (gather requirements)"
+    echo "3) 🏗️  Generate Architecture Design"
+    echo "4) 📋 Generate Development Plan"
+    echo "5) 🔍 Review Development Plan"
+    echo "6) 🚀 Execute Development"
+    echo "7) 📊 Show Status"
+    echo "8) 📈 Show Token Stats"
+    echo "9) 💰 Check Quotas"
+    echo "10) 💾 Create Checkpoint"
+    echo "11) 📋 List Checkpoints"
+    echo "12) 🔄 Rollback to Checkpoint"
+    echo "13) ▶️  Resume from Checkpoint"
+    echo "14) 🧭 Navigate Pipeline Stages"
     echo "q) Quit"
     echo ""
     read -p "Select an option: " choice
@@ -55,60 +56,67 @@ while true; do
         1)
             echo ""
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo "⚙️  Configuration Management..."
+            echo ""
+            ./geoffrussy config
+            ;;
+        2)
+            echo ""
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             echo "🎤 Starting Interview..."
             echo ""
             ./geoffrussy interview
             ;;
-        2)
+        3)
             echo ""
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             echo "🏗️  Generating Architecture..."
             echo ""
             ./geoffrussy design
             ;;
-        3)
+        4)
             echo ""
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             echo "📋 Generating Development Plan..."
             echo ""
             ./geoffrussy plan
             ;;
-        4)
+        5)
             echo ""
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             echo "🔍 Reviewing Development Plan..."
             echo ""
             ./geoffrussy review
             ;;
-        5)
+        6)
             echo ""
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             echo "🚀 Executing Development..."
             echo ""
             ./geoffrussy develop
             ;;
-        6)
+        7)
             echo ""
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             echo "📊 Showing Status..."
             echo ""
             ./geoffrussy status
             ;;
-        7)
+        8)
             echo ""
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             echo "📈 Showing Token Stats..."
             echo ""
             ./geoffrussy stats
             ;;
-        8)
+        9)
             echo ""
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             echo "💰 Checking Quotas..."
             echo ""
             ./geoffrussy quota
             ;;
-        9)
+        10)
             echo ""
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             echo "💾 Creating Checkpoint..."
@@ -120,14 +128,14 @@ while true; do
                 ./geoffrussy checkpoint --name="$name"
             fi
             ;;
-        10)
+        11)
             echo ""
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             echo "📋 Listing Checkpoints..."
             echo ""
             ./geoffrussy checkpoint --list
             ;;
-        11)
+        12)
             echo ""
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             echo "🔄 Rolling Back to Checkpoint..."
@@ -139,14 +147,14 @@ while true; do
                 echo "⚠️  No checkpoint name provided. Skipping rollback."
             fi
             ;;
-        12)
+        13)
             echo ""
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             echo "▶️  Resuming from Checkpoint..."
             echo ""
             ./geoffrussy resume
             ;;
-        13)
+        14)
             echo ""
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             echo "🧭 Navigating Pipeline Stages..."

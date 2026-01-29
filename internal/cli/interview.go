@@ -1,8 +1,16 @@
 package cli
 
 import (
+	"bufio"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 
+	"github.com/mojomast/geoffrussy/internal/config"
+	"github.com/mojomast/geoffrussy/internal/interview"
+	"github.com/mojomast/geoffrussy/internal/provider"
+	"github.com/mojomast/geoffrussy/internal/state"
 	"github.com/spf13/cobra"
 )
 
@@ -27,13 +35,124 @@ func init() {
 
 func runInterview(cmd *cobra.Command, args []string) error {
 	fmt.Println("🎤 Starting Project Interview...")
-	fmt.Println("⚠️  This command requires full provider integration")
-	fmt.Println("   Implementation in progress...")
-	
-	// TODO: Full implementation requires:
-	// - Provider selection based on model
-	// - Proper session management
-	// - Interactive TUI with bubbletea
-	
-	return fmt.Errorf("interview command not yet fully implemented")
+	fmt.Println("════════════════════════════════════════════════════════════")
+	fmt.Println()
+
+	cfgMgr := config.NewManager()
+	if err := cfgMgr.Load(nil); err != nil {
+		return fmt.Errorf("failed to load configuration: %w", err)
+	}
+
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("failed to get current directory: %w", err)
+	}
+
+	projectID := filepath.Base(cwd)
+
+	dbPath := filepath.Join(filepath.Dir(cfgMgr.GetConfigPath()), "geoffrussy.db")
+	store, err := state.NewStore(dbPath)
+	if err != nil {
+		return fmt.Errorf("failed to open state store: %w", err)
+	}
+	defer store.Close()
+
+	_, err = store.GetProject(projectID)
+	if err != nil {
+		return fmt.Errorf("project not found. Please run 'geoffrussy init' first: %w", err)
+	}
+
+	providerName, modelName, err := getProviderAndModel(cfgMgr, "interview", interviewModel)
+	if err != nil {
+		return fmt.Errorf("failed to get provider and model: %w", err)
+	}
+
+	bridge := provider.NewBridge()
+	if err := setupProvider(bridge, cfgMgr, providerName); err != nil {
+		return fmt.Errorf("failed to setup provider: %w", err)
+	}
+
+	prov, err := bridge.GetProvider(providerName)
+	if err != nil {
+		return fmt.Errorf("failed to get provider: %w", err)
+	}
+
+	engine := interview.NewEngine(store, prov, modelName)
+
+	var session *interview.InterviewSession
+
+	if interviewResume {
+		fmt.Println("🔄 Resuming interview from previous session...")
+		session, err = engine.ResumeInterview(projectID)
+		if err != nil {
+			return fmt.Errorf("failed to resume interview: %w", err)
+		}
+	} else {
+		fmt.Println("🆕 Starting new interview session...")
+		session, err = engine.StartInterview(projectID)
+		if err != nil {
+			return fmt.Errorf("failed to start interview: %w", err)
+		}
+	}
+
+	question, err := engine.GetNextQuestion(session)
+	if err != nil {
+		return fmt.Errorf("failed to get next question: %w", err)
+	}
+
+	if question == nil {
+		complete, missing := engine.ValidateCompleteness(session)
+		if complete {
+			fmt.Println("════════════════════════════════════════════════════════════")
+			fmt.Println("✅ Interview completed successfully!")
+
+			summary, err := engine.GenerateSummary(session)
+			if err != nil {
+				return fmt.Errorf("failed to generate summary: %w", err)
+			}
+
+			fmt.Println("\n📊 Interview Summary")
+			fmt.Println("─────────────────────────────────────────────────────")
+			fmt.Println(summary)
+
+			fmt.Println("\n💡 Next steps:")
+			fmt.Println("   Run 'geoffrussy design' to generate architecture")
+			fmt.Println("   Run 'geoffrussy config' to update configuration")
+		} else {
+			fmt.Println("⚠️  Interview is incomplete. Missing required answers:")
+			for _, m := range missing {
+				fmt.Printf("   - %s\n", m)
+			}
+		}
+
+		return nil
+	}
+
+	fmt.Printf("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+	fmt.Printf("Phase %s - Question %d\n", session.CurrentPhase, session.CurrentQuestion)
+	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	fmt.Printf("\n%s\n\n", question.Text)
+
+	fmt.Printf("Your answer (or 'help' for suggestions, 'back' to go back): ")
+	reader := bufio.NewReader(os.Stdin)
+	answer, _ := reader.ReadString('\n')
+	answer = strings.TrimSpace(answer)
+
+	if answer == "back" {
+		fmt.Println("⏮️  Going to previous question...")
+		return runInterview(cmd, args)
+	}
+
+	if err := engine.RecordAnswer(session, question.ID, answer); err != nil {
+		return fmt.Errorf("failed to record answer: %w", err)
+	}
+
+	if err := engine.SaveSession(session); err != nil {
+		return fmt.Errorf("failed to save session: %w", err)
+	}
+
+	fmt.Println("✅ Answer saved!")
+	return runInterview(cmd, args)
+
+	return nil
 }
