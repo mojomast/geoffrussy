@@ -2,7 +2,12 @@ package cli
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 
+	"github.com/mojomast/geoffrussy/internal/config"
+	"github.com/mojomast/geoffrussy/internal/devplan"
+	"github.com/mojomast/geoffrussy/internal/provider"
 	"github.com/mojomast/geoffrussy/internal/reviewer"
 	"github.com/mojomast/geoffrussy/internal/state"
 	"github.com/spf13/cobra"
@@ -17,8 +22,8 @@ var reviewCmd = &cobra.Command{
 	Use:   "review",
 	Short: "Review development plan phases",
 	Long: `Review development plan phases for clarity, completeness,
-dependencies, scope, and other quality metrics. Optionally apply
-suggested improvements.`,
+ dependencies, scope, and other quality metrics. Optionally apply
+ suggested improvements.`,
 	RunE: runReview,
 }
 
@@ -29,18 +34,282 @@ func init() {
 
 func runReview(cmd *cobra.Command, args []string) error {
 	fmt.Println("🔍 Reviewing Development Plan...")
-	fmt.Println("⚠️  This command requires full provider integration")
-	fmt.Println("   Implementation in progress...")
-	
-	// TODO: Full implementation requires:
-	// - Provider selection based on model
-	// - Phase review with improvement suggestions
-	// - Interactive improvement application
-	
-	return fmt.Errorf("review command not yet fully implemented")
+	fmt.Println("═════════════════════════════════════════════")
+
+	cfgMgr := config.NewManager()
+	if err := cfgMgr.Load(nil); err != nil {
+		return fmt.Errorf("failed to load configuration: %w", err)
+	}
+	cfg := cfgMgr.GetConfig()
+
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("failed to get current directory: %w", err)
+	}
+	projectID := filepath.Base(cwd)
+
+	dbPath := filepath.Join(filepath.Dir(cfg.ConfigPath), "geoffrussy.db")
+	store, err := state.NewStore(dbPath)
+	if err != nil {
+		return fmt.Errorf("failed to open state store: %w", err)
+	}
+	defer store.Close()
+
+	_, err = store.GetProject(projectID)
+	if err != nil {
+		return fmt.Errorf("project not found: %w. Please run 'geoffrussy init' first", err)
+	}
+
+	statePhases, err := store.ListPhases(projectID)
+	if err != nil {
+		return fmt.Errorf("failed to load phases: %w", err)
+	}
+
+	if len(statePhases) == 0 {
+		fmt.Println("\n⚠️  No phases found. Run 'geoffrussy plan' first to generate phases.")
+		return nil
+	}
+
+	fmt.Printf("\nFound %d phase(s) to review\n", len(statePhases))
+
+	devplanPhases, err := convertStatePhasesToDevplan(statePhases)
+	if err != nil {
+		return fmt.Errorf("failed to convert phases: %w", err)
+	}
+
+	providerName, modelName, err := getProviderAndModel(cfgMgr, "review", reviewModel)
+	if err != nil {
+		return fmt.Errorf("failed to get provider and model: %w", err)
+	}
+
+	bridge := provider.NewBridge()
+	if err := setupProvider(bridge, cfgMgr, providerName); err != nil {
+		return fmt.Errorf("failed to setup provider: %w", err)
+	}
+
+	prov, err := bridge.GetProvider(providerName)
+	if err != nil {
+		return fmt.Errorf("failed to get provider: %w", err)
+	}
+
+	rev := reviewer.NewReviewer(prov, modelName)
+	report, err := rev.ReviewAllPhases(devplanPhases)
+	if err != nil {
+		return fmt.Errorf("failed to review phases: %w", err)
+	}
+
+	fmt.Printf("\n📊 Review Report\n")
+	fmt.Println("═════════════════════════════════════════════")
+	fmt.Printf("\n**Generated:** %s\n", report.Timestamp.Format("2006-01-02 15:04:05"))
+	fmt.Printf("**Total Phases:** %d\n", report.TotalPhases)
+	fmt.Printf("**Issues Found:** %d\n\n", report.IssuesFound)
+
+	fmt.Println("## Summary")
+	fmt.Println(report.Summary)
+
+	fmt.Println("\n## Severity Breakdown")
+	fmt.Printf("- **Critical:** %d\n", report.SeverityBreakdown[reviewer.SeverityCritical])
+	fmt.Printf("- **Warning:** %d\n", report.SeverityBreakdown[reviewer.SeverityWarning])
+	fmt.Printf("- **Info:** %d\n", report.SeverityBreakdown[reviewer.SeverityInfo])
+
+	if len(report.CrossPhaseIssues) > 0 {
+		fmt.Println("\n## Cross-Phase Issues")
+		for _, issue := range report.CrossPhaseIssues {
+			fmt.Printf("\n### [%s] %s\n", issue.Severity, issue.Type)
+			fmt.Printf("**Description:** %s\n", issue.Description)
+			fmt.Printf("**Suggestion:** %s\n", issue.Suggestion)
+		}
+	}
+
+	fmt.Println("\n## Phase Reviews")
+	for _, phaseReview := range report.PhaseReviews {
+		fmt.Printf("\n### Phase %s - %s\n", phaseReview.PhaseID, phaseReview.Status)
+		if len(phaseReview.Issues) == 0 {
+			fmt.Println("✅ No issues found.")
+		} else {
+			for _, issue := range phaseReview.Issues {
+				fmt.Printf("\n#### [%s] %s\n", issue.Severity, issue.Type)
+				fmt.Printf("**Description:** %s\n", issue.Description)
+				fmt.Printf("**Suggestion:** %s\n", issue.Suggestion)
+			}
+		}
+	}
+
+	if reviewApply {
+		if report.IssuesFound == 0 {
+			fmt.Println("\n✨ No issues to apply. Plan is already clean!")
+			return nil
+		}
+
+		fmt.Println("\n📝 Applying Improvements...")
+		updatedPhases, err := rev.ApplyImprovementsToAll(devplanPhases, report)
+		if err != nil {
+			return fmt.Errorf("failed to apply improvements: %w", err)
+		}
+
+		for i, phase := range updatedPhases {
+			statePhase := &state.Phase{
+				ID:        phase.ID,
+				ProjectID: projectID,
+				Number:    phase.Number,
+				Title:     phase.Title,
+				Content:   formatPhaseContent(&phase),
+				Status:    state.PhaseStatus(phase.Status),
+				CreatedAt: phase.CreatedAt,
+			}
+			if err := store.SavePhase(statePhase); err != nil {
+				return fmt.Errorf("failed to save updated phase %d: %w", i, err)
+			}
+		}
+
+		fmt.Printf("✅ Applied improvements to %d phase(s)\n", len(updatedPhases))
+	}
+
+	fmt.Println("\n✨ Review complete!")
+	return nil
+}
+
+func convertStatePhasesToDevplan(statePhases []*state.Phase) ([]devplan.Phase, error) {
+	phases := make([]devplan.Phase, len(statePhases))
+	for i, sp := range statePhases {
+		phases[i] = devplan.Phase{
+			ID:        sp.ID,
+			Number:    sp.Number,
+			Title:     sp.Title,
+			Objective: fmt.Sprintf("Phase %d: %s", sp.Number, sp.Title),
+			CreatedAt: sp.CreatedAt,
+			Status:    devplan.PhaseStatus(sp.Status),
+		}
+	}
+	return phases, nil
+}
+
+func formatPhaseContent(phase *devplan.Phase) string {
+	content := fmt.Sprintf("# Phase %d: %s\n\n", phase.Number, phase.Title)
+	content += fmt.Sprintf("## Objective\n\n%s\n\n", phase.Objective)
+	if len(phase.SuccessCriteria) > 0 {
+		content += "## Success Criteria\n\n"
+		for _, sc := range phase.SuccessCriteria {
+			content += fmt.Sprintf("- %s\n", sc)
+		}
+		content += "\n"
+	}
+	if len(phase.Tasks) > 0 {
+		content += "## Tasks\n\n"
+		for _, task := range phase.Tasks {
+			content += fmt.Sprintf("### %s: %s\n\n", task.Number, task.Description)
+			if len(task.AcceptanceCriteria) > 0 {
+				content += "**Acceptance Criteria:**\n"
+				for _, ac := range task.AcceptanceCriteria {
+					content += fmt.Sprintf("- %s\n", ac)
+				}
+				content += "\n"
+			}
+		}
+	}
+	return content
+}
+
+func getProviderAndModel(cfgMgr *config.Manager, stage, overrideModel string) (string, string, error) {
+	cfg := cfgMgr.GetConfig()
+
+	if overrideModel != "" {
+		for provider := range cfg.APIKeys {
+			return provider, overrideModel, nil
+		}
+		return "", "", fmt.Errorf("no provider configured for model override")
+	}
+
+	model, err := cfgMgr.GetDefaultModel(stage)
+	if err == nil {
+		for provider, defaultModel := range cfg.DefaultModels {
+			if defaultModel == model {
+				return provider, model, nil
+			}
+		}
+	}
+
+	for provider := range cfg.APIKeys {
+		if model, ok := cfg.DefaultModels[provider]; ok && model != "" {
+			return provider, model, nil
+		}
+	}
+
+	for provider := range cfg.APIKeys {
+		return provider, "gpt-3.5-turbo", nil
+	}
+
+	return "", "", fmt.Errorf("no API keys configured. Run 'geoffrussy init' to set up providers")
+}
+
+func setupProvider(bridge *provider.Bridge, cfgMgr *config.Manager, providerName string) error {
+	switch providerName {
+	case "openai":
+		apiKey, err := cfgMgr.GetAPIKey("openai")
+		if err != nil {
+			return err
+		}
+		p := provider.NewOpenAIProvider()
+		if err := p.Authenticate(apiKey); err != nil {
+			return err
+		}
+		return bridge.RegisterProvider(p)
+	case "anthropic":
+		apiKey, err := cfgMgr.GetAPIKey("anthropic")
+		if err != nil {
+			return err
+		}
+		p := provider.NewAnthropicProvider()
+		if err := p.Authenticate(apiKey); err != nil {
+			return err
+		}
+		return bridge.RegisterProvider(p)
+	case "ollama":
+		p := provider.NewOllamaProvider("http://localhost:11434")
+		return bridge.RegisterProvider(p)
+	default:
+		apiKey, err := cfgMgr.GetAPIKey(providerName)
+		if err != nil {
+			return err
+		}
+		p := provider.NewOpenAIProvider()
+		p.Authenticate(apiKey)
+		return bridge.RegisterProvider(p)
+	}
 }
 
 func applyImprovements(rev *reviewer.Reviewer, store *state.Store, phases []state.Phase, report *reviewer.ReviewReport) error {
-	// Stub implementation
-	return fmt.Errorf("not yet implemented")
+	fmt.Println("📝 Applying improvements...")
+	cwd, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+	projectID := filepath.Base(cwd)
+
+	devplanPhases, err := convertStatePhasesToDevplan([]*state.Phase{&phases[0]})
+	if err != nil {
+		return err
+	}
+
+	updatedPhases, err := rev.ApplyImprovementsToAll(devplanPhases, report)
+	if err != nil {
+		return err
+	}
+
+	for _, phase := range updatedPhases {
+		statePhase := &state.Phase{
+			ID:        phase.ID,
+			ProjectID: projectID,
+			Number:    phase.Number,
+			Title:     phase.Title,
+			Content:   formatPhaseContent(&phase),
+			Status:    state.PhaseStatus(phase.Status),
+			CreatedAt: phase.CreatedAt,
+		}
+		if err := store.SavePhase(statePhase); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
