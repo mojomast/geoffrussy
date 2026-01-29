@@ -87,16 +87,25 @@ func (te *TaskExecutor) ExecuteTask(taskID string) error {
 	// Build prompt for LLM
 	prompt := te.buildExecutionPrompt(task, phase, interviewData, architecture)
 
+	// Determine model to use
+	modelName := te.getModelForTask(task)
+	fmt.Printf("🤖 Using model: %s\n", modelName)
+
 	// Call LLM to generate code
-	response, err := te.provider.Call(te.getModelForTask(task), prompt)
+	fmt.Printf("📝 Sending prompt to LLM...\n")
+	fmt.Printf("📏  Prompt length: %d characters\n", len(prompt))
+	response, err := te.provider.Call(modelName, prompt)
 	if err != nil {
 		return fmt.Errorf("failed to call LLM: %w", err)
 	}
+
+	fmt.Printf("✓ Received LLM response: %d tokens\n", response.TokensInput+response.TokensOutput)
 
 	// Parse response
 	var codeResp CodeGenerationResponse
 	if err := json.Unmarshal([]byte(response.Content), &codeResp); err != nil {
 		// If JSON parsing fails, treat the entire response as code
+		fmt.Printf("⚠️  JSON parsing failed, treating as markdown\n")
 		codeResp = CodeGenerationResponse{
 			Explanation: response.Content,
 			Files: []File{
@@ -108,17 +117,25 @@ func (te *TaskExecutor) ExecuteTask(taskID string) error {
 		}
 	}
 
+	fmt.Printf("📦 Generated %d file(s)\n", len(codeResp.Files))
+
 	// Create files
-	for _, file := range codeResp.Files {
+	for i, file := range codeResp.Files {
+		fmt.Printf("   Writing file %d/%d: %s\n", i+1, len(codeResp.Files), file.Path)
 		if err := te.writeFile(file); err != nil {
 			return fmt.Errorf("failed to write file %s: %w", file.Path, err)
 		}
+		fmt.Printf("   ✓ Created: %s\n", file.Path)
 	}
 
 	// Execute commands (optional - might be dangerous in auto-execution)
 	if len(codeResp.Commands) > 0 {
 		// For safety, just log commands for now
 		// TODO: Implement command execution with confirmation
+		fmt.Printf("📝 Commands to run:\n")
+		for _, cmd := range codeResp.Commands {
+			fmt.Printf("   %s\n", cmd.Command)
+		}
 	}
 
 	return nil
@@ -162,7 +179,7 @@ func (te *TaskExecutor) buildExecutionPrompt(
 	promptBuilder.WriteString("INSTRUCTIONS:\n")
 	promptBuilder.WriteString("1. Analyze the task and architecture context\n")
 	promptBuilder.WriteString("2. Generate working code that implements the task\n")
-	promptBuilder.WriteString("3. Ensure code follows best practices for the language/framework\n")
+	promptBuilder.WriteString("3. Ensure code follows best practices for language/framework\n")
 	promptBuilder.WriteString("4. Return your response as JSON with the following structure:\n\n")
 
 	promptBuilder.WriteString(`{
