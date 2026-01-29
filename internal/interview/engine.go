@@ -3,6 +3,7 @@ package interview
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/mojomast/geoffrussy/internal/provider"
@@ -374,11 +375,12 @@ type AnswerAnalysis struct {
 
 // GenerateSummary generates a summary of all answers
 func (e *Engine) GenerateSummary(session *InterviewSession) (string, error) {
-	summary := "# Interview Summary\n\n"
-	summary += fmt.Sprintf("**Project ID:** %s\n", session.ProjectID)
-	summary += fmt.Sprintf("**Started:** %s\n", session.StartedAt.Format("2006-01-02 15:04:05"))
-	summary += fmt.Sprintf("**Last Updated:** %s\n", session.LastUpdatedAt.Format("2006-01-02 15:04:05"))
-	summary += fmt.Sprintf("**Status:** %s\n\n", func() string {
+	var sb strings.Builder
+	sb.WriteString("# Interview Summary\n\n")
+	fmt.Fprintf(&sb, "**Project ID:** %s\n", session.ProjectID)
+	fmt.Fprintf(&sb, "**Started:** %s\n", session.StartedAt.Format("2006-01-02 15:04:05"))
+	fmt.Fprintf(&sb, "**Last Updated:** %s\n", session.LastUpdatedAt.Format("2006-01-02 15:04:05"))
+	fmt.Fprintf(&sb, "**Status:** %s\n\n", func() string {
 		if session.Completed {
 			return "Completed"
 		} else if session.Paused {
@@ -386,58 +388,58 @@ func (e *Engine) GenerateSummary(session *InterviewSession) (string, error) {
 		}
 		return "In Progress"
 	}())
-	
+
 	phases := e.GetAllPhases()
 	for _, phase := range phases {
 		questions := e.GetPhaseQuestions(phase)
-		summary += fmt.Sprintf("## %s\n\n", formatPhaseName(phase))
-		
+		fmt.Fprintf(&sb, "## %s\n\n", formatPhaseName(phase))
+
 		hasAnswers := false
 		for _, q := range questions {
 			if answer, ok := session.Answers[q.ID]; ok {
 				hasAnswers = true
-				summary += fmt.Sprintf("**Q: %s**\n", q.Text)
-				summary += fmt.Sprintf("A: %s\n\n", answer.Text)
-				
+				fmt.Fprintf(&sb, "**Q: %s**\n", q.Text)
+				fmt.Fprintf(&sb, "A: %s\n\n", answer.Text)
+
 				// Include follow-up answers if any
 				if followUps, ok := session.FollowUpAnswers[q.ID]; ok && len(followUps) > 0 {
-					summary += "  *Follow-up responses:*\n"
+					sb.WriteString("  *Follow-up responses:*\n")
 					for i, fu := range followUps {
-						summary += fmt.Sprintf("  %d. %s\n", i+1, fu.Text)
+						fmt.Fprintf(&sb, "  %d. %s\n", i+1, fu.Text)
 					}
-					summary += "\n"
+					sb.WriteString("\n")
 				}
-				
+
 				// Include iteration history if any
 				iterations := e.GetIterationHistory(session, q.ID)
 				if len(iterations) > 0 {
-					summary += "  *Revision history:*\n"
+					sb.WriteString("  *Revision history:*\n")
 					for i, iter := range iterations {
-						summary += fmt.Sprintf("  %d. Changed from \"%s\" to \"%s\" (%s)\n", 
+						fmt.Fprintf(&sb, "  %d. Changed from \"%s\" to \"%s\" (%s)\n",
 							i+1, iter.OldAnswer, iter.NewAnswer, iter.Reason)
 					}
-					summary += "\n"
+					sb.WriteString("\n")
 				}
 			}
 		}
-		
+
 		if !hasAnswers {
-			summary += "*No answers recorded for this phase yet.*\n\n"
+			sb.WriteString("*No answers recorded for this phase yet.*\n\n")
 		}
 	}
-	
+
 	// Add statistics
-	summary += "## Statistics\n\n"
-	summary += fmt.Sprintf("- Total questions answered: %d\n", len(session.Answers))
-	summary += fmt.Sprintf("- Total revisions made: %d\n", len(session.Iterations))
-	
+	sb.WriteString("## Statistics\n\n")
+	fmt.Fprintf(&sb, "- Total questions answered: %d\n", len(session.Answers))
+	fmt.Fprintf(&sb, "- Total revisions made: %d\n", len(session.Iterations))
+
 	followUpCount := 0
 	for _, followUps := range session.FollowUpAnswers {
 		followUpCount += len(followUps)
 	}
-	summary += fmt.Sprintf("- Total follow-up responses: %d\n", followUpCount)
-	
-	return summary, nil
+	fmt.Fprintf(&sb, "- Total follow-up responses: %d\n", followUpCount)
+
+	return sb.String(), nil
 }
 
 // formatPhaseName converts a phase constant to a readable name
