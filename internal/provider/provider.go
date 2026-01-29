@@ -10,6 +10,7 @@ import (
 type Provider interface {
 	Name() string
 	Authenticate(apiKey string) error
+	IsAuthenticated() bool
 	ListModels() ([]Model, error)
 	DiscoverModels() ([]Model, error) // For dynamic discovery (OpenCode)
 	Call(model string, prompt string) (*Response, error)
@@ -114,25 +115,25 @@ func (b *BaseProvider) SetBaseDelay(delay time.Duration) {
 // RetryWithBackoff executes a function with exponential backoff retry logic
 func (b *BaseProvider) RetryWithBackoff(fn func() error) error {
 	var lastErr error
-	
+
 	for attempt := 0; attempt <= b.maxRetries; attempt++ {
 		err := fn()
 		if err == nil {
 			return nil
 		}
-		
+
 		lastErr = err
-		
+
 		// Don't retry on last attempt
 		if attempt == b.maxRetries {
 			break
 		}
-		
+
 		// Calculate exponential backoff delay
 		delay := b.baseDelay * time.Duration(math.Pow(2, float64(attempt)))
 		time.Sleep(delay)
 	}
-	
+
 	return fmt.Errorf("failed after %d retries: %w", b.maxRetries, lastErr)
 }
 

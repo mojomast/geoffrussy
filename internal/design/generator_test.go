@@ -21,6 +21,10 @@ func (m *MockProvider) Authenticate(apiKey string) error {
 	return nil
 }
 
+func (m *MockProvider) IsAuthenticated() bool {
+	return true
+}
+
 func (m *MockProvider) ListModels() ([]provider.Model, error) {
 	return []provider.Model{}, nil
 }
@@ -289,7 +293,7 @@ func TestDesignGenerator_Reiteration(t *testing.T) {
 
 	t.Run("ListRefinableSections", func(t *testing.T) {
 		sections := generator.ListRefinableSections()
-		
+
 		if len(sections) == 0 {
 			t.Error("Should have refinable sections")
 		}

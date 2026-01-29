@@ -22,6 +22,10 @@ func (m *MockProvider) Authenticate(apiKey string) error {
 	return nil
 }
 
+func (m *MockProvider) IsAuthenticated() bool {
+	return true
+}
+
 func (m *MockProvider) ListModels() ([]provider.Model, error) {
 	return []provider.Model{}, nil
 }
@@ -394,7 +398,7 @@ func TestDevPlanGenerator_PhaseManipulation(t *testing.T) {
 
 	t.Run("ReorderPhases", func(t *testing.T) {
 		phases := []Phase{*phase1, *phase2}
-		
+
 		// Swap the order
 		reordered, err := generator.ReorderPhases(phases, []int{1, 0})
 		if err != nil {
@@ -426,7 +430,7 @@ func TestDevPlanGenerator_PhaseManipulation(t *testing.T) {
 
 	t.Run("ReorderPhases_InvalidLength", func(t *testing.T) {
 		phases := []Phase{*phase1, *phase2}
-		
+
 		_, err := generator.ReorderPhases(phases, []int{0})
 		if err == nil {
 			t.Error("Should error when new order has different length")
@@ -435,7 +439,7 @@ func TestDevPlanGenerator_PhaseManipulation(t *testing.T) {
 
 	t.Run("ReorderPhases_InvalidIndex", func(t *testing.T) {
 		phases := []Phase{*phase1, *phase2}
-		
+
 		_, err := generator.ReorderPhases(phases, []int{0, 5})
 		if err == nil {
 			t.Error("Should error with invalid index")
@@ -444,7 +448,7 @@ func TestDevPlanGenerator_PhaseManipulation(t *testing.T) {
 
 	t.Run("ReorderPhases_DuplicateIndex", func(t *testing.T) {
 		phases := []Phase{*phase1, *phase2}
-		
+
 		_, err := generator.ReorderPhases(phases, []int{0, 0})
 		if err == nil {
 			t.Error("Should error with duplicate index")
@@ -453,7 +457,7 @@ func TestDevPlanGenerator_PhaseManipulation(t *testing.T) {
 
 	t.Run("ValidatePhaseOrder_Valid", func(t *testing.T) {
 		phases := []Phase{*phase1, *phase2}
-		
+
 		isValid, issues := generator.ValidatePhaseOrder(phases)
 		if !isValid {
 			t.Errorf("Phase order should be valid, issues: %v", issues)
@@ -468,9 +472,9 @@ func TestDevPlanGenerator_PhaseManipulation(t *testing.T) {
 		// Create phases with invalid dependencies
 		invalidPhase1 := *phase1
 		invalidPhase1.Dependencies = []string{"1"} // Depends on phase 1 which comes after
-		
+
 		phases := []Phase{invalidPhase1, *phase2}
-		
+
 		isValid, issues := generator.ValidatePhaseOrder(phases)
 		if isValid {
 			t.Error("Phase order should be invalid")
