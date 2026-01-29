@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/mojomast/geoffrussy/internal/checkpoint"
 	"github.com/mojomast/geoffrussy/internal/config"
 	"github.com/mojomast/geoffrussy/internal/git"
 	"github.com/mojomast/geoffrussy/internal/state"
@@ -57,18 +58,23 @@ func runCheckpoint(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("project not found: %w. Please run 'geoffrussy init' first", err)
 	}
 
+	// Initialize managers
+	gitMgr := git.NewManager(cwd)
+	dataDir := filepath.Dir(dbPath)
+	cpManager := checkpoint.NewManager(store, gitMgr, dataDir)
+
 	if checkpointRollback != "" {
-		return rollbackToCheckpoint(store, projectID, checkpointRollback, cwd)
+		return rollbackToCheckpoint(cpManager, store, projectID, checkpointRollback)
 	}
 
 	if checkpointList {
 		return listCheckpoints(store, projectID)
 	}
 
-	return createCheckpoint(store, projectID, checkpointName, cwd)
+	return createCheckpoint(cpManager, gitMgr, projectID, checkpointName)
 }
 
-func createCheckpoint(store *state.Store, projectID, name, cwd string) error {
+func createCheckpoint(cpManager *checkpoint.Manager, gitMgr *git.Manager, projectID, name string) error {
 	fmt.Println("💾 Creating Checkpoint")
 	fmt.Println("═════════════════════════════════════════════")
 
@@ -76,7 +82,6 @@ func createCheckpoint(store *state.Store, projectID, name, cwd string) error {
 		name = fmt.Sprintf("checkpoint-%s", time.Now().Format("20060102-150405"))
 	}
 
-	gitMgr := git.NewManager(cwd)
 	isRepo, err := gitMgr.IsRepository()
 	if err != nil {
 		return fmt.Errorf("failed to check git repository: %w", err)
@@ -102,31 +107,20 @@ func createCheckpoint(store *state.Store, projectID, name, cwd string) error {
 		}
 	}
 
-	gitTag := fmt.Sprintf("checkpoint-%s-%d", name, time.Now().Unix())
-	if err := gitMgr.CreateTag(gitTag, fmt.Sprintf("Geoffrey checkpoint: %s", name)); err != nil {
-		return fmt.Errorf("failed to create git tag: %w", err)
+	metadata := map[string]string{
+		"created_at": time.Now().Format(time.RFC3339),
+		"project_id": projectID,
 	}
 
-	checkpoint := &state.Checkpoint{
-		ID:        generateCheckpointID(projectID, name),
-		ProjectID: projectID,
-		Name:      name,
-		GitTag:    gitTag,
-		CreatedAt: time.Now(),
-		Metadata: map[string]string{
-			"created_at": time.Now().Format(time.RFC3339),
-			"project_id": projectID,
-		},
-	}
-
-	if err := store.SaveCheckpoint(checkpoint); err != nil {
-		return fmt.Errorf("failed to save checkpoint: %w", err)
+	cp, err := cpManager.CreateCheckpoint(projectID, name, metadata)
+	if err != nil {
+		return fmt.Errorf("failed to create checkpoint: %w", err)
 	}
 
 	fmt.Printf("\n✅ Checkpoint created successfully!\n")
-	fmt.Printf("   Name: %s\n", name)
-	fmt.Printf("   Git Tag: %s\n", gitTag)
-	fmt.Printf("   Created: %s\n", checkpoint.CreatedAt.Format("2006-01-02 15:04:05"))
+	fmt.Printf("   Name: %s\n", cp.Name)
+	fmt.Printf("   Git Tag: %s\n", cp.GitTag)
+	fmt.Printf("   Created: %s\n", cp.CreatedAt.Format("2006-01-02 15:04:05"))
 	fmt.Println("\n💡 Tip: Use 'geoffrussy checkpoint --rollback=<name>' to restore this checkpoint")
 
 	return nil
@@ -162,20 +156,39 @@ func listCheckpoints(store *state.Store, projectID string) error {
 	return nil
 }
 
-func rollbackToCheckpoint(store *state.Store, projectID, checkpointName, cwd string) error {
+func rollbackToCheckpoint(cpManager *checkpoint.Manager, store *state.Store, projectID, checkpointName string) error {
 	fmt.Printf("🔄 Rolling Back to Checkpoint: %s\n", checkpointName)
 	fmt.Println("═════════════════════════════════════════════")
 
-	checkpoint, err := store.GetCheckpoint(generateCheckpointID(projectID, checkpointName))
+	// Find checkpoint by name
+	var targetCP *state.Checkpoint
+	checkpoints, err := store.ListCheckpoints(projectID)
 	if err != nil {
-		return fmt.Errorf("checkpoint not found: %w", err)
+		return fmt.Errorf("failed to list checkpoints: %w", err)
 	}
 
-	gitMgr := git.NewManager(cwd)
+	for _, cp := range checkpoints {
+		if cp.Name == checkpointName {
+			targetCP = cp
+			break
+		}
+	}
 
-	fmt.Printf("\n⚠️  Warning: This will reset your working directory to checkpoint '%s'\n", checkpointName)
-	fmt.Printf("   Git Tag: %s\n", checkpoint.GitTag)
-	fmt.Printf("   Created: %s\n\n", checkpoint.CreatedAt.Format("2006-01-02 15:04:05"))
+	// Try using generateCheckpointID for backward compatibility
+	if targetCP == nil {
+		cp, err := store.GetCheckpoint(generateCheckpointID(projectID, checkpointName))
+		if err == nil {
+			targetCP = cp
+		}
+	}
+
+	if targetCP == nil {
+		return fmt.Errorf("checkpoint not found: %s", checkpointName)
+	}
+
+	fmt.Printf("\n⚠️  Warning: This will reset your working directory to checkpoint '%s'\n", targetCP.Name)
+	fmt.Printf("   Git Tag: %s\n", targetCP.GitTag)
+	fmt.Printf("   Created: %s\n\n", targetCP.CreatedAt.Format("2006-01-02 15:04:05"))
 
 	fmt.Println("Note: The following will be lost:")
 	fmt.Println("  - Uncommitted changes")
@@ -183,10 +196,11 @@ func rollbackToCheckpoint(store *state.Store, projectID, checkpointName, cwd str
 	fmt.Println()
 	fmt.Println("The following will be preserved:")
 	fmt.Println("  - State database (checkpointed state will be restored)")
+	fmt.Println("  - Checkpoint history")
 	fmt.Println()
 
-	if err := gitMgr.ResetToTag(checkpoint.GitTag); err != nil {
-		return fmt.Errorf("failed to reset to git tag: %w", err)
+	if err := cpManager.Rollback(targetCP.ID); err != nil {
+		return fmt.Errorf("failed to rollback: %w", err)
 	}
 
 	fmt.Printf("✅ Successfully rolled back to checkpoint: %s\n", checkpointName)
