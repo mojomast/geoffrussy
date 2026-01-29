@@ -8,7 +8,7 @@ Geoffrey is a next-generation AI-powered development orchestration platform that
 - 🏗️ **Architecture-First Approach**: Generate complete system architecture before writing code
 - 📋 **Executable DevPlans**: Break down projects into 7-10 phases with 3-5 tasks each
 - 🔍 **Automated Review**: AI-powered phase review to catch issues before development
-- 🤖 **Multi-Model Support**: Use OpenAI, Anthropic, Ollama, and more
+- 🤖 **Multi-Model Support**: Use OpenAI, Anthropic, Ollama, Firmware.ai, Kimi, OpenCode, Requesty.ai, Z.ai
 - 💰 **Cost Tracking**: Monitor token usage and costs across all API calls
 - 📊 **Rate Limit Monitoring**: Track and respect API rate limits and quotas
 - 🔄 **Checkpoint System**: Save progress and rollback when needed
@@ -47,7 +47,12 @@ Requirements:
 git clone https://github.com/mojomast/geoffrussy.git
 cd geoffrussy
 make build
-sudo make install
+
+# Install to GOPATH/bin
+make install
+
+# OR Install system-wide (requires sudo)
+sudo make install-system
 ```
 
 ### Using Docker
@@ -158,6 +163,7 @@ Geoffrey will execute each phase, streaming real-time output and allowing you to
 
 ```bash
 geoffrussy init              # Initialize project configuration
+geoffrussy config            # Manage configuration (keys, models, budget)
 geoffrussy interview         # Start or resume interview phase
 geoffrussy design            # Generate or review architecture
 geoffrussy plan              # Generate or review DevPlan
@@ -168,6 +174,8 @@ geoffrussy stats             # Show token usage and cost statistics
 geoffrussy quota             # Check rate limits and quotas
 geoffrussy checkpoint        # Create or list checkpoints
 geoffrussy rollback          # Rollback to a checkpoint
+geoffrussy resume            # Resume work from current state, checkpoint, or stage
+geoffrussy navigate          # Navigate between pipeline stages
 geoffrussy version           # Print version number
 ```
 
