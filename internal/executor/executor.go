@@ -71,7 +71,7 @@ func (e *Executor) ExecutePhase(phaseID string) error {
 	}
 
 	// Update phase status to in_progress
-	if err := e.store.UpdatePhaseStatus(phaseID, "in_progress"); err != nil {
+	if err := e.store.UpdatePhaseStatus(phaseID, state.PhaseInProgress); err != nil {
 		return fmt.Errorf("failed to update phase status: %w", err)
 	}
 
@@ -84,11 +84,30 @@ func (e *Executor) ExecutePhase(phaseID string) error {
 	})
 
 	// Get all tasks for this phase
-	// Note: In a real implementation, we would query tasks from the store
-	// For now, we'll simulate task execution
+	tasks, err := e.store.ListTasks(phaseID)
+	if err != nil {
+		return fmt.Errorf("failed to list tasks: %w", err)
+	}
+
+	for _, task := range tasks {
+		if task.Status == state.TaskCompleted {
+			continue
+		}
+		if err := e.ExecuteTask(task.ID); err != nil {
+			// If task failed, stop phase execution
+			e.sendUpdate(TaskUpdate{
+				PhaseID:   phaseID,
+				Type:      TaskError,
+				Content:   fmt.Sprintf("Phase stopped due to task error: %v", err),
+				Timestamp: time.Now(),
+				Error:     err,
+			})
+			return err
+		}
+	}
 
 	// Update phase status to completed
-	if err := e.store.UpdatePhaseStatus(phaseID, "completed"); err != nil {
+	if err := e.store.UpdatePhaseStatus(phaseID, state.PhaseCompleted); err != nil {
 		return fmt.Errorf("failed to update phase status: %w", err)
 	}
 
@@ -122,7 +141,7 @@ func (e *Executor) ExecuteTask(taskID string) error {
 	}
 
 	// Update task status to in_progress
-	if err := e.store.UpdateTaskStatus(taskID, "in_progress"); err != nil {
+	if err := e.store.UpdateTaskStatus(taskID, state.TaskInProgress); err != nil {
 		return fmt.Errorf("failed to update task status: %w", err)
 	}
 
@@ -157,7 +176,7 @@ func (e *Executor) ExecuteTask(taskID string) error {
 	})
 
 	// Update task status to completed
-	if err := e.store.UpdateTaskStatus(taskID, "completed"); err != nil {
+	if err := e.store.UpdateTaskStatus(taskID, state.TaskCompleted); err != nil {
 		return fmt.Errorf("failed to update task status: %w", err)
 	}
 
@@ -224,7 +243,7 @@ func (e *Executor) ResumeExecution() error {
 // SkipTask skips the current task
 func (e *Executor) SkipTask(taskID string) error {
 	// Update task status to skipped
-	if err := e.store.UpdateTaskStatus(taskID, "skipped"); err != nil {
+	if err := e.store.UpdateTaskStatus(taskID, state.TaskSkipped); err != nil {
 		return fmt.Errorf("failed to update task status: %w", err)
 	}
 
@@ -242,7 +261,7 @@ func (e *Executor) SkipTask(taskID string) error {
 // MarkBlocked marks a task as blocked
 func (e *Executor) MarkBlocked(taskID, reason string) error {
 	// Update task status to blocked
-	if err := e.store.UpdateTaskStatus(taskID, "blocked"); err != nil {
+	if err := e.store.UpdateTaskStatus(taskID, state.TaskBlocked); err != nil {
 		return fmt.Errorf("failed to update task status: %w", err)
 	}
 
@@ -315,7 +334,8 @@ func (e *Executor) ResolveBlocker(taskID, resolution string) error {
 	}
 
 	// Update task status back to pending
-	if err := e.store.UpdateTaskStatus(taskID, "pending"); err != nil {
+	// Note: We use TaskNotStarted as pending state
+	if err := e.store.UpdateTaskStatus(taskID, state.TaskNotStarted); err != nil {
 		return fmt.Errorf("failed to update task status: %w", err)
 	}
 
