@@ -70,6 +70,18 @@ func (s *Store) CalculateProgress(projectID string) (*ProgressStats, error) {
 
 	stats.TotalPhases = len(phases)
 
+	// Get all tasks for the project to avoid N+1 query
+	allTasks, err := s.ListTasksByProject(projectID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list tasks for project: %w", err)
+	}
+
+	// Group tasks by phase ID
+	tasksByPhaseID := make(map[string][]Task)
+	for _, task := range allTasks {
+		tasksByPhaseID[task.PhaseID] = append(tasksByPhaseID[task.PhaseID], task)
+	}
+
 	// Count phases by status
 	for _, phase := range phases {
 		switch phase.Status {
@@ -83,11 +95,8 @@ func (s *Store) CalculateProgress(projectID string) (*ProgressStats, error) {
 			stats.PendingPhases++
 		}
 
-		// Get tasks for this phase
-		tasks, err := s.ListTasks(phase.ID)
-		if err != nil {
-			continue // Skip if can't get tasks
-		}
+		// Get tasks for this phase from map
+		tasks := tasksByPhaseID[phase.ID]
 
 		stats.TotalTasks += len(tasks)
 

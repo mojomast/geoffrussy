@@ -709,8 +709,8 @@ func (s *Store) ListTasks(phaseID string) ([]Task, error) {
 	return tasks, nil
 }
 
-// ListProjectTasks retrieves all tasks for a project
-func (s *Store) ListProjectTasks(projectID string) ([]Task, error) {
+// ListTasksByProject retrieves all tasks for a project
+func (s *Store) ListTasksByProject(projectID string) ([]Task, error) {
 	query := `
 		SELECT t.id, t.phase_id, t.number, t.description, t.status, t.started_at, t.completed_at
 		FROM tasks t
@@ -720,7 +720,7 @@ func (s *Store) ListProjectTasks(projectID string) ([]Task, error) {
 	`
 	rows, err := s.db.Query(query, projectID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to list project tasks: %w", err)
+		return nil, fmt.Errorf("failed to list tasks for project: %w", err)
 	}
 	defer rows.Close()
 
