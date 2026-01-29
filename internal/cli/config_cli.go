@@ -327,45 +327,41 @@ func setDefaultModelInteractive() error {
 		}
 	}
 
-	fmt.Printf("\nEnter model for %s stage (type 'list' to see available): ", selectedStage)
-	modelInput, _ := reader.ReadString('\n')
-	modelInput = strings.TrimSpace(modelInput)
+	fmt.Println("\nFetching available models...")
 
-	if modelInput == "list" {
-		fmt.Println("\nFetching available models...")
+	bridge := provider.NewBridge()
+	providerNames := provider.GetProviderNames()
 
-		// Use bridge to collect all models
-		bridge := provider.NewBridge()
-		providerNames := provider.GetProviderNames()
-
-		for _, name := range providerNames {
-			if err := setupProvider(bridge, cfgMgr, name); err != nil {
-				// Ignore errors, just skip unconfigured providers
-				continue
-			}
+	for _, name := range providerNames {
+		if err := setupProvider(bridge, cfgMgr, name); err != nil {
+			continue
 		}
-
-		allModels, _ := bridge.ListModels()
-		if len(allModels) > 0 {
-			fmt.Println("\nAvailable Models:")
-			for _, m := range allModels {
-				fmt.Printf("  • %s (%s)\n", m.Name, m.Provider)
-			}
-		} else {
-			fmt.Println("⚠️  No models found. Configure providers first.")
-		}
-
-		fmt.Printf("\nEnter model for %s stage: ", selectedStage)
-		modelInput, _ = reader.ReadString('\n')
-		modelInput = strings.TrimSpace(modelInput)
 	}
 
-	if modelInput == "" {
-		fmt.Println("⏭️  Skipped")
+	allModels, err := bridge.ListModels()
+	if err != nil || len(allModels) == 0 {
+		fmt.Println("⚠️  No models found. Configure providers first.")
 		return nil
 	}
 
-	if err := cfgMgr.SetDefaultModel(selectedStage, modelInput); err != nil {
+	fmt.Println("\nAvailable Models:")
+	fmt.Println("─────────────────────────────────────────────────────")
+	for i, m := range allModels {
+		fmt.Printf("  %d) %s (%s)\n", i+1, m.Name, strings.Title(m.Provider))
+	}
+
+	fmt.Printf("\nEnter model for %s stage (1-%d): ", selectedStage, len(allModels))
+	modelInput, _ := reader.ReadString('\n')
+	modelInput = strings.TrimSpace(modelInput)
+
+	modelIndex := 0
+	if _, err := fmt.Sscanf(modelInput, "%d", &modelIndex); err != nil || modelIndex < 1 || modelIndex > len(allModels) {
+		return fmt.Errorf("invalid selection. Please enter a number between 1 and %d", len(allModels))
+	}
+
+	selectedModel := allModels[modelIndex-1]
+
+	if err := cfgMgr.SetDefaultModel(selectedStage, selectedModel.Name); err != nil {
 		return fmt.Errorf("failed to set default model: %w", err)
 	}
 
@@ -373,7 +369,7 @@ func setDefaultModelInteractive() error {
 		return fmt.Errorf("failed to save configuration: %w", err)
 	}
 
-	fmt.Printf("✅ Default model for %s set to %s\n", selectedStage, modelInput)
+	fmt.Printf("✅ Default model for %s set to %s (%s)\n", selectedStage, selectedModel.Name, strings.Title(selectedModel.Provider))
 	return nil
 }
 

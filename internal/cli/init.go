@@ -10,6 +10,7 @@ import (
 
 	"github.com/mojomast/geoffrussy/internal/config"
 	"github.com/mojomast/geoffrussy/internal/git"
+	"github.com/mojomast/geoffrussy/internal/provider"
 	"github.com/mojomast/geoffrussy/internal/state"
 	"github.com/spf13/cobra"
 )
@@ -184,18 +185,32 @@ func promptForAPIKeys(cfgManager *config.Manager) error {
 func displayConfiguredModels(cfgMgr *config.Manager) {
 	cfg := cfgMgr.GetConfig()
 
-	providerModels := map[string][]string{
-		"openai":    {"gpt-4", "gpt-4-turbo", "gpt-3.5-turbo"},
-		"anthropic": {"claude-3-opus", "claude-3-sonnet", "claude-3-haiku", "claude-2.1"},
-		"ollama":    {"llama2", "mistral", "neural-chat", "codellama"},
-		"firmware":  {"claude-3-opus", "claude-3-sonnet", "gpt-4"},
-		"requesty":  {"claude-3-opus", "claude-3-sonnet", "gpt-4"},
-		"zai":       {"zai-c3", "zai-c3-turbo"},
-		"kimi":      {"moonshot-v1-32k", "moonshot-v1-128k"},
-		"opencode":  {"opencode-1", "opencode-2"},
+	if len(cfg.APIKeys) == 0 {
+		fmt.Println("⚠️  No API keys configured. Run 'geoffrussy config' to add keys.")
+		return
 	}
 
-	providerNames := map[string]string{
+	bridge := provider.NewBridge()
+	providerNames := provider.GetProviderNames()
+
+	for _, name := range providerNames {
+		if err := setupProvider(bridge, cfgMgr, name); err != nil {
+			continue
+		}
+	}
+
+	allModels, err := bridge.ListModels()
+	if err != nil || len(allModels) == 0 {
+		fmt.Println("⚠️  No models found. Configure providers first.")
+		return
+	}
+
+	modelsByProvider := make(map[string][]string)
+	for _, m := range allModels {
+		modelsByProvider[m.Provider] = append(modelsByProvider[m.Provider], m.Name)
+	}
+
+	providerDisplayNames := map[string]string{
 		"openai":    "OpenAI",
 		"anthropic": "Anthropic",
 		"ollama":    "Ollama (Local)",
@@ -206,17 +221,16 @@ func displayConfiguredModels(cfgMgr *config.Manager) {
 		"opencode":  "OpenCode",
 	}
 
-	if len(cfg.APIKeys) == 0 {
-		fmt.Println("⚠️  No API keys configured. Run 'geoffrussy config' to add keys.")
-		return
-	}
-
 	for provider := range cfg.APIKeys {
-		models, ok := providerModels[provider]
+		models, ok := modelsByProvider[provider]
 		if !ok {
 			continue
 		}
-		fmt.Printf("\n📦 %s:\n", providerNames[provider])
+		displayName := providerDisplayNames[provider]
+		if displayName == "" {
+			displayName = strings.Title(provider)
+		}
+		fmt.Printf("\n📦 %s:\n", displayName)
 		for _, model := range models {
 			fmt.Printf("   • %s\n", model)
 		}
