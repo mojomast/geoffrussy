@@ -1,5 +1,44 @@
 # Geoffrey AI Coding Agent - Release Notes
 
+## Version 0.1.1 - Banner and Monitor Improvements (2026-01-29)
+
+### Features Added
+
+#### 🎨 ASCII Art Banner
+- **Global Banner Display**: ASCII art banner now appears on all Geoffrey commands
+- **Monitor Banner**: Execution monitor displays Geoffrey ASCII art instead of plain text header
+- **Brand Consistency**: Unified branding across CLI and monitor interfaces
+
+#### 📈 Enhanced Execution Monitor
+- **Project Progress Tracking**: Shows tasks completed/total, phases completed/total, and completion percentage
+- **Phase and Task Display**: Current phase ID and task ID prominently displayed
+- **Token Usage Statistics**: Real-time tracking of input/output tokens consumed
+- **Elapsed Timer**: Continuously updates time since execution started
+- **Improved Layout**: Better viewport sizing to prevent UI clipping
+
+#### ⏸️ Phase Control
+- **Stop After Phase Flag**: New `--stop-after-phase` flag to halt execution after completing current phase
+- **Continuous Execution**: Default behavior continues through all phases automatically
+
+#### 🤖 Model Configuration Improvements
+- **GLM Model Support**: Added GLM model detection and ZAI provider mapping
+- **Model Override**: Develop command properly uses configured model instead of hardcoded fallback
+- **Provider Detection**: Improved provider guessing for GLM-4.7 and other ZAI models
+
+### Bug Fixes
+
+- **Fixed hardcoded model**: TaskExecutor now uses configured model from config file
+- **Fixed viewport clipping**: Increased viewport height calculation to accommodate banner
+- **Fixed provider mapping**: GLM models now correctly route to ZAI provider
+
+### Documentation Updates
+
+- **README Updates**: Added documentation for new flags and features
+- **Configuration Examples**: Updated to include ZAI/GLM provider configuration
+- **Command Reference**: Added flags for `develop` command
+
+---
+
 ## Version 0.1.0 - Initial Release (2026-01-29)
 
 ### Overview

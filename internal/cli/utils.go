@@ -115,7 +115,7 @@ func guessProviderFromModel(model string) string {
 		return "kimi"
 	}
 
-	if strings.Contains(lowerModel, "zai") {
+	if strings.Contains(lowerModel, "glm") || strings.Contains(lowerModel, "zai") {
 		return "zai"
 	}
 

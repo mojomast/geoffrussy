@@ -20,6 +20,7 @@ type SendUpdateFunc func(update TaskUpdate)
 type TaskExecutor struct {
 	store      *state.Store
 	provider   provider.Provider
+	modelName  string
 	ctx        context.Context
 	sendUpdate SendUpdateFunc // Function to send updates through TUI
 	phaseID    string         // For update messages
@@ -27,10 +28,11 @@ type TaskExecutor struct {
 }
 
 // NewTaskExecutor creates a new task executor that actually implements tasks
-func NewTaskExecutor(store *state.Store, prov provider.Provider, sendUpdateFn SendUpdateFunc) *TaskExecutor {
+func NewTaskExecutor(store *state.Store, prov provider.Provider, sendUpdateFn SendUpdateFunc, modelName string) *TaskExecutor {
 	return &TaskExecutor{
 		store:      store,
 		provider:   prov,
+		modelName:  modelName,
 		ctx:        context.Background(),
 		sendUpdate: sendUpdateFn,
 	}
@@ -217,9 +219,7 @@ func (te *TaskExecutor) ExecuteTask(taskID string) error {
 }
 
 func (te *TaskExecutor) getModelForTask(task *state.Task) string {
-	// TODO: Get model from config or task specification
-	// For now, use a sensible default
-	return "openai/gpt-5-nano"
+	return te.modelName
 }
 
 func (te *TaskExecutor) buildExecutionPrompt(

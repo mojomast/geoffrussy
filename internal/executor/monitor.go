@@ -15,6 +15,7 @@ import (
 // Monitor provides live monitoring of task execution
 type Monitor struct {
 	executor     *Executor
+	projectID    string
 	width        int
 	height       int
 	viewport     viewport.Model
@@ -23,21 +24,30 @@ type Monitor struct {
 	currentTask  string
 	currentPhase string
 	startTime    time.Time
+	completion   float64
+	phasesDone   int
+	totalPhases  int
+	tasksDone    int
+	totalTasks   int
+	tokensIn     int
+	tokensOut    int
+	requests     int
 	err          error
 }
 
 // NewMonitor creates a new live monitor
-func NewMonitor(executor *Executor) *Monitor {
-	vp := viewport.New(0, 0) // Let viewport determine size from window
+func NewMonitor(executor *Executor, projectID string) *Monitor {
+	vp := viewport.New(0, 0)
 	vp.Style = lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color("63")).
-		Padding(1, 0, 1, 1) // Add horizontal padding
+		Padding(1, 0, 1, 1)
 
 	prog := progress.New(progress.WithDefaultGradient())
 
 	return &Monitor{
 		executor:  executor,
+		projectID: projectID,
 		viewport:  vp,
 		progress:  prog,
 		updates:   []TaskUpdate{},
@@ -48,12 +58,23 @@ func NewMonitor(executor *Executor) *Monitor {
 // monitorMsg is a message containing a task update
 type monitorMsg TaskUpdate
 
+// tickMsg is sent every second to update the timer
+type tickMsg time.Time
+
 // Init initializes the monitor
 func (m *Monitor) Init() tea.Cmd {
 	return tea.Batch(
 		m.waitForUpdate(),
 		m.progress.Init(),
+		tickCmd(),
 	)
+}
+
+// tickCmd returns a command that sends a tick message every second
+func tickCmd() tea.Cmd {
+	return tea.Tick(time.Second, func(t time.Time) tea.Msg {
+		return tickMsg(t)
+	})
 }
 
 // Update handles messages and updates the monitor
@@ -92,7 +113,7 @@ func (m *Monitor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		m.viewport.Width = msg.Width - 4
-		m.viewport.Height = msg.Height - 15
+		m.viewport.Height = msg.Height - 25
 
 	case monitorMsg:
 		update := TaskUpdate(msg)
@@ -116,6 +137,10 @@ func (m *Monitor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		progressModel, cmd := m.progress.Update(msg)
 		m.progress = progressModel.(progress.Model)
 		cmds = append(cmds, cmd)
+
+	case tickMsg:
+		m.refreshStats()
+		cmds = append(cmds, tickCmd())
 	}
 
 	// Update viewport
@@ -134,14 +159,43 @@ func (m *Monitor) View() string {
 
 	var b strings.Builder
 
-	// Header
-	headerStyle := lipgloss.NewStyle().
-		Bold(true).
+	// Header - Banner
+	bannerStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("205")).
 		MarginBottom(1)
 
-	b.WriteString(headerStyle.Render("🚀 Geoffrey Execution Monitor"))
-	b.WriteString("\n\n")
+	b.WriteString(bannerStyle.Render(`
+ /$$$$$$                       /$$$$$$   /$$$$$$
+ /$$__  $$                     /$$__  $$ /$$__  $$
+| $$  \__/  /$$$$$$   /$$$$$$ | $$  \__/| $$  \__//$$$$$$  /$$   /$$  /$$$$$$$ /$$$$$$$ /$$   /$$
+| $$ /$$$$ /$$__  $$ /$$__  $$| $$$$    | $$$$   /$$__  $$| $$  | $$ /$$_____//$$_____/| $$  | $$
+| $$|_  $$| $$$$$$$$| $$  \ $$| $$_/    | $$_/  | $$  \__/| $$  | $$|  $$$$$$|  $$$$$$ | $$  | $$
+| $$  \ $$| $$_____/| $$  | $$| $$      | $$    | $$      | $$  | $$ \____  $$\____  $$| $$  | $$
+|  $$$$$$/|  $$$$$$$|  $$$$$$/| $$      | $$    | $$      |  $$$$$$/ /$$$$$$$//$$$$$$$/|  $$$$$$$
+ \______/  \_______/ \______/ |__/      |__/    |__/       \______/ |_______/|_______/  \____  $$
+                                                                                        /$$  | $$
+                                                                                       |  $$$$$$/
+                                                                                        \______/
+`))
+
+	b.WriteString("\n")
+
+	// Stats row
+	statsStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
+	if m.totalTasks > 0 {
+		completionStr := fmt.Sprintf("%.0f%%", m.completion)
+		phaseStr := fmt.Sprintf("%d/%d", m.phasesDone, m.totalPhases)
+		taskStr := fmt.Sprintf("%d/%d", m.tasksDone, m.totalTasks)
+		stats := fmt.Sprintf("%s tasks • %s phases • %s done", taskStr, phaseStr, completionStr)
+		b.WriteString(statsStyle.Render(stats))
+	}
+
+	// Token stats
+	if m.tokensIn > 0 || m.tokensOut > 0 {
+		tokenStr := fmt.Sprintf("  |  🔤 In: %d  Out: %d", m.tokensIn, m.tokensOut)
+		b.WriteString(statsStyle.Render(tokenStr))
+	}
+	b.WriteString("\n")
 
 	// Current phase and task
 	if m.currentPhase != "" {
@@ -166,9 +220,12 @@ func (m *Monitor) View() string {
 	b.WriteString(timeStyle.Render(fmt.Sprintf("Elapsed: %s", formatDuration(elapsed))))
 	b.WriteString("\n\n")
 
-	// Progress bar (simplified - would need actual progress calculation)
-	b.WriteString(m.progress.View())
-	b.WriteString("\n")
+	// Progress bar
+	if m.totalTasks > 0 {
+		m.progress.SetPercent(m.completion / 100)
+		b.WriteString(m.progress.View())
+		b.WriteString("\n\n")
+	}
 
 	// Output viewport - this is where task updates appear
 	b.WriteString(m.viewport.View())
@@ -283,6 +340,28 @@ func (m *Monitor) Run() error {
 		return fmt.Errorf("error running monitor: %w", err)
 	}
 	return nil
+}
+
+// refreshStats refreshes statistics from the store
+func (m *Monitor) refreshStats() {
+	stats, err := m.executor.store.CalculateProgress(m.projectID)
+	if err != nil {
+		return
+	}
+
+	m.completion = stats.CompletionPercentage
+	m.phasesDone = stats.CompletedPhases
+	m.totalPhases = stats.TotalPhases
+	m.tasksDone = stats.CompletedTasks
+	m.totalTasks = stats.TotalTasks
+
+	tokenStats, err := m.executor.store.GetTokenStats(m.projectID)
+	if err != nil {
+		return
+	}
+
+	m.tokensIn = tokenStats.TotalInput
+	m.tokensOut = tokenStats.TotalOutput
 }
 
 // RunWithOutput runs the monitor and writes output to the given writer

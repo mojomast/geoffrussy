@@ -124,8 +124,8 @@ func runDevelop(cmd *cobra.Command, args []string) error {
 	fmt.Printf("📋 Executing Phase: %s (%s)\n", phase.Title, phase.ID)
 
 	// 6. Initialize Executor and Monitor
-	exec := executor.NewExecutor(store, prov)
-	mon := executor.NewMonitor(exec)
+	exec := executor.NewExecutor(store, prov, modelName)
+	mon := executor.NewMonitor(exec, projectID)
 
 	// 7. Start Execution
 	// Run execution in a separate goroutine so Monitor can run in main thread

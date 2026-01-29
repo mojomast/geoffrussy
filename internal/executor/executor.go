@@ -38,6 +38,7 @@ type TaskUpdate struct {
 type Executor struct {
 	store      *state.Store
 	provider   provider.Provider
+	modelName  string
 	updateChan chan TaskUpdate
 	ctx        context.Context
 	cancel     context.CancelFunc
@@ -47,13 +48,14 @@ type Executor struct {
 }
 
 // NewExecutor creates a new task executor
-func NewExecutor(store *state.Store, provider provider.Provider) *Executor {
+func NewExecutor(store *state.Store, provider provider.Provider, modelName string) *Executor {
 	ctx, cancel := context.WithCancel(context.Background())
 	mu := &sync.RWMutex{}
 
 	return &Executor{
 		store:      store,
 		provider:   provider,
+		modelName:  modelName,
 		updateChan: make(chan TaskUpdate, 100),
 		ctx:        ctx,
 		cancel:     cancel,
@@ -194,7 +196,7 @@ func (e *Executor) ExecuteTask(taskID string) error {
 
 	// Execute the task using the provider
 	// Use TaskExecutor to actually generate code and write files
-	taskExecutor := NewTaskExecutor(e.store, e.provider, e.sendUpdate)
+	taskExecutor := NewTaskExecutor(e.store, e.provider, e.sendUpdate, e.modelName)
 	if err := taskExecutor.ExecuteTask(taskID); err != nil {
 		return fmt.Errorf("failed to execute task: %w", err)
 	}

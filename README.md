@@ -8,11 +8,13 @@ Geoffrey is a next-generation AI-powered development orchestration platform that
 - 🏗️ **Architecture-First Approach**: Generate complete system architecture before writing code
 - 📋 **Executable DevPlans**: Break down projects into 7-10 phases with 3-5 tasks each
 - 🔍 **Automated Review**: AI-powered phase review to catch issues before development
-- 🤖 **Multi-Model Support**: Use OpenAI, Anthropic, Ollama, and more
+- 🤖 **Multi-Model Support**: Use OpenAI, Anthropic, ZAI (GLM), Ollama, and more
 - 💰 **Cost Tracking**: Monitor token usage and costs across all API calls
 - 📊 **Rate Limit Monitoring**: Track and respect API rate limits and quotas
 - 🔄 **Checkpoint System**: Save progress and rollback when needed
-- 🎨 **Interactive Terminal UI**: Beautiful terminal interface built with Bubbletea
+- 📈 **Real-Time Progress Monitor**: Track tasks, phases, completion percentage, and token usage
+- ⏸️ **Phase Control**: Stop after current phase or continue through all phases automatically
+- 🎨 **Interactive Terminal UI**: Beautiful terminal interface with ASCII art banner
 - 📦 **Single Binary**: No dependencies, works on Linux, macOS, and Windows
 
 ## Installation
@@ -145,7 +147,14 @@ Geoffrey will analyze the DevPlan for:
 ### 6. Execute Development
 
 ```bash
+# Execute all phases until complete
 geoffrussy develop
+
+# Execute specific phase and stop
+geoffrussy develop --phase phase-5 --stop-after-phase
+
+# Use a specific model
+geoffrussy develop --model glm-4.7
 ```
 
 Geoffrey will execute each phase, streaming real-time output and allowing you to:
@@ -153,6 +162,13 @@ Geoffrey will execute each phase, streaming real-time output and allowing you to
 - Skip tasks
 - Request detours (mid-execution changes)
 - Handle blockers
+
+The execution monitor displays:
+- **Project progress**: Tasks completed/total, phases completed/total, completion percentage
+- **Phase and task tracking**: Current phase ID and task ID
+- **Elapsed time**: Time since execution started
+- **Token usage**: Input and output tokens consumed
+- **Real-time updates**: Live stream of task execution output
 
 ## Commands
 
@@ -163,6 +179,9 @@ geoffrussy design            # Generate or review architecture
 geoffrussy plan              # Generate or review DevPlan
 geoffrussy review            # Run phase review and validation
 geoffrussy develop           # Execute development phases
+geoffrussy develop --model <model>        # Use specific model (e.g., glm-4.7, gpt-4)
+geoffrussy develop --phase <id>          # Execute specific phase
+geoffrussy develop --stop-after-phase     # Stop after completing current phase
 geoffrussy status            # Show current progress
 geoffrussy stats             # Show token usage and cost statistics
 geoffrussy quota             # Check rate limits and quotas
@@ -185,6 +204,7 @@ Geoffrey supports configuration via:
 api_keys:
   openai: sk-...
   anthropic: sk-ant-...
+  zai: <your-zai-api-key>  # For GLM models (glm-4.7, etc.)
   ollama: http://localhost:11434
 
 default_models:
@@ -192,7 +212,7 @@ default_models:
   design: claude-3-5-sonnet
   devplan: gpt-4
   review: claude-3-5-sonnet
-  develop: gpt-4
+  develop: glm-4.7  # Supports: glm-4.7, gpt-4, claude-3-5-sonnet, etc.
 
 budget_limit: 100.0  # USD
 verbose_logging: false

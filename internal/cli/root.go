@@ -30,13 +30,22 @@ func init() {
 	rootCmd = &cobra.Command{
 		Use:   "geoffrussy",
 		Short: "Geoffrey - AI-powered development orchestration platform",
-		Long: `Geoffrey is a next-generation AI-powered development orchestration platform
+		Long: Banner() + `
+
+Geoffrey is a next-generation AI-powered development orchestration platform
 that reimagines human-AI collaboration on software projects.
 
 The system prioritizes deep project understanding through a multi-stage iterative
 pipeline: Interview → Architecture Design → DevPlan Generation → Phase Review.`,
 		Version: version,
 		RunE:    runRootWithResumeCheck,
+		PersistentPreRun: func(cmd *cobra.Command, args []string) {
+			// Don't print banner for help commands
+			if !argsContains(args, "--help") && !argsContains(args, "-h") {
+				fmt.Print(Banner())
+				fmt.Println()
+			}
+		},
 	}
 
 	// Global flags
@@ -59,6 +68,15 @@ pipeline: Interview → Architecture Design → DevPlan Generation → Phase Rev
 	rootCmd.AddCommand(rollbackCmd)
 	rootCmd.AddCommand(resumeCmd)
 	rootCmd.AddCommand(navigateCmd)
+}
+
+func argsContains(args []string, s string) bool {
+	for _, arg := range args {
+		if arg == s {
+			return true
+		}
+	}
+	return false
 }
 
 var versionCmd = &cobra.Command{
