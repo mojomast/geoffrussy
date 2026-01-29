@@ -20,8 +20,8 @@ type RequestyProvider struct {
 // NewRequestyProvider creates a new Requesty.ai provider
 func NewRequestyProvider() *RequestyProvider {
 	return &RequestyProvider{
-		BaseProvider: NewBaseProvider("requesty.ai"),
-		baseURL:      "https://api.requesty.ai/v1",
+		BaseProvider: NewBaseProvider("requesty"),
+		baseURL:      "https://router.requesty.ai/v1",
 		httpClient: &http.Client{
 			Timeout: 60 * time.Second,
 		},
@@ -30,11 +30,11 @@ func NewRequestyProvider() *RequestyProvider {
 
 // requestyRequest represents a request to Requesty.ai API
 type requestyRequest struct {
-	Model       string              `json:"model"`
-	Messages    []requestyMessage   `json:"messages"`
-	Stream      bool                `json:"stream,omitempty"`
-	Temperature float64             `json:"temperature,omitempty"`
-	MaxTokens   int                 `json:"max_tokens,omitempty"`
+	Model       string            `json:"model"`
+	Messages    []requestyMessage `json:"messages"`
+	Stream      bool              `json:"stream,omitempty"`
+	Temperature float64           `json:"temperature,omitempty"`
+	MaxTokens   int               `json:"max_tokens,omitempty"`
 }
 
 type requestyMessage struct {

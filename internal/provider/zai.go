@@ -22,7 +22,7 @@ type ZAIProvider struct {
 // NewZAIProvider creates a new Z.ai provider
 func NewZAIProvider() *ZAIProvider {
 	return &ZAIProvider{
-		BaseProvider: NewBaseProvider("z.ai"),
+		BaseProvider: NewBaseProvider("zai"),
 		baseURL:      "https://api.z.ai/v1",
 		httpClient: &http.Client{
 			Timeout: 120 * time.Second,

@@ -20,7 +20,7 @@ type FirmwareProvider struct {
 // NewFirmwareProvider creates a new Firmware.ai provider
 func NewFirmwareProvider() *FirmwareProvider {
 	return &FirmwareProvider{
-		BaseProvider: NewBaseProvider("firmware.ai"),
+		BaseProvider: NewBaseProvider("firmware"),
 		baseURL:      "https://api.firmware.ai/v1",
 		httpClient: &http.Client{
 			Timeout: 60 * time.Second,

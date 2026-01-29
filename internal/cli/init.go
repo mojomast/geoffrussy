@@ -39,13 +39,16 @@ func runInit(cmd *cobra.Command, args []string) error {
 	}
 	fmt.Printf("✓ Created configuration directory: %s\n", configDir)
 
-	// Initialize configuration manager
+	// Initialize configuration manager and load existing config
 	cfgManager := config.NewManager()
+	if err := cfgManager.Load(nil); err != nil {
+		return fmt.Errorf("failed to load configuration: %w", err)
+	}
 
-	// Check if config already exists
-	configPath := filepath.Join(configDir, "config.yaml")
-	if _, err := os.Stat(configPath); err == nil {
-		fmt.Println("⚠️  Configuration file already exists")
+	// Check if config already has API keys
+	cfg := cfgManager.GetConfig()
+	if len(cfg.APIKeys) > 0 {
+		fmt.Println("⚠️  Configuration file already exists with API keys")
 		reader := bufio.NewReader(os.Stdin)
 		fmt.Print("Do you want to reconfigure? (y/N): ")
 		response, _ := reader.ReadString('\n')

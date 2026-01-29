@@ -113,8 +113,8 @@ func TestBridge_ListProviders(t *testing.T) {
 	if !providerMap["anthropic"] {
 		t.Error("expected 'anthropic' in provider list")
 	}
-	if !providerMap["firmware.ai"] {
-		t.Error("expected 'firmware.ai' in provider list")
+	if !providerMap["firmware"] {
+		t.Error("expected 'firmware' in provider list")
 	}
 }
 
@@ -366,7 +366,7 @@ func TestBridge_SupportsCodingPlan(t *testing.T) {
 	bridge.RegisterProvider(NewOpenAIProvider())
 
 	// Test Z.ai (should support coding plan)
-	supports, err := bridge.SupportsCodingPlan("z.ai")
+	supports, err := bridge.SupportsCodingPlan("zai")
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}

@@ -13,8 +13,8 @@ func TestNewZAIProvider(t *testing.T) {
 	if provider == nil {
 		t.Fatal("expected non-nil provider")
 	}
-	if provider.Name() != "z.ai" {
-		t.Errorf("expected provider name 'z.ai', got '%s'", provider.Name())
+	if provider.Name() != "zai" {
+		t.Errorf("expected provider name 'zai', got '%s'", provider.Name())
 	}
 }
 

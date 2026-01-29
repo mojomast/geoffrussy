@@ -9,7 +9,6 @@ import (
 	"github.com/mojomast/geoffrussy/internal/provider"
 )
 
-// formatDuration formats a duration in a human-readable way
 func formatDuration(d time.Duration) string {
 	if d < 0 {
 		return "expired"
@@ -29,7 +28,6 @@ func formatDuration(d time.Duration) string {
 	return fmt.Sprintf("%dd %dh", days, hours)
 }
 
-// formatTimeSince formats time since as a human-readable duration
 func formatTimeSince(t time.Time) string {
 	duration := time.Since(t)
 	if duration < time.Minute {
@@ -49,75 +47,78 @@ func formatTimeSince(t time.Time) string {
 func getProviderAndModel(cfgMgr *config.Manager, stage, overrideModel string) (string, string, error) {
 	cfg := cfgMgr.GetConfig()
 
-	if overrideModel != "" {
-		// User specified model override, find provider for it
-		provider := guessProviderFromModel(overrideModel)
-		if provider == "" {
-			// Could not guess, use first available provider
+	modelName := overrideModel
+	if modelName == "" {
+		var err error
+		modelName, err = cfgMgr.GetDefaultModel(stage)
+		if err != nil || modelName == "" {
+			for provider := range cfg.APIKeys {
+				if defaultModel, ok := cfg.DefaultModels[provider]; ok && defaultModel != "" {
+					return provider, defaultModel, nil
+				}
+				if _, ok := cfg.APIKeys[provider]; ok {
+					if provider == "requesty" {
+						return provider, "openai/gpt-4", nil
+					}
+					return provider, "gpt-3.5-turbo", nil
+				}
+			}
+			return "", "", fmt.Errorf("no API keys configured. Run 'geoffrussy config' to set up providers")
+		}
+	}
+
+	providerName := ""
+	if strings.Contains(modelName, "/") {
+		if _, ok := cfg.APIKeys["requesty"]; ok {
+			providerName = "requesty"
+		} else {
+			providerName = guessProviderFromModel(modelName)
+		}
+	} else {
+		providerName = guessProviderFromModel(modelName)
+		if providerName == "" {
 			for p := range cfg.APIKeys {
-				return p, overrideModel, nil
+				if _, ok := cfg.APIKeys[p]; ok {
+					providerName = p
+					break
+				}
 			}
-			return "", "", fmt.Errorf("no provider configured for model override")
-		}
-		if _, ok := cfg.APIKeys[provider]; ok {
-			return provider, overrideModel, nil
-		}
-		return provider, overrideModel, nil
-	}
-
-	// Try to get default model for the stage
-	model, err := cfgMgr.GetDefaultModel(stage)
-	if err == nil && model != "" {
-		// Model configured, guess provider from model name
-		provider := guessProviderFromModel(model)
-		if provider != "" {
-			if _, ok := cfg.APIKeys[provider]; ok {
-				return provider, model, nil
-			}
-			return provider, model, nil
 		}
 	}
 
-	// No default model for stage, or provider not configured, use first available provider
-	for provider := range cfg.APIKeys {
-		// Check if this provider has a default model
-		if defaultModel, ok := cfg.DefaultModels[provider]; ok && defaultModel != "" {
-			return provider, defaultModel, nil
+	if providerName == "" {
+		for p := range cfg.APIKeys {
+			return p, modelName, nil
 		}
-		// Otherwise use the first provider with a key
-		if _, ok := cfg.APIKeys[provider]; ok {
-			return provider, "gpt-3.5-turbo", nil
-		}
+		return "", "", fmt.Errorf("no provider configured for model: %s", modelName)
 	}
 
-	return "", "", fmt.Errorf("no API keys configured. Run 'geoffrussy config' to set up providers")
+	if _, ok := cfg.APIKeys[providerName]; !ok {
+		return "", "", fmt.Errorf("no API key configured for provider '%s'. Run 'geoffrussy config --set-key'", providerName)
+	}
+
+	return providerName, modelName, nil
 }
 
-// guessProviderFromModel attempts to guess the provider from a model name
 func guessProviderFromModel(model string) string {
 	lowerModel := strings.ToLower(model)
 
-	// OpenAI models
 	if strings.Contains(lowerModel, "gpt") {
 		return "openai"
 	}
 
-	// Anthropic models
 	if strings.Contains(lowerModel, "claude") {
 		return "anthropic"
 	}
 
-	// Kimi models
 	if strings.Contains(lowerModel, "moonshot") || strings.Contains(lowerModel, "kimi") {
 		return "kimi"
 	}
 
-	// Z.ai models
 	if strings.Contains(lowerModel, "zai") {
 		return "zai"
 	}
 
-	// OpenCode models
 	if strings.Contains(lowerModel, "opencode") {
 		return "opencode"
 	}
@@ -131,7 +132,6 @@ func setupProvider(bridge *provider.Bridge, cfgMgr *config.Manager, providerName
 		return err
 	}
 
-	// Special handling for Ollama which doesn't require an API key
 	if providerName == "ollama" {
 		if err := p.Authenticate(""); err != nil {
 			return fmt.Errorf("failed to authenticate/connect to %s: %w", providerName, err)
@@ -139,7 +139,6 @@ func setupProvider(bridge *provider.Bridge, cfgMgr *config.Manager, providerName
 		return bridge.RegisterProvider(p)
 	}
 
-	// For all other providers, we expect an API key
 	apiKey, err := cfgMgr.GetAPIKey(providerName)
 	if err != nil {
 		return err

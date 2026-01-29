@@ -105,62 +105,74 @@ func runInterview(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	question, err := engine.GetNextQuestion(session)
-	if err != nil {
-		return fmt.Errorf("failed to get next question: %w", err)
-	}
+	reader := bufio.NewReader(os.Stdin)
 
-	if question == nil {
-		complete, missing := engine.ValidateCompleteness(session)
-		if complete {
-			fmt.Println("════════════════════════════════════════════════════════")
-			fmt.Println("✅ Interview completed successfully!")
-
-			summary, err := engine.GenerateSummary(session)
-			if err != nil {
-				return fmt.Errorf("failed to generate summary: %w", err)
-			}
-
-			fmt.Println("\n📊 Interview Summary")
-			fmt.Println("─────────────────────────────────────────────")
-			fmt.Println(summary)
-
-			fmt.Println("\n💡 Next steps:")
-			fmt.Println("   Run 'geoffrussy design' to generate architecture")
-			fmt.Println("   Run 'geoffrussy config' to update configuration")
-		} else {
-			fmt.Println("⚠️  Interview is incomplete. Missing required answers:")
-			for _, m := range missing {
-				fmt.Printf("   - %s\n", m)
-			}
+	for {
+		question, err := engine.GetNextQuestion(session)
+		if err != nil {
+			return fmt.Errorf("failed to get next question: %w", err)
 		}
 
-		return nil
+		if question == nil {
+			complete, missing := engine.ValidateCompleteness(session)
+			if complete {
+				fmt.Println("════════════════════════════════════════════════════════")
+				fmt.Println("✅ Interview completed successfully!")
+
+				summary, err := engine.GenerateSummary(session)
+				if err != nil {
+					return fmt.Errorf("failed to generate summary: %w", err)
+				}
+
+				fmt.Println("\n📊 Interview Summary")
+				fmt.Println("─────────────────────────────────────────────")
+				fmt.Println(summary)
+
+				fmt.Println("\n💡 Next steps:")
+				fmt.Println("   Run 'geoffrussy design' to generate architecture")
+				fmt.Println("   Run 'geoffrussy config' to update configuration")
+			} else {
+				fmt.Println("⚠️  Interview is incomplete. Missing required answers:")
+				for _, m := range missing {
+					fmt.Printf("   - %s\n", m)
+				}
+			}
+
+			return nil
+		}
+
+		fmt.Printf("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+		fmt.Printf("Phase %s - Question %d\n", session.CurrentPhase, session.CurrentQuestion)
+		fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		fmt.Printf("\n%s\n\n", question.Text)
+
+		fmt.Printf("Your answer (or 'help' for suggestions, 'back' to go back): ")
+		answer, _ := reader.ReadString('\n')
+		answer = strings.TrimSpace(answer)
+
+		if answer == "back" {
+			fmt.Println("⏮️  Going to previous question...")
+			continue
+		}
+
+		if answer == "help" {
+			fmt.Println("\n💡 Suggestions:")
+			fmt.Println("   - Be specific about your problem")
+			fmt.Println("   - Mention your target users")
+			fmt.Println("   - List key features you need")
+			fmt.Println("   - Describe any constraints")
+			fmt.Println()
+			continue
+		}
+
+		if err := engine.RecordAnswer(session, question.ID, answer); err != nil {
+			return fmt.Errorf("failed to record answer: %w", err)
+		}
+
+		if err := engine.SaveSession(session); err != nil {
+			return fmt.Errorf("failed to save session: %w", err)
+		}
+
+		fmt.Println("✅ Answer saved!")
 	}
-
-	fmt.Printf("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
-	fmt.Printf("Phase %s - Question %d\n", session.CurrentPhase, session.CurrentQuestion)
-	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	fmt.Printf("\n%s\n\n", question.Text)
-
-	fmt.Printf("Your answer (or 'help' for suggestions, 'back' to go back): ")
-	reader := bufio.NewReader(os.Stdin)
-	answer, _ := reader.ReadString('\n')
-	answer = strings.TrimSpace(answer)
-
-	if answer == "back" {
-		fmt.Println("⏮️  Going to previous question...")
-		return runInterview(cmd, args)
-	}
-
-	if err := engine.RecordAnswer(session, question.ID, answer); err != nil {
-		return fmt.Errorf("failed to record answer: %w", err)
-	}
-
-	if err := engine.SaveSession(session); err != nil {
-		return fmt.Errorf("failed to save session: %w", err)
-	}
-
-	fmt.Println("✅ Answer saved!")
-	return runInterview(cmd, args)
 }

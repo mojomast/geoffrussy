@@ -35,11 +35,19 @@ func runConfig(cmd *cobra.Command, args []string) error {
 	}
 
 	if configSetKey {
-		return setAPIKeyInteractive()
+		cfgMgr := config.NewManager()
+		if err := cfgMgr.Load(nil); err != nil {
+			return fmt.Errorf("failed to load configuration: %w", err)
+		}
+		return setAPIKeyInteractive(cfgMgr)
 	}
 
 	if configSetModel {
-		return setDefaultModelInteractive()
+		cfgMgr := config.NewManager()
+		if err := cfgMgr.Load(nil); err != nil {
+			return fmt.Errorf("failed to load configuration: %w", err)
+		}
+		return setDefaultModelInteractive(cfgMgr)
 	}
 
 	return showConfigMenu()
@@ -77,11 +85,11 @@ func showConfigMenu() error {
 
 		switch choice {
 		case "1":
-			if err := setAPIKeyInteractive(); err != nil {
+			if err := setAPIKeyInteractive(cfgMgr); err != nil {
 				fmt.Printf("⚠️  Error: %v\n", err)
 			}
 		case "2":
-			if err := setDefaultModelInteractive(); err != nil {
+			if err := setDefaultModelInteractive(cfgMgr); err != nil {
 				fmt.Printf("⚠️  Error: %v\n", err)
 			}
 		case "3":
@@ -235,7 +243,7 @@ func listProvidersAndModels() error {
 	return nil
 }
 
-func setAPIKeyInteractive() error {
+func setAPIKeyInteractive(cfgMgr *config.Manager) error {
 	fmt.Println("\n╔════════════════════════════════════════════════════════════╗")
 	fmt.Println("║              Set API Key                                       ║")
 	fmt.Println("╚════════════════════════════════════════════════════════════╝")
@@ -274,11 +282,6 @@ func setAPIKeyInteractive() error {
 		return nil
 	}
 
-	cfgMgr := config.NewManager()
-	if err := cfgMgr.Load(nil); err != nil {
-		return fmt.Errorf("failed to load configuration: %w", err)
-	}
-
 	if err := cfgMgr.SetAPIKey(selectedName, apiKey); err != nil {
 		return fmt.Errorf("failed to set API key: %w", err)
 	}
@@ -291,7 +294,7 @@ func setAPIKeyInteractive() error {
 	return nil
 }
 
-func setDefaultModelInteractive() error {
+func setDefaultModelInteractive(cfgMgr *config.Manager) error {
 	fmt.Println("\n╔════════════════════════════════════════════════════════════╗")
 	fmt.Println("║            Set Default Model for Stage                        ║")
 	fmt.Println("╚════════════════════════════════════════════════════════════╝")
@@ -317,10 +320,6 @@ func setDefaultModelInteractive() error {
 
 	selectedStage := stages[index-1]
 
-	cfgMgr := config.NewManager()
-	if err := cfgMgr.Load(nil); err != nil {
-		return fmt.Errorf("failed to load configuration: %w", err)
-	}
 	cfg := cfgMgr.GetConfig()
 
 	fmt.Printf("\nCurrent configured models:\n")
