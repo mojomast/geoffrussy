@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/mojomast/geoffrussy/internal/config"
 	"github.com/mojomast/geoffrussy/internal/devplan"
@@ -194,40 +195,4 @@ func formatPhaseContent(phase *devplan.Phase) string {
 		}
 	}
 	return sb.String()
-}
-
-func applyImprovements(rev *reviewer.Reviewer, store *state.Store, phases []state.Phase, report *reviewer.ReviewReport) error {
-	fmt.Println("📝 Applying improvements...")
-	cwd, err := os.Getwd()
-	if err != nil {
-		return err
-	}
-	projectID := filepath.Base(cwd)
-
-	devplanPhases, err := convertStatePhasesToDevplan(store, []*state.Phase{&phases[0]})
-	if err != nil {
-		return err
-	}
-
-	updatedPhases, err := rev.ApplyImprovementsToAll(devplanPhases, report)
-	if err != nil {
-		return err
-	}
-
-	for _, phase := range updatedPhases {
-		statePhase := &state.Phase{
-			ID:        phase.ID,
-			ProjectID: projectID,
-			Number:    phase.Number,
-			Title:     phase.Title,
-			Content:   formatPhaseContent(&phase),
-			Status:    state.PhaseStatus(phase.Status),
-			CreatedAt: phase.CreatedAt,
-		}
-		if err := store.SavePhase(statePhase); err != nil {
-			return err
-		}
-	}
-
-	return nil
 }

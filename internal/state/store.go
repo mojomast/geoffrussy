@@ -334,6 +334,43 @@ func (s *Store) UpdateProjectStage(id string, stage Stage) error {
 	return nil
 }
 
+// ResetProjectProgress resets in-progress tasks and phases to not started
+func (s *Store) ResetProjectProgress(projectID string) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	// Reset tasks
+	taskQuery := `
+		UPDATE tasks
+		SET status = ?, started_at = NULL
+		WHERE status = ? AND phase_id IN (
+			SELECT id FROM phases WHERE project_id = ?
+		)
+	`
+	if _, err := tx.Exec(taskQuery, TaskNotStarted, TaskInProgress, projectID); err != nil {
+		return fmt.Errorf("failed to reset tasks: %w", err)
+	}
+
+	// Reset phases
+	phaseQuery := `
+		UPDATE phases
+		SET status = ?, started_at = NULL
+		WHERE project_id = ? AND status = ?
+	`
+	if _, err := tx.Exec(phaseQuery, PhaseNotStarted, projectID, PhaseInProgress); err != nil {
+		return fmt.Errorf("failed to reset phases: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return nil
+}
+
 // Interview data operations
 
 // SaveInterviewData saves interview data for a project

@@ -177,7 +177,7 @@ func (s *Store) ListAllPhaseProgress(projectID string) ([]*PhaseProgress, error)
 	}
 
 	// Get all tasks for the project in one query
-	tasks, err := s.ListProjectTasks(projectID)
+	tasks, err := s.ListTasksByProject(projectID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list project tasks: %w", err)
 	}
