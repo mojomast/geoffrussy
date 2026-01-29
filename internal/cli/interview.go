@@ -35,7 +35,7 @@ func init() {
 
 func runInterview(cmd *cobra.Command, args []string) error {
 	fmt.Println("🎤 Starting Project Interview...")
-	fmt.Println("════════════════════════════════════════════════════════════")
+	fmt.Println("════════════════════════════════════════════════════════")
 	fmt.Println()
 
 	cfgMgr := config.NewManager()
@@ -50,7 +50,7 @@ func runInterview(cmd *cobra.Command, args []string) error {
 
 	projectID := filepath.Base(cwd)
 
-	// Use the same database location as init command
+	// Use of same database location as init command
 	dbPath := filepath.Join(cwd, ".geoffrussy", "state.db")
 	store, err := state.NewStore(dbPath)
 	if err != nil {
@@ -65,6 +65,11 @@ func runInterview(cmd *cobra.Command, args []string) error {
 
 	providerName, modelName, err := getProviderAndModel(cfgMgr, "interview", interviewModel)
 	if err != nil {
+		fmt.Println("\n⚠️  Could not automatically select provider and model")
+		fmt.Println("   Available options:")
+		fmt.Println("   1. Run './geoffrussy config' to set up providers")
+		fmt.Println("   2. Run './geoffrussy config --list-providers' to see available models")
+		fmt.Println("   3. Use '--model <model-name>' flag to specify a model")
 		return fmt.Errorf("failed to get provider and model: %w", err)
 	}
 
@@ -108,7 +113,7 @@ func runInterview(cmd *cobra.Command, args []string) error {
 	if question == nil {
 		complete, missing := engine.ValidateCompleteness(session)
 		if complete {
-			fmt.Println("════════════════════════════════════════════════════════════")
+			fmt.Println("════════════════════════════════════════════════════════")
 			fmt.Println("✅ Interview completed successfully!")
 
 			summary, err := engine.GenerateSummary(session)
@@ -117,7 +122,7 @@ func runInterview(cmd *cobra.Command, args []string) error {
 			}
 
 			fmt.Println("\n📊 Interview Summary")
-			fmt.Println("─────────────────────────────────────────────────────")
+			fmt.Println("─────────────────────────────────────────────")
 			fmt.Println(summary)
 
 			fmt.Println("\n💡 Next steps:")
@@ -133,7 +138,7 @@ func runInterview(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	fmt.Printf("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+	fmt.Printf("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
 	fmt.Printf("Phase %s - Question %d\n", session.CurrentPhase, session.CurrentQuestion)
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	fmt.Printf("\n%s\n\n", question.Text)
@@ -158,6 +163,4 @@ func runInterview(cmd *cobra.Command, args []string) error {
 
 	fmt.Println("✅ Answer saved!")
 	return runInterview(cmd, args)
-
-	return nil
 }

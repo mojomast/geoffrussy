@@ -166,7 +166,11 @@ func promptForAPIKeys(cfgManager *config.Manager) error {
 	}
 
 	// Prompt for default model
-	fmt.Print("\nDefault model for interview stage (e.g., gpt-4, claude-3-opus): ")
+	fmt.Println("\n📦 Available Models:")
+	fmt.Println("─────────────────────────────────────────────────────")
+	displayConfiguredModels(cfgManager)
+
+	fmt.Print("\nDefault model for interview stage (select from above): ")
 	defaultModel, _ := reader.ReadString('\n')
 	defaultModel = strings.TrimSpace(defaultModel)
 	if defaultModel != "" {
@@ -175,4 +179,46 @@ func promptForAPIKeys(cfgManager *config.Manager) error {
 	}
 
 	return nil
+}
+
+func displayConfiguredModels(cfgMgr *config.Manager) {
+	cfg := cfgMgr.GetConfig()
+
+	providerModels := map[string][]string{
+		"openai":    {"gpt-4", "gpt-4-turbo", "gpt-3.5-turbo"},
+		"anthropic": {"claude-3-opus", "claude-3-sonnet", "claude-3-haiku", "claude-2.1"},
+		"ollama":    {"llama2", "mistral", "neural-chat", "codellama"},
+		"firmware":  {"claude-3-opus", "claude-3-sonnet", "gpt-4"},
+		"requesty":  {"claude-3-opus", "claude-3-sonnet", "gpt-4"},
+		"zai":       {"zai-c3", "zai-c3-turbo"},
+		"kimi":      {"moonshot-v1-32k", "moonshot-v1-128k"},
+		"opencode":  {"opencode-1", "opencode-2"},
+	}
+
+	providerNames := map[string]string{
+		"openai":    "OpenAI",
+		"anthropic": "Anthropic",
+		"ollama":    "Ollama (Local)",
+		"firmware":  "Firmware.ai",
+		"requesty":  "Requesty.ai",
+		"zai":       "Z.ai",
+		"kimi":      "Kimi",
+		"opencode":  "OpenCode",
+	}
+
+	if len(cfg.APIKeys) == 0 {
+		fmt.Println("⚠️  No API keys configured. Run 'geoffrussy config' to add keys.")
+		return
+	}
+
+	for provider := range cfg.APIKeys {
+		models, ok := providerModels[provider]
+		if !ok {
+			continue
+		}
+		fmt.Printf("\n📦 %s:\n", providerNames[provider])
+		for _, model := range models {
+			fmt.Printf("   • %s\n", model)
+		}
+	}
 }
