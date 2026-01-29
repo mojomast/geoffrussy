@@ -65,16 +65,23 @@ func (m *MockProvider) SupportsCodingPlan() bool {
 
 func TestDevPlanGenerator(t *testing.T) {
 	mockResponse := `
-PHASE 0: Setup & Infrastructure
-OBJECTIVE: Initialize project
-SUCCESS_CRITERIA:
-- Project created
-- Dependencies installed
-DEPENDENCIES: None
-TASKS:
-1. Create project structure
-   ACCEPTANCE: Directory structure exists
-   NOTES: Use standard layout
+[
+  {
+    "number": 0,
+    "title": "Setup & Infrastructure",
+    "objective": "Initialize project",
+    "success_criteria": ["Project created", "Dependencies installed"],
+    "dependencies": [],
+    "tasks": [
+      {
+        "number": "0.1",
+        "description": "Create project structure",
+        "acceptance_criteria": ["Directory structure exists"],
+        "implementation_notes": ["Use standard layout"]
+      }
+    ]
+  }
+]
 `
 
 	mockProvider := &MockProvider{response: mockResponse}
@@ -127,6 +134,27 @@ TASKS:
 
 		if phase.EstimatedCost == 0 {
 			t.Error("Phase should have estimated cost")
+		}
+	})
+
+	t.Run("GeneratePhases_InvalidJSON", func(t *testing.T) {
+		// Create a generator with a provider that returns invalid JSON
+		invalidJSONProvider := &MockProvider{response: "This is not JSON"}
+		invalidGenerator := NewGenerator(invalidJSONProvider, "test-model")
+
+		phases, err := invalidGenerator.GeneratePhases(architecture, interviewData)
+		if err != nil {
+			t.Fatalf("Failed to generate phases: %v", err)
+		}
+
+		// Should fall back to default phases
+		if len(phases) == 0 {
+			t.Fatal("Should return default phases on invalid JSON")
+		}
+
+		// Check that we got the default phase
+		if phases[0].Title != "Setup & Infrastructure" {
+			t.Errorf("Expected default phase title, got %s", phases[0].Title)
 		}
 	})
 
