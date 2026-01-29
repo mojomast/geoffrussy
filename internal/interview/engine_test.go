@@ -1256,3 +1256,56 @@ func containsHelper(s, substr string) bool {
 	}
 	return false
 }
+
+func TestInterviewEngine_ProjectNameExport(t *testing.T) {
+	// Create temporary database
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+
+	store, err := state.NewStore(dbPath)
+	if err != nil {
+		t.Fatalf("Failed to create store: %v", err)
+	}
+	defer store.Close()
+
+	// Create test project with specific name different from ID
+	projectID := "test-project-id"
+	projectName := "Test Project Name"
+	project := &state.Project{
+		ID:           projectID,
+		Name:         projectName,
+		CreatedAt:    time.Now(),
+		CurrentStage: state.StageInterview,
+	}
+	if err := store.CreateProject(project); err != nil {
+		t.Fatalf("Failed to create project: %v", err)
+	}
+
+	engine := NewEngine(store, nil, "")
+	session, err := engine.StartInterview(project.ID)
+	if err != nil {
+		t.Fatalf("Failed to start interview: %v", err)
+	}
+
+	// Export to JSON
+	jsonStr, err := engine.ExportToJSON(session)
+	if err != nil {
+		t.Fatalf("Failed to export to JSON: %v", err)
+	}
+
+	// Parse JSON
+	var data map[string]interface{}
+	if err := json.Unmarshal([]byte(jsonStr), &data); err != nil {
+		t.Fatalf("Failed to parse JSON: %v", err)
+	}
+
+	// Verify project_name
+	exportedProjectName, ok := data["project_name"].(string)
+	if !ok {
+		t.Fatal("project_name missing or not a string")
+	}
+
+	if exportedProjectName != projectName {
+		t.Errorf("Expected project_name to be '%s', got '%s'", projectName, exportedProjectName)
+	}
+}
