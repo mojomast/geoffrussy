@@ -14,25 +14,25 @@ import (
 
 // Monitor provides live monitoring of task execution
 type Monitor struct {
-	executor   *Executor
-	width      int
-	height     int
-	viewport   viewport.Model
-	progress   progress.Model
-	updates    []TaskUpdate
-	currentTask string
+	executor     *Executor
+	width        int
+	height       int
+	viewport     viewport.Model
+	progress     progress.Model
+	updates      []TaskUpdate
+	currentTask  string
 	currentPhase string
-	startTime   time.Time
-	err         error
+	startTime    time.Time
+	err          error
 }
 
 // NewMonitor creates a new live monitor
 func NewMonitor(executor *Executor) *Monitor {
-	vp := viewport.New(80, 20)
+	vp := viewport.New(0, 0) // Let viewport determine size from window
 	vp.Style = lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color("63")).
-		Padding(1)
+		Padding(1, 0, 1, 1) // Add horizontal padding
 
 	prog := progress.New(progress.WithDefaultGradient())
 
@@ -168,9 +168,9 @@ func (m *Monitor) View() string {
 
 	// Progress bar (simplified - would need actual progress calculation)
 	b.WriteString(m.progress.View())
-	b.WriteString("\n\n")
+	b.WriteString("\n")
 
-	// Output viewport
+	// Output viewport - this is where task updates appear
 	b.WriteString(m.viewport.View())
 	b.WriteString("\n\n")
 
@@ -196,10 +196,10 @@ func (m *Monitor) waitForUpdate() tea.Cmd {
 func (m *Monitor) updateViewport() {
 	var lines []string
 
-	// Show last 50 updates
+	// Show last 30 updates (fewer to keep UI cleaner)
 	start := 0
-	if len(m.updates) > 50 {
-		start = len(m.updates) - 50
+	if len(m.updates) > 30 {
+		start = len(m.updates) - 30
 	}
 
 	for _, update := range m.updates[start:] {
@@ -209,8 +209,6 @@ func (m *Monitor) updateViewport() {
 
 	content := strings.Join(lines, "\n")
 	m.viewport.SetContent(content)
-
-	// Scroll to bottom
 	m.viewport.GotoBottom()
 }
 
