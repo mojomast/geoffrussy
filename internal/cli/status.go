@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/mojomast/geoffrussy/internal/blocker"
 	"github.com/mojomast/geoffrussy/internal/state"
@@ -201,15 +202,7 @@ func displayProgressBar(percent int) {
 
 	barLength := 40
 	filled := percent * barLength / 100
-	bar := "  ["
-	for i := 0; i < barLength; i++ {
-		if i < filled {
-			bar += "█"
-		} else {
-			bar += "░"
-		}
-	}
-	bar += fmt.Sprintf("] %d%%", percent)
+	bar := "  [" + strings.Repeat("█", filled) + strings.Repeat("░", barLength-filled) + fmt.Sprintf("] %d%%", percent)
 	fmt.Println(bar)
 }
 
