@@ -27,17 +27,17 @@ func NewGenerator(provider provider.Provider, model string) *Generator {
 
 // Phase represents a development phase
 type Phase struct {
-	ID              string
-	Number          int
-	Title           string
-	Objective       string
-	SuccessCriteria []string
-	Dependencies    []string
-	Tasks           []Task
-	EstimatedTokens int
-	EstimatedCost   float64
-	Status          PhaseStatus
-	CreatedAt       time.Time
+	ID              string      `json:"id"`
+	Number          int         `json:"number"`
+	Title           string      `json:"title"`
+	Objective       string      `json:"objective"`
+	SuccessCriteria []string    `json:"success_criteria"`
+	Dependencies    []string    `json:"dependencies"`
+	Tasks           []Task      `json:"tasks"`
+	EstimatedTokens int         `json:"estimated_tokens"`
+	EstimatedCost   float64     `json:"estimated_cost"`
+	Status          PhaseStatus `json:"status"`
+	CreatedAt       time.Time   `json:"created_at"`
 }
 
 // PhaseStatus represents the status of a phase
@@ -52,13 +52,13 @@ const (
 
 // Task represents a development task
 type Task struct {
-	ID                  string
-	Number              string
-	Description         string
-	AcceptanceCriteria  []string
-	ImplementationNotes []string
-	BlockersEncountered []string
-	Status              TaskStatus
+	ID                  string     `json:"id"`
+	Number              string     `json:"number"`
+	Description         string     `json:"description"`
+	AcceptanceCriteria  []string   `json:"acceptance_criteria"`
+	ImplementationNotes []string   `json:"implementation_notes"`
+	BlockersEncountered []string   `json:"blockers_encountered"`
+	Status              TaskStatus `json:"status"`
 }
 
 // TaskStatus represents the status of a task
@@ -74,11 +74,11 @@ const (
 
 // DevPlan represents the complete development plan
 type DevPlan struct {
-	ProjectID       string
-	Phases          []Phase
-	TotalTokens     int
-	TotalCost       float64
-	CreatedAt       time.Time
+	ProjectID   string    `json:"project_id"`
+	Phases      []Phase   `json:"phases"`
+	TotalTokens int       `json:"total_tokens"`
+	TotalCost   float64   `json:"total_cost"`
+	CreatedAt   time.Time `json:"created_at"`
 }
 
 // GeneratePhases generates 7-10 executable phases from architecture and interview data
@@ -138,20 +138,28 @@ Follow this standard order:
 - Phase 8: Performance & Observability
 - Phase 9: Deployment & Hardening
 
-For each phase, provide:
-PHASE [number]: [Title]
-OBJECTIVE: [Clear objective]
-SUCCESS_CRITERIA:
-- [Criterion 1]
-- [Criterion 2]
-DEPENDENCIES: [List of phase numbers this depends on]
-TASKS:
-1. [Task description]
-   ACCEPTANCE: [Acceptance criteria]
-   NOTES: [Implementation notes]
-2. [Next task...]
+Output your response as a strict JSON array of phase objects. Do not include any text outside the JSON.
+The JSON format must be:
 
-Generate the phases now:`
+[
+  {
+    "number": 0,
+    "title": "Phase Title",
+    "objective": "Clear objective",
+    "success_criteria": ["Criterion 1", "Criterion 2"],
+    "dependencies": ["0", "1"],
+    "tasks": [
+      {
+        "number": "0.1",
+        "description": "Task description",
+        "acceptance_criteria": ["Acceptance 1", "Acceptance 2"],
+        "implementation_notes": ["Note 1", "Note 2"]
+      }
+    ]
+  }
+]
+
+Generate the phases JSON now:`
 
 	return prompt
 }
@@ -240,8 +248,57 @@ func (g *Generator) parsePhasesResponse(response string) ([]Phase, error) {
 
 	// Try to parse the response, fall back to defaults if parsing fails
 	if response != "" {
-		// TODO: Implement more sophisticated parsing
-		phases = defaultPhases
+		// Clean up the response (remove Markdown code blocks)
+		jsonContent := response
+		if strings.Contains(jsonContent, "```json") {
+			parts := strings.Split(jsonContent, "```json")
+			if len(parts) > 1 {
+				jsonContent = parts[1]
+			}
+			parts = strings.Split(jsonContent, "```")
+			if len(parts) > 0 {
+				jsonContent = parts[0]
+			}
+		} else if strings.Contains(jsonContent, "```") {
+			// Handle generic code blocks
+			parts := strings.Split(jsonContent, "```")
+			if len(parts) > 1 {
+				jsonContent = parts[1]
+			}
+		}
+
+		jsonContent = strings.TrimSpace(jsonContent)
+
+		err := json.Unmarshal([]byte(jsonContent), &phases)
+		if err != nil {
+			phases = defaultPhases
+		} else {
+			// Post-process parsed phases
+			for i := range phases {
+				// Generate ID if missing
+				if phases[i].ID == "" {
+					phases[i].ID = fmt.Sprintf("phase-%d", phases[i].Number)
+				}
+
+				// Ensure Status is set
+				if phases[i].Status == "" {
+					phases[i].Status = PhaseNotStarted
+				}
+
+				// Process tasks
+				for j := range phases[i].Tasks {
+					// Generate Task ID if missing
+					if phases[i].Tasks[j].ID == "" {
+						phases[i].Tasks[j].ID = fmt.Sprintf("task-%d-%d", phases[i].Number, j+1)
+					}
+
+					// Ensure Task Status is set
+					if phases[i].Tasks[j].Status == "" {
+						phases[i].Tasks[j].Status = TaskNotStarted
+					}
+				}
+			}
+		}
 	} else {
 		phases = defaultPhases
 	}

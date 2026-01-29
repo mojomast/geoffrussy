@@ -105,7 +105,7 @@ func runRootWithResumeCheck(cmd *cobra.Command, args []string) error {
 
 	// Initialize managers
 	gitMgr := git.NewManager(".")
-	checkpointMgr := checkpoint.NewManager(store, gitMgr)
+	checkpointMgr := checkpoint.NewManager(store, gitMgr, configDir)
 	resumeMgr := resume.NewManager(store, checkpointMgr)
 
 	// Check for incomplete work
