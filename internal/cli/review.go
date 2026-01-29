@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/mojomast/geoffrussy/internal/config"
 	"github.com/mojomast/geoffrussy/internal/devplan"

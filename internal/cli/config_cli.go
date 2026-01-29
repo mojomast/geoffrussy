@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/mojomast/geoffrussy/internal/config"
+	"github.com/mojomast/geoffrussy/internal/provider"
 	"github.com/spf13/cobra"
 )
 
@@ -156,31 +157,76 @@ func listProvidersAndModels() error {
 	fmt.Println("╚════════════════════════════════════════════════════════════╝")
 	fmt.Println()
 
-	providers := []struct {
-		name    string
-		display string
-		models  []string
-	}{
-		{"openai", "OpenAI", []string{"gpt-4", "gpt-4-turbo", "gpt-3.5-turbo"}},
-		{"anthropic", "Anthropic", []string{"claude-3-opus", "claude-3-sonnet", "claude-3-haiku", "claude-2.1"}},
-		{"ollama", "Ollama (Local)", []string{"llama2", "mistral", "neural-chat", "codellama"}},
-		{"firmware", "Firmware.ai", []string{"claude-3-opus", "claude-3-sonnet", "gpt-4"}},
-		{"requesty", "Requesty.ai", []string{"claude-3-opus", "claude-3-sonnet", "gpt-4"}},
-		{"zai", "Z.ai", []string{"zai-c3", "zai-c3-turbo"}},
-		{"kimi", "Kimi", []string{"moonshot-v1-32k", "moonshot-v1-128k"}},
-		{"opencode", "OpenCode", []string{"opencode-1", "opencode-2"}},
+	cfgMgr := config.NewManager()
+	if err := cfgMgr.Load(nil); err != nil {
+		return fmt.Errorf("failed to load configuration: %w", err)
 	}
+	cfg := cfgMgr.GetConfig()
 
-	for _, p := range providers {
-		fmt.Printf("\n📦 %s\n", p.display)
+	providerNames := provider.GetProviderNames()
+
+	for _, name := range providerNames {
+		fmt.Printf("\n📦 %s\n", strings.Title(name))
+
+		// Create provider
+		p, err := provider.CreateProvider(name)
+		if err != nil {
+			fmt.Printf("   Error: %v\n", err)
+			continue
+		}
+
+		// Check authentication
+		isAuthenticated := false
+		var authErr error
+
+		if name == "ollama" {
+			// Ollama doesn't need API key
+			if err := p.Authenticate(""); err == nil {
+				isAuthenticated = true
+			} else {
+				authErr = err
+			}
+		} else {
+			if key, ok := cfg.APIKeys[name]; ok && key != "" {
+				if err := p.Authenticate(key); err == nil {
+					isAuthenticated = true
+				} else {
+					authErr = err
+				}
+			}
+		}
+
+		if !isAuthenticated {
+			if name == "ollama" {
+				if authErr != nil {
+					fmt.Printf("   ⚠️  Connection failed: %v\n", authErr)
+				} else {
+					fmt.Println("   ⚠️  Not connected (is Ollama running?)")
+				}
+			} else {
+				if authErr != nil {
+					fmt.Printf("   ⚠️  Authentication failed: %v\n", authErr)
+				} else {
+					fmt.Println("   ⚠️  Not configured (set API key to see models)")
+				}
+			}
+			continue
+		}
+
+		// List models
+		models, err := p.ListModels()
+		if err != nil {
+			fmt.Printf("   Error listing models: %v\n", err)
+			continue
+		}
+
 		fmt.Println("   Models:")
-		for _, model := range p.models {
-			fmt.Printf("      • %s\n", model)
+		for _, model := range models {
+			fmt.Printf("      • %s\n", model.Name)
 		}
 	}
 
-	fmt.Println("\n💡 Tip: Use provider names with 'geoffrussy config --set-key'")
-	fmt.Println("   Available providers: openai, anthropic, ollama, firmware, requesty, zai, kimi, opencode")
+	fmt.Println("\n💡 Tip: Use 'geoffrussy config --set-key' to configure providers")
 	return nil
 }
 
@@ -190,25 +236,12 @@ func setAPIKeyInteractive() error {
 	fmt.Println("╚════════════════════════════════════════════════════════════╝")
 	fmt.Println()
 
-	providers := []struct {
-		name   string
-		prompt string
-	}{
-		{"openai", "OpenAI"},
-		{"anthropic", "Anthropic"},
-		{"ollama", "Ollama"},
-		{"firmware", "Firmware.ai"},
-		{"requesty", "Requesty.ai"},
-		{"zai", "Z.ai"},
-		{"kimi", "Kimi"},
-		{"opencode", "OpenCode"},
-	}
-
+	providerNames := provider.GetProviderNames()
 	reader := bufio.NewReader(os.Stdin)
 
 	fmt.Println("Select a provider to configure (or type 'cancel'):")
-	for i, p := range providers {
-		fmt.Printf("  %d) %s\n", i+1, p.prompt)
+	for i, name := range providerNames {
+		fmt.Printf("  %d) %s\n", i+1, strings.Title(name))
 	}
 	fmt.Print("\nSelection: ")
 
@@ -221,12 +254,13 @@ func setAPIKeyInteractive() error {
 	}
 
 	index := 0
-	if _, err := fmt.Sscanf(selection, "%d", &index); err != nil || index < 1 || index > len(providers) {
+	if _, err := fmt.Sscanf(selection, "%d", &index); err != nil || index < 1 || index > len(providerNames) {
 		return fmt.Errorf("invalid selection")
 	}
 
-	selected := providers[index-1]
-	fmt.Printf("\nEnter API Key for %s (or press Enter to skip): ", selected.prompt)
+	selectedName := providerNames[index-1]
+
+	fmt.Printf("\nEnter API Key for %s (or press Enter to skip): ", strings.Title(selectedName))
 	apiKey, _ := reader.ReadString('\n')
 	apiKey = strings.TrimSpace(apiKey)
 
@@ -240,7 +274,7 @@ func setAPIKeyInteractive() error {
 		return fmt.Errorf("failed to load configuration: %w", err)
 	}
 
-	if err := cfgMgr.SetAPIKey(selected.name, apiKey); err != nil {
+	if err := cfgMgr.SetAPIKey(selectedName, apiKey); err != nil {
 		return fmt.Errorf("failed to set API key: %w", err)
 	}
 
@@ -278,13 +312,13 @@ func setDefaultModelInteractive() error {
 
 	selectedStage := stages[index-1]
 
-	fmt.Printf("\nCurrent configured models:\n")
 	cfgMgr := config.NewManager()
 	if err := cfgMgr.Load(nil); err != nil {
 		return fmt.Errorf("failed to load configuration: %w", err)
 	}
 	cfg := cfgMgr.GetConfig()
 
+	fmt.Printf("\nCurrent configured models:\n")
 	if len(cfg.DefaultModels) == 0 {
 		fmt.Println("   None configured")
 	} else {
@@ -293,16 +327,45 @@ func setDefaultModelInteractive() error {
 		}
 	}
 
-	fmt.Printf("\nEnter model for %s stage: ", selectedStage)
-	model, _ := reader.ReadString('\n')
-	model = strings.TrimSpace(model)
+	fmt.Printf("\nEnter model for %s stage (type 'list' to see available): ", selectedStage)
+	modelInput, _ := reader.ReadString('\n')
+	modelInput = strings.TrimSpace(modelInput)
 
-	if model == "" {
+	if modelInput == "list" {
+		fmt.Println("\nFetching available models...")
+
+		// Use bridge to collect all models
+		bridge := provider.NewBridge()
+		providerNames := provider.GetProviderNames()
+
+		for _, name := range providerNames {
+			if err := setupProvider(bridge, cfgMgr, name); err != nil {
+				// Ignore errors, just skip unconfigured providers
+				continue
+			}
+		}
+
+		allModels, _ := bridge.ListModels()
+		if len(allModels) > 0 {
+			fmt.Println("\nAvailable Models:")
+			for _, m := range allModels {
+				fmt.Printf("  • %s (%s)\n", m.Name, m.Provider)
+			}
+		} else {
+			fmt.Println("⚠️  No models found. Configure providers first.")
+		}
+
+		fmt.Printf("\nEnter model for %s stage: ", selectedStage)
+		modelInput, _ = reader.ReadString('\n')
+		modelInput = strings.TrimSpace(modelInput)
+	}
+
+	if modelInput == "" {
 		fmt.Println("⏭️  Skipped")
 		return nil
 	}
 
-	if err := cfgMgr.SetDefaultModel(selectedStage, model); err != nil {
+	if err := cfgMgr.SetDefaultModel(selectedStage, modelInput); err != nil {
 		return fmt.Errorf("failed to set default model: %w", err)
 	}
 
@@ -310,7 +373,7 @@ func setDefaultModelInteractive() error {
 		return fmt.Errorf("failed to save configuration: %w", err)
 	}
 
-	fmt.Printf("✅ Default model for %s set to %s\n", selectedStage, model)
+	fmt.Printf("✅ Default model for %s set to %s\n", selectedStage, modelInput)
 	return nil
 }
 

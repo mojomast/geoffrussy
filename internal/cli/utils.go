@@ -126,37 +126,28 @@ func guessProviderFromModel(model string) string {
 }
 
 func setupProvider(bridge *provider.Bridge, cfgMgr *config.Manager, providerName string) error {
-	switch providerName {
-	case "openai":
-		apiKey, err := cfgMgr.GetAPIKey("openai")
-		if err != nil {
-			return err
+	p, err := provider.CreateProvider(providerName)
+	if err != nil {
+		return err
+	}
+
+	// Special handling for Ollama which doesn't require an API key
+	if providerName == "ollama" {
+		if err := p.Authenticate(""); err != nil {
+			return fmt.Errorf("failed to authenticate/connect to %s: %w", providerName, err)
 		}
-		p := provider.NewOpenAIProvider()
-		if err := p.Authenticate(apiKey); err != nil {
-			return err
-		}
-		return bridge.RegisterProvider(p)
-	case "anthropic":
-		apiKey, err := cfgMgr.GetAPIKey("anthropic")
-		if err != nil {
-			return err
-		}
-		p := provider.NewAnthropicProvider()
-		if err := p.Authenticate(apiKey); err != nil {
-			return err
-		}
-		return bridge.RegisterProvider(p)
-	case "ollama":
-		p := provider.NewOllamaProvider("http://localhost:11434")
-		return bridge.RegisterProvider(p)
-	default:
-		apiKey, err := cfgMgr.GetAPIKey(providerName)
-		if err != nil {
-			return err
-		}
-		p := provider.NewOpenAIProvider()
-		p.Authenticate(apiKey)
 		return bridge.RegisterProvider(p)
 	}
+
+	// For all other providers, we expect an API key
+	apiKey, err := cfgMgr.GetAPIKey(providerName)
+	if err != nil {
+		return err
+	}
+
+	if err := p.Authenticate(apiKey); err != nil {
+		return fmt.Errorf("failed to authenticate %s: %w", providerName, err)
+	}
+
+	return bridge.RegisterProvider(p)
 }
