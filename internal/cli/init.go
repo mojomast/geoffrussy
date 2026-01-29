@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/mojomast/geoffrussy/internal/config"
 	"github.com/mojomast/geoffrussy/internal/git"
@@ -39,7 +40,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 
 	// Initialize configuration manager
 	cfgManager := config.NewManager()
-	
+
 	// Check if config already exists
 	configPath := filepath.Join(configDir, "config.yaml")
 	if _, err := os.Stat(configPath); err == nil {
@@ -75,6 +76,34 @@ func runInit(cmd *cobra.Command, args []string) error {
 	}
 	defer store.Close()
 	fmt.Printf("✓ Initialized database: %s\n", dbPath)
+
+	// Create or update project in state store
+	projectID := filepath.Base(cwd)
+	project := &state.Project{
+		ID:           projectID,
+		Name:         projectID,
+		CreatedAt:    time.Now(),
+		CurrentStage: state.StageInit,
+		CurrentPhase: "",
+	}
+
+	// Check if project exists
+	existingProject, err := store.GetProject(projectID)
+	if err != nil {
+		// Project doesn't exist, create it
+		if err := store.CreateProject(project); err != nil {
+			return fmt.Errorf("failed to create project: %w", err)
+		}
+		fmt.Printf("✓ Created project: %s\n", projectID)
+	} else {
+		// Project exists, update it
+		existingProject.CurrentStage = state.StageInit
+		existingProject.Name = projectID
+		if err := store.UpdateProject(existingProject); err != nil {
+			return fmt.Errorf("failed to update project: %w", err)
+		}
+		fmt.Printf("✓ Updated project: %s\n", projectID)
+	}
 
 	// Initialize Git repository if needed
 	gitManager := git.NewManager(cwd)

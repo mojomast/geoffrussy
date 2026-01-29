@@ -40,7 +40,6 @@ func runReview(cmd *cobra.Command, args []string) error {
 	if err := cfgMgr.Load(nil); err != nil {
 		return fmt.Errorf("failed to load configuration: %w", err)
 	}
-	cfg := cfgMgr.GetConfig()
 
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -48,7 +47,8 @@ func runReview(cmd *cobra.Command, args []string) error {
 	}
 	projectID := filepath.Base(cwd)
 
-	dbPath := filepath.Join(filepath.Dir(cfg.ConfigPath), "geoffrussy.db")
+	// Use the same database location as init command
+	dbPath := filepath.Join(cwd, ".geoffrussy", "state.db")
 	store, err := state.NewStore(dbPath)
 	if err != nil {
 		return fmt.Errorf("failed to open state store: %w", err)
