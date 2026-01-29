@@ -150,6 +150,11 @@ func (b *Bridge) Call(providerName, model, prompt string) (*Response, error) {
 		return nil, err
 	}
 
+	// Check quotas before making call
+	if err := b.checkQuota(providerName); err != nil {
+		return nil, err
+	}
+
 	// Make the call
 	resp, err := provider.Call(model, prompt)
 	if err != nil {
@@ -175,6 +180,11 @@ func (b *Bridge) Stream(providerName, model, prompt string) (<-chan string, erro
 
 	// Check rate limits before making call
 	if err := b.checkRateLimit(providerName); err != nil {
+		return nil, err
+	}
+
+	// Check quotas before making call
+	if err := b.checkQuota(providerName); err != nil {
 		return nil, err
 	}
 
@@ -263,6 +273,7 @@ func (b *Bridge) GetQuotaInfo(providerName string) (*QuotaInfo, error) {
 }
 
 // checkRateLimit checks if we're within rate limits before making a call
+// and delays the request if necessary
 func (b *Bridge) checkRateLimit(providerName string) error {
 	info, err := b.GetRateLimitInfo(providerName)
 	if err != nil {
@@ -277,9 +288,25 @@ func (b *Bridge) checkRateLimit(providerName string) error {
 
 	// Check if we have requests remaining
 	if info.RequestsRemaining <= 0 {
+		// If we have RetryAfter, wait for it
 		if info.RetryAfter > 0 {
-			return fmt.Errorf("rate limit exceeded for provider '%s', retry after %v", providerName, info.RetryAfter)
+			// Only wait up to 5 minutes
+			if info.RetryAfter <= 5*time.Minute {
+				fmt.Printf("Rate limit reached for provider '%s', waiting %v before retry...\n", providerName, info.RetryAfter)
+				time.Sleep(info.RetryAfter)
+				return nil
+			}
+			return fmt.Errorf("rate limit exceeded for provider '%s', retry after %v (too long to wait)", providerName, info.RetryAfter)
 		}
+
+		// Check if we can wait until reset
+		timeUntilReset := time.Until(info.ResetAt)
+		if timeUntilReset > 0 && timeUntilReset <= 5*time.Minute {
+			fmt.Printf("Rate limit reached for provider '%s', waiting %v until reset...\n", providerName, timeUntilReset)
+			time.Sleep(timeUntilReset + time.Second) // Add 1 second buffer
+			return nil
+		}
+
 		return fmt.Errorf("rate limit exceeded for provider '%s'", providerName)
 	}
 
@@ -289,6 +316,47 @@ func (b *Bridge) checkRateLimit(providerName string) error {
 		if info.RequestsRemaining < threshold {
 			// Log warning but don't block the request
 			fmt.Printf("Warning: approaching rate limit for provider '%s' (%d remaining)\n", providerName, info.RequestsRemaining)
+		}
+	}
+
+	return nil
+}
+
+// checkQuota checks if we're within quota limits before making a call
+func (b *Bridge) checkQuota(providerName string) error {
+	info, err := b.GetQuotaInfo(providerName)
+	if err != nil {
+		// If we can't get quota info, proceed anyway
+		return nil
+	}
+
+	if info == nil {
+		// Provider doesn't support quotas
+		return nil
+	}
+
+	// Check token quota
+	if info.TokensRemaining <= 0 {
+		return fmt.Errorf("token quota exceeded for provider '%s'", providerName)
+	}
+
+	// Check cost quota
+	if info.CostRemaining <= 0 {
+		return fmt.Errorf("cost quota exceeded for provider '%s'", providerName)
+	}
+
+	// Warn if approaching limits (within 10%)
+	if info.TokensLimit > 0 {
+		threshold := info.TokensLimit / 10
+		if info.TokensRemaining < threshold {
+			fmt.Printf("Warning: approaching token quota for provider '%s' (%d remaining)\n", providerName, info.TokensRemaining)
+		}
+	}
+
+	if info.CostLimit > 0 {
+		threshold := info.CostLimit * 0.1
+		if info.CostRemaining < threshold {
+			fmt.Printf("Warning: approaching cost quota for provider '%s' ($%.2f remaining)\n", providerName, info.CostRemaining)
 		}
 	}
 
