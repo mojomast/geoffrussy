@@ -1,50 +1,138 @@
 Handoff — Next Steps
 
-I created this handoff with focused next steps to finish the CLI surface and move toward a release. Tests currently pass (`go test ./...`) but several CLI commands are stubs and need wiring to the implemented core services.
+## Recent Completed Work (2026-01-29)
 
-- Short status
-  - All Go unit tests pass locally (cached results); the core subsystems (state store, providers, devplan, executor, token/cost tracking) are largely implemented.
-  - Several CLI commands in `internal/cli` are placeholders that print TODOs and return errors instead of calling core packages.
+### UI and User Experience Enhancements
+- ✅ **ASCII Art Banner**: Added Geoffrey ASCII art that displays on all commands
+- ✅ **Enhanced Execution Monitor**: Improved TUI with:
+  - Project progress (tasks/phases completed, completion %)
+  - Real-time token usage tracking (input/output tokens)
+  - Elapsed timer that updates every second
+  - Current phase and task display
+  - Fixed viewport sizing to prevent UI clipping
 
-- High priority (make the CLI usable)
-  1. Implement minimal non-interactive wiring for CLI commands so they call existing services and return meaningful output (graceful fallbacks if provider credentials or TUI not present).
-     - Files to update: `internal/cli/interview.go`, `internal/cli/design.go`, `internal/cli/plan.go`, `internal/cli/review.go`, `internal/cli/develop.go`, `internal/cli/checkpoint.go`, `internal/cli/stats.go`, `internal/cli/rollback.go`.
-     - Acceptance: each command should return 0 with helpful message or perform basic work using existing packages; `--help` must show flags.
-     - Verify: run `go build ./cmd/geoffrussy` then `./geoffrussy <command> --help` and `./geoffrussy review --model=gpt` (or similar) to see non-error output.
+### CLI Functionality
+- ✅ **Phase Control**: Added `--stop-after-phase` flag to develop command
+  - Default behavior: continues through all phases automatically
+  - With flag: stops after completing current phase
 
-- Medium priority (behavioral and integration polish)
-  1. Wire provider/model selection and session creation so CLI commands choose the right provider and model mapping.
-     - Files to inspect: `internal/provider/*`, `internal/config/config.go`, `internal/cli/*`.
-  2. Implement `applyImprovements` in `internal/cli/review.go` to use `reviewer.Reviewer` and persist changes to `state.Store`.
-  3. Implement checkpoint creation/listing/rollback using the existing state and git manager (`internal/state`, `internal/git/manager.go`).
+### Provider and Model Configuration
+- ✅ **Fixed Hardcoded Model Issue**: TaskExecutor now uses configured model from config file instead of hardcoded `openai/gpt-5-nano`
+- ✅ **GLM Model Support**: Added GLM model detection for ZAI provider
+  - GLM-4.7 and other GLM models now correctly route to ZAI
+  - Added `glm` keyword to `guessProviderFromModel()` function
 
-- Lower priority (UX, tests, and hardening)
-  1. Integrate Bubbletea TUI flows for interactive commands (interview, develop, live monitor) once non-interactive flows work.
-  2. Add unit/property tests referenced in `.kiro/specs/geoffrey-ai-agent/tasks.md` for CLI validation, checkpoints, and multi-provider behavior.
-  3. Run and fix linter issues (`go vet`, `golangci-lint`) and add CI steps.
+### Code Changes
+- ✅ **New Files**:
+  - `internal/cli/banner.go` - ASCII art banner function
 
-- Immediate actionable checklist (what I recommend doing first)
-  1. Create a short-lived branch: `git checkout -b feat/cli-wiring`.
-  2. Implement minimal wiring for `review` and `checkpoint` (two highest-impact commands).
-  3. Run tests and build:
+- ✅ **Modified Files**:
+  - `internal/cli/develop.go` - Added stop-after-phase flag, model name passing
+  - `internal/cli/root.go` - Added PersistentPreRun for banner display
+  - `internal/cli/utils.go` - Added GLM model detection
+  - `internal/executor/executor.go` - Added modelName field and ExecuteProject method
+  - `internal/executor/monitor.go` - Enhanced with stats tracking and banner
+  - `internal/executor/task_executor.go` - Added modelName field, fixed model usage
 
-     ```bash
-     go test ./...
-     go build ./cmd/geoffrussy
-     ./geoffrussy review --help
-     ./geoffrussy checkpoint --help
-     ```
+### Documentation
+- ✅ **README.md**: Updated with new flags, configuration examples, and features
+- ✅ **RELEASE_NOTES.md**: Added v0.1.1 release notes
 
-  4. Commit with message: `feat(cli): wire review and checkpoint commands to core services` and push; open a PR with summary and verification steps.
+## Current Status
 
-- Suggested PR checklist
-  - Tests still pass (`go test ./...`).
-  - `go build` succeeds for `cmd/geoffrussy`.
-  - Each wired CLI command has a unit-level smoke test or example invocation in the PR description.
-  - Document any breaking flags or behavior in `README.md`.
+### Working CLI Commands
+- ✅ `init` - Initialize Geoffrey in current project
+- ✅ `interview` - Start or resume project interview
+- ✅ `design` - Generate or refine architecture
+- ✅ `plan` - Generate or manipulate DevPlan
+- ✅ `review` - Review and validate DevPlan
+- ✅ `develop` - Execute development phases (with flags: --model, --phase, --stop-after-phase)
+- ✅ `status` - Display project status and progress
+- ✅ `stats` - Show token usage and cost statistics
+- ✅ `quota` - Check rate limits and quotas
+- ✅ `checkpoint` - Create or list checkpoints
+- ✅ `rollback` - Rollback to a checkpoint
+- ✅ `navigate` - Navigate between pipeline stages
+- ✅ `version` - Print version number
 
-- Contacts & references
-  - Tasks spec: `.kiro/specs/geoffrey-ai-agent/tasks.md`
-  - CLI stubs (edit these): `internal/cli/interview.go`, `internal/cli/design.go`, `internal/cli/plan.go`, `internal/cli/review.go`, `internal/cli/develop.go`, `internal/cli/checkpoint.go`, `internal/cli/stats.go`.
+### Supported Providers
+- ✅ OpenAI (GPT-4, GPT-3.5)
+- ✅ Anthropic (Claude 3.5 Sonnet, Claude 3 Opus)
+- ✅ ZAI (GLM-4.7 and other GLM models)
+- ✅ Ollama (Local models)
+- ✅ OpenCode (CLI wrapper for OpenAI/Anthropic)
+- ✅ Firmware.ai
+- ✅ Requesty.ai
+- ✅ Kimi
 
-If you want I can start with the recommended branch and implement the minimal wiring for `review` + `checkpoint` (option 1). Otherwise tell me which commands you'd like me to wire first.
+### Testing Status
+- ✅ Unit tests passing for most packages
+- ⚠️ Some executor tests failing (TestExecutor_ExecuteTask, TestExecutor_ExecutePhase) - due to missing interview data in test setup
+- ✅ CLI tests passing
+- ✅ Provider tests passing
+
+## Next Steps / Known Issues
+
+### Priority 1: Fix Failing Executor Tests
+The executor tests are failing because they lack proper test data setup:
+- `TestExecutor_ExecuteTask` - fails with "interview data not found"
+- `TestExecutor_ExecutePhase` - fails with same issue
+
+**Fix**: Set up proper interview data in test fixtures or mock the interview data retrieval.
+
+### Priority 2: Improve Model Configuration Validation
+Currently, the model configuration has some rough edges:
+- Model selection from config works but could be more robust
+- Provider guessing from model name is basic
+
+**Improvements**:
+- Add better error messages for invalid model/provider combinations
+- Implement model validation in config file parsing
+- Add `geoffrussy config validate` command
+
+### Priority 3: Enhanced TUI Features
+While the execution monitor is improved, other TUI components could benefit:
+- Interview TUI could have better progress indicators
+- Review TUI could show more context
+- Status dashboard could have more interactive features
+
+### Priority 4: Testing and Hardening
+- Run comprehensive integration tests
+- Add property-based tests for critical paths
+- Test with real provider credentials (OpenAI, Anthropic, ZAI, etc.)
+- Performance testing with large projects
+
+### Priority 5: Documentation Improvements
+- Add more examples to README
+- Create troubleshooting guide
+- Document environment variables in detail
+- Add FAQ section
+
+## Quick Reference
+
+### Build Commands
+```bash
+go build ./cmd/geoffrussy        # Build binary
+go test ./...                      # Run all tests
+go test ./internal/cli/...         # Run CLI tests
+go test ./internal/executor/...      # Run executor tests
+```
+
+### Installation
+```bash
+sudo cp bin/geoffrussy /usr/local/bin/geoffrussy  # Install to PATH
+```
+
+### Configuration File
+```bash
+~/.config/geoffrussy/config.yaml    # Linux
+~/.geoffrussy/config.yaml             # macOS
+%APPDATA%\geoffrussy\config.yaml    # Windows
+```
+
+### Key Files
+- `internal/executor/monitor.go` - Execution TUI
+- `internal/executor/task_executor.go` - Task execution logic
+- `internal/cli/develop.go` - Develop command implementation
+- `internal/cli/utils.go` - Provider/model utilities
+- `internal/cli/banner.go` - ASCII art banner
