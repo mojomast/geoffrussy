@@ -579,6 +579,46 @@ func (s *Store) ListTasks(phaseID string) ([]Task, error) {
 	return tasks, nil
 }
 
+// ListProjectTasks retrieves all tasks for a project
+func (s *Store) ListProjectTasks(projectID string) ([]Task, error) {
+	query := `
+		SELECT t.id, t.phase_id, t.number, t.description, t.status, t.started_at, t.completed_at
+		FROM tasks t
+		JOIN phases p ON t.phase_id = p.id
+		WHERE p.project_id = ?
+		ORDER BY p.number, t.number
+	`
+	rows, err := s.db.Query(query, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list project tasks: %w", err)
+	}
+	defer rows.Close()
+
+	var tasks []Task
+	for rows.Next() {
+		var task Task
+		err := rows.Scan(
+			&task.ID,
+			&task.PhaseID,
+			&task.Number,
+			&task.Description,
+			&task.Status,
+			&task.StartedAt,
+			&task.CompletedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan task: %w", err)
+		}
+		tasks = append(tasks, task)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating tasks: %w", err)
+	}
+
+	return tasks, nil
+}
+
 // Helper functions for JSON marshaling
 
 func marshalJSON(v interface{}) (string, error) {
