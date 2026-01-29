@@ -68,6 +68,10 @@ func runInterview(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to get provider and model: %w", err)
 	}
 
+	fmt.Printf("📦 Using Provider: %s\n", providerName)
+	fmt.Printf("🤖 Using Model: %s\n", modelName)
+	fmt.Println()
+
 	bridge := provider.NewBridge()
 	if err := setupProvider(bridge, cfgMgr, providerName); err != nil {
 		return fmt.Errorf("failed to setup provider: %w", err)
