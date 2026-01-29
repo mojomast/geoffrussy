@@ -7,12 +7,36 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/mojomast/geoffrussy/internal/provider"
 	"github.com/mojomast/geoffrussy/internal/state"
 )
 
-// CodeGenerationResponse represents the LLM response for code generation
+// SendUpdateFunc is the type of function used to send updates
+type SendUpdateFunc func(update TaskUpdate)
+
+// TaskExecutor implements actual task execution using LLM
+type TaskExecutor struct {
+	store      *state.Store
+	provider   provider.Provider
+	ctx        context.Context
+	sendUpdate SendUpdateFunc // Function to send updates through TUI
+	phaseID    string         // For update messages
+	taskID     string         // For update messages
+}
+
+// NewTaskExecutor creates a new task executor that actually implements tasks
+func NewTaskExecutor(store *state.Store, prov provider.Provider, sendUpdateFn SendUpdateFunc) *TaskExecutor {
+	return &TaskExecutor{
+		store:      store,
+		provider:   prov,
+		ctx:        context.Background(),
+		sendUpdate: sendUpdateFn,
+	}
+}
+
+// CodeGenerationResponse represents a LLM response for code generation
 type CodeGenerationResponse struct {
 	Explanation string    `json:"explanation"`
 	Files       []File    `json:"files"`
@@ -36,24 +60,11 @@ type Test struct {
 	Command string `json:"command"`
 }
 
-// NewTaskExecutor creates a new task executor that actually implements tasks
-func NewTaskExecutor(store *state.Store, prov provider.Provider) *TaskExecutor {
-	return &TaskExecutor{
-		store:    store,
-		provider: prov,
-		ctx:      context.Background(),
-	}
-}
-
-// TaskExecutor implements actual task execution using LLM
-type TaskExecutor struct {
-	store    *state.Store
-	provider provider.Provider
-	ctx      context.Context
-}
-
 // ExecuteTask executes a single task using LLM to generate code
 func (te *TaskExecutor) ExecuteTask(taskID string) error {
+	// Store IDs for update messages
+	te.taskID = taskID
+
 	// Get task from store
 	task, err := te.store.GetTask(taskID)
 	if err != nil {
@@ -65,6 +76,9 @@ func (te *TaskExecutor) ExecuteTask(taskID string) error {
 	if err != nil {
 		return fmt.Errorf("failed to get phase: %w", err)
 	}
+
+	// Store phase ID for updates
+	te.phaseID = phase.ID
 
 	// Get project
 	project, err := te.store.GetProject(phase.ProjectID)
@@ -89,36 +103,49 @@ func (te *TaskExecutor) ExecuteTask(taskID string) error {
 
 	// Determine model to use
 	modelName := te.getModelForTask(task)
-	fmt.Printf("🤖 Using model: %s\n", modelName)
 
-	// Show task being worked on
-	fmt.Printf("\n🎯 Task: %s\n", task.Description)
-	fmt.Printf("📋 Phase: %s\n", phase.Title)
-	fmt.Println()
+	// Show task being worked on (through TUI)
+	te.sendUpdate(TaskUpdate{
+		TaskID:    taskID,
+		PhaseID:   phase.ID,
+		Type:      TaskProgress,
+		Content:   fmt.Sprintf("Starting task: %s\nUsing model: %s", task.Description, modelName),
+		Timestamp: time.Now(),
+	})
 
 	// Call LLM to generate code
-	fmt.Printf("📝 Calling LLM to generate code...\n")
-	fmt.Printf("   (This may take 30-60 seconds for complex tasks)\n")
-	fmt.Println()
-
 	response, err := te.provider.Call(modelName, prompt)
 	if err != nil {
+		te.sendUpdate(TaskUpdate{
+			TaskID:    taskID,
+			PhaseID:   phase.ID,
+			Type:      TaskError,
+			Content:   fmt.Sprintf("LLM call failed: %v", err),
+			Error:     err,
+			Timestamp: time.Now(),
+		})
 		return fmt.Errorf("failed to call LLM: %w", err)
 	}
 
-	fmt.Printf("\n✓ LLM responded with %d tokens (input: %d, output: %d)\n",
-		response.TokensInput+response.TokensOutput,
-		response.TokensInput,
-		response.TokensOutput)
+	te.sendUpdate(TaskUpdate{
+		TaskID:    taskID,
+		PhaseID:   phase.ID,
+		Type:      TaskProgress,
+		Content:   fmt.Sprintf("LLM responded with %d tokens", response.TokensInput+response.TokensOutput),
+		Timestamp: time.Now(),
+	})
 
 	// Parse response
 	var codeResp CodeGenerationResponse
 	if err := json.Unmarshal([]byte(response.Content), &codeResp); err != nil {
-		// If JSON parsing fails, treat the entire response as code
-		fmt.Printf("⚠️  JSON parsing failed, treating as markdown\n")
-		fmt.Printf("\n💭 LLM Response Preview:\n")
-		fmt.Printf("%s\n", response.Content[:min(500, len(response.Content))])
-		fmt.Printf("... (truncated, %d total chars)\n\n", len(response.Content))
+		// If JSON parsing fails, treat as entire response as code
+		te.sendUpdate(TaskUpdate{
+			TaskID:    taskID,
+			PhaseID:   phase.ID,
+			Type:      TaskProgress,
+			Content:   fmt.Sprintf("JSON parsing failed, treating as markdown"),
+			Timestamp: time.Now(),
+		})
 		codeResp = CodeGenerationResponse{
 			Explanation: response.Content,
 			Files: []File{
@@ -128,42 +155,62 @@ func (te *TaskExecutor) ExecuteTask(taskID string) error {
 				},
 			},
 		}
-	} else {
-		// Show LLM's explanation
-		if codeResp.Explanation != "" {
-			fmt.Printf("\n💭 LLM Explanation:\n")
-			fmt.Printf("%s\n", codeResp.Explanation)
-			fmt.Println()
-		}
 	}
 
-	fmt.Printf("📦 Generated %d file(s)\n", len(codeResp.Files))
+	// Show LLM's explanation
+	if codeResp.Explanation != "" {
+		te.sendUpdate(TaskUpdate{
+			TaskID:    taskID,
+			PhaseID:   phase.ID,
+			Type:      TaskProgress,
+			Content:   fmt.Sprintf("Explanation: %s", truncateString(codeResp.Explanation, 200)),
+			Timestamp: time.Now(),
+		})
+	}
+
+	te.sendUpdate(TaskUpdate{
+		TaskID:    taskID,
+		PhaseID:   phase.ID,
+		Type:      TaskProgress,
+		Content:   fmt.Sprintf("Generated %d file(s)", len(codeResp.Files)),
+		Timestamp: time.Now(),
+	})
 
 	// Create files
 	for i, file := range codeResp.Files {
-		fmt.Printf("   Writing file %d/%d: %s\n", i+1, len(codeResp.Files), file.Path)
+		preview := truncateString(file.Content, 200)
 
-		// Show preview of file content (first 200 chars)
-		preview := file.Content
-		if len(preview) > 200 {
-			preview = preview[:200] + "..."
-		}
-		fmt.Printf("   📝 Content preview: %s\n", preview)
+		te.sendUpdate(TaskUpdate{
+			TaskID:    taskID,
+			PhaseID:   phase.ID,
+			Type:      TaskProgress,
+			Content:   fmt.Sprintf("Writing file %d/%d: %s\nPreview: %s", i+1, len(codeResp.Files), file.Path, preview),
+			Timestamp: time.Now(),
+		})
 
 		if err := te.writeFile(file); err != nil {
 			return fmt.Errorf("failed to write file %s: %w", file.Path, err)
 		}
-		fmt.Printf("   ✓ Created: %s (%d bytes)\n", file.Path, len(file.Content))
+
+		te.sendUpdate(TaskUpdate{
+			TaskID:    taskID,
+			PhaseID:   phase.ID,
+			Type:      TaskProgress,
+			Content:   fmt.Sprintf("Created: %s (%d bytes)", file.Path, len(file.Content)),
+			Timestamp: time.Now(),
+		})
 	}
 
 	// Execute commands (optional - might be dangerous in auto-execution)
 	if len(codeResp.Commands) > 0 {
-		// For safety, just log commands for now
-		// TODO: Implement command execution with confirmation
-		fmt.Printf("📝 Commands to run:\n")
-		for _, cmd := range codeResp.Commands {
-			fmt.Printf("   %s\n", cmd.Command)
-		}
+		cmdList := fmt.Sprintf("%d commands", len(codeResp.Commands))
+		te.sendUpdate(TaskUpdate{
+			TaskID:    taskID,
+			PhaseID:   phase.ID,
+			Type:      TaskProgress,
+			Content:   cmdList,
+			Timestamp: time.Now(),
+		})
 	}
 
 	return nil
@@ -207,7 +254,7 @@ func (te *TaskExecutor) buildExecutionPrompt(
 	promptBuilder.WriteString("INSTRUCTIONS:\n")
 	promptBuilder.WriteString("1. Analyze the task and architecture context\n")
 	promptBuilder.WriteString("2. Generate working code that implements the task\n")
-	promptBuilder.WriteString("3. Ensure code follows best practices for language/framework\n")
+	promptBuilder.WriteString("3. Ensure code follows best practices for the language/framework\n")
 	promptBuilder.WriteString("4. Return your response as JSON with the following structure:\n\n")
 
 	promptBuilder.WriteString(`{
@@ -260,4 +307,12 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// truncateString truncates a string to max length with "..." suffix
+func truncateString(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
 }

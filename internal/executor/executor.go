@@ -156,19 +156,10 @@ func (e *Executor) ExecuteTask(taskID string) error {
 
 	// Execute the task using the provider
 	// Use TaskExecutor to actually generate code and write files
-	taskExecutor := NewTaskExecutor(e.store, e.provider)
+	taskExecutor := NewTaskExecutor(e.store, e.provider, e.sendUpdate)
 	if err := taskExecutor.ExecuteTask(taskID); err != nil {
 		return fmt.Errorf("failed to execute task: %w", err)
 	}
-
-	// Send progress updates
-	e.sendUpdate(TaskUpdate{
-		TaskID:    taskID,
-		PhaseID:   task.PhaseID,
-		Type:      TaskProgress,
-		Content:   "Executing task...",
-		Timestamp: time.Now(),
-	})
 
 	// Update task status to completed
 	if err := e.store.UpdateTaskStatus(taskID, state.TaskCompleted); err != nil {
@@ -178,7 +169,7 @@ func (e *Executor) ExecuteTask(taskID string) error {
 	// Send task completed update
 	e.sendUpdate(TaskUpdate{
 		TaskID:    taskID,
-		PhaseID:   task.PhaseID,
+		PhaseID:   taskExecutor.phaseID,
 		Type:      TaskCompleted,
 		Content:   fmt.Sprintf("Completed task: %s", task.Description),
 		Timestamp: time.Now(),
