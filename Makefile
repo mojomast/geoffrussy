@@ -1,4 +1,4 @@
-.PHONY: build test clean install lint fmt vet run help
+.PHONY: build test clean install install-system uninstall lint fmt vet run help
 
 # Build variables
 BINARY_NAME=geoffrussy
@@ -49,10 +49,22 @@ clean:
 	@rm -f coverage.txt
 	@$(GO) clean
 
-## install: Install the binary to GOPATH/bin
+## install: Install binary to GOPATH/bin
 install:
-	@echo "Installing $(BINARY_NAME)..."
+	@echo "Installing $(BINARY_NAME) to GOPATH/bin..."
 	$(GO) install $(LDFLAGS) ./cmd/geoffrussy
+
+## install-system: Install binary to system PATH (requires sudo)
+install-system:
+	@echo "Installing $(BINARY_NAME) to system..."
+	@./install.sh
+
+## uninstall: Remove from system PATH
+uninstall:
+	@echo "Uninstalling $(BINARY_NAME)..."
+	@rm -f /usr/local/bin/$(BINARY_NAME) 2>/dev/null || true
+	@rm -f $(HOME)/bin/$(BINARY_NAME) 2>/dev/null || true
+	@echo "$(BINARY_NAME) removed from system"
 
 ## lint: Run linters
 lint:
