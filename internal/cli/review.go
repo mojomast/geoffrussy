@@ -73,7 +73,7 @@ func runReview(cmd *cobra.Command, args []string) error {
 
 	fmt.Printf("\nFound %d phase(s) to review\n", len(statePhases))
 
-	devplanPhases, err := convertStatePhasesToDevplan(statePhases)
+	devplanPhases, err := convertStatePhasesToDevplan(store, statePhases)
 	if err != nil {
 		return fmt.Errorf("failed to convert phases: %w", err)
 	}
@@ -168,21 +168,6 @@ func runReview(cmd *cobra.Command, args []string) error {
 
 	fmt.Println("\n✨ Review complete!")
 	return nil
-}
-
-func convertStatePhasesToDevplan(statePhases []*state.Phase) ([]devplan.Phase, error) {
-	phases := make([]devplan.Phase, len(statePhases))
-	for i, sp := range statePhases {
-		phases[i] = devplan.Phase{
-			ID:        sp.ID,
-			Number:    sp.Number,
-			Title:     sp.Title,
-			Objective: fmt.Sprintf("Phase %d: %s", sp.Number, sp.Title),
-			CreatedAt: sp.CreatedAt,
-			Status:    devplan.PhaseStatus(sp.Status),
-		}
-	}
-	return phases, nil
 }
 
 func formatPhaseContent(phase *devplan.Phase) string {
@@ -334,7 +319,7 @@ func applyImprovements(rev *reviewer.Reviewer, store *state.Store, phases []stat
 	}
 	projectID := filepath.Base(cwd)
 
-	devplanPhases, err := convertStatePhasesToDevplan([]*state.Phase{&phases[0]})
+	devplanPhases, err := convertStatePhasesToDevplan(store, []*state.Phase{&phases[0]})
 	if err != nil {
 		return err
 	}

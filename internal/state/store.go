@@ -439,6 +439,42 @@ func (s *Store) UpdatePhaseStatus(id string, status PhaseStatus) error {
 	return nil
 }
 
+// DeletePhase deletes a phase and its tasks
+func (s *Store) DeletePhase(id string) error {
+	// Start transaction
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	// Delete tasks first (manual cascade for safety)
+	_, err = tx.Exec("DELETE FROM tasks WHERE phase_id = ?", id)
+	if err != nil {
+		return fmt.Errorf("failed to delete phase tasks: %w", err)
+	}
+
+	// Delete phase
+	result, err := tx.Exec("DELETE FROM phases WHERE id = ?", id)
+	if err != nil {
+		return fmt.Errorf("failed to delete phase: %w", err)
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+	if rows == 0 {
+		return fmt.Errorf("phase not found: %s", id)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return nil
+}
+
 // Task operations
 
 // SaveTask saves a task
