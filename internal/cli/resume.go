@@ -75,7 +75,7 @@ func runResume(cmd *cobra.Command, args []string) error {
 	gitMgr := git.NewManager(".")
 
 	// Initialize checkpoint manager
-	checkpointMgr := checkpoint.NewManager(store, gitMgr)
+	checkpointMgr := checkpoint.NewManager(store, gitMgr, configDir)
 
 	// Initialize resume manager
 	resumeMgr := resume.NewManager(store, checkpointMgr)

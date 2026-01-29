@@ -234,30 +234,8 @@ func (m *Manager) restartStage(project *state.Project, stage state.Stage) error 
 
 	case state.StageDevelop:
 		// Reset in-progress tasks to not started
-		phases, err := m.store.ListPhases(project.ID)
-		if err != nil {
-			return fmt.Errorf("failed to list phases: %w", err)
-		}
-
-		for _, phase := range phases {
-			if phase.Status == state.PhaseInProgress {
-				if err := m.store.UpdatePhaseStatus(phase.ID, state.PhaseNotStarted); err != nil {
-					return fmt.Errorf("failed to reset phase status: %w", err)
-				}
-			}
-
-			tasks, err := m.store.ListTasks(phase.ID)
-			if err != nil {
-				continue
-			}
-
-			for _, task := range tasks {
-				if task.Status == state.TaskInProgress {
-					if err := m.store.UpdateTaskStatus(task.ID, state.TaskNotStarted); err != nil {
-						return fmt.Errorf("failed to reset task status: %w", err)
-					}
-				}
-			}
+		if err := m.store.ResetProjectProgress(project.ID); err != nil {
+			return fmt.Errorf("failed to reset project progress: %w", err)
 		}
 
 		return m.store.UpdateProjectStage(project.ID, state.StageDevelop)
