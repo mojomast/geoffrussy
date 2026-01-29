@@ -50,7 +50,7 @@ type Executor struct {
 func NewExecutor(store *state.Store, provider provider.Provider) *Executor {
 	ctx, cancel := context.WithCancel(context.Background())
 	mu := &sync.RWMutex{}
-	
+
 	return &Executor{
 		store:      store,
 		provider:   provider,
@@ -155,16 +155,11 @@ func (e *Executor) ExecuteTask(taskID string) error {
 	})
 
 	// Execute the task using the provider
-	// This is a simplified implementation
-	// In a real implementation, we would:
-	// 1. Parse the task description
-	// 2. Generate code using the LLM
-	// 3. Write files
-	// 4. Run tests
-	// 5. Handle errors and retries
-
-	// Simulate task execution
-	time.Sleep(100 * time.Millisecond)
+	// Use TaskExecutor to actually generate code and write files
+	taskExecutor := NewTaskExecutor(e.store, e.provider)
+	if err := taskExecutor.ExecuteTask(taskID); err != nil {
+		return fmt.Errorf("failed to execute task: %w", err)
+	}
 
 	// Send progress updates
 	e.sendUpdate(TaskUpdate{
