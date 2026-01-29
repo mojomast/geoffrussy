@@ -66,6 +66,7 @@ func showConfigMenu() error {
 		fmt.Println("  4) 💰 Set Budget Limit")
 		fmt.Println("  5) 🔍 Toggle Verbose Logging")
 		fmt.Println("  6) 💾 Save and Exit")
+		fmt.Println("  7) ⭐ Manage Favorite Models")
 		fmt.Println("  q) Quit (Exit without Saving)")
 		fmt.Println()
 		fmt.Print("Select option: ")
@@ -105,6 +106,10 @@ func showConfigMenu() error {
 			}
 			fmt.Println("✅ Configuration saved!")
 			return nil
+		case "7":
+			if err := manageFavoritesInteractive(cfgMgr); err != nil {
+				fmt.Printf("⚠️  Error: %v\n", err)
+			}
 		case "q", "Q":
 			fmt.Println("❌ Exiting without saving...")
 			return nil
@@ -344,22 +349,41 @@ func setDefaultModelInteractive() error {
 		return nil
 	}
 
-	fmt.Println("\nAvailable Models:")
-	fmt.Println("─────────────────────────────────────────────────────")
-	for i, m := range allModels {
-		fmt.Printf("  %d) %s (%s)\n", i+1, m.Name, strings.Title(m.Provider))
+	// Separate favorites
+	var favorites []provider.Model
+	var others []provider.Model
+
+	for _, m := range allModels {
+		if cfgMgr.IsFavoriteModel(m.Name) {
+			favorites = append(favorites, m)
+		} else {
+			others = append(others, m)
+		}
 	}
 
-	fmt.Printf("\nEnter model for %s stage (1-%d): ", selectedStage, len(allModels))
+	// Reconstruct sorted list
+	sortedModels := append(favorites, others...)
+
+	fmt.Println("\nAvailable Models:")
+	fmt.Println("─────────────────────────────────────────────────────")
+	for i, m := range sortedModels {
+		prefix := "  "
+		if cfgMgr.IsFavoriteModel(m.Name) {
+			prefix = "⭐ "
+		}
+		fmt.Printf("  %d) %s%s (%s)\n", i+1, prefix, m.Name, strings.Title(m.Provider))
+	}
+
+	fmt.Printf("\nEnter model for %s stage (1-%d): ", selectedStage, len(sortedModels))
 	modelInput, _ := reader.ReadString('\n')
 	modelInput = strings.TrimSpace(modelInput)
 
 	modelIndex := 0
-	if _, err := fmt.Sscanf(modelInput, "%d", &modelIndex); err != nil || modelIndex < 1 || modelIndex > len(allModels) {
-		return fmt.Errorf("invalid selection. Please enter a number between 1 and %d", len(allModels))
+	if _, err := fmt.Sscanf(modelInput, "%d", &modelIndex); err != nil || modelIndex < 1 || modelIndex > len(sortedModels) {
+		return fmt.Errorf("invalid selection. Please enter a number between 1 and %d", len(sortedModels))
 	}
 
-	selectedModel := allModels[modelIndex-1]
+	selectedModel := sortedModels[modelIndex-1]
 
 	if err := cfgMgr.SetDefaultModel(selectedStage, selectedModel.Name); err != nil {
 		return fmt.Errorf("failed to set default model: %w", err)
@@ -370,6 +394,138 @@ func setDefaultModelInteractive() error {
 	}
 
 	fmt.Printf("✅ Default model for %s set to %s (%s)\n", selectedStage, selectedModel.Name, strings.Title(selectedModel.Provider))
+	return nil
+}
+
+func manageFavoritesInteractive(cfgMgr *config.Manager) error {
+	for {
+		fmt.Println("\n╔════════════════════════════════════════════════════════════╗")
+		fmt.Println("║            Manage Favorite Models                             ║")
+		fmt.Println("╚════════════════════════════════════════════════════════════╝")
+		fmt.Println()
+
+		favorites := cfgMgr.GetFavoriteModels()
+		if len(favorites) == 0 {
+			fmt.Println("No favorite models configured.")
+		} else {
+			fmt.Println("Current Favorites:")
+			for _, fav := range favorites {
+				fmt.Printf("  ⭐ %s\n", fav)
+			}
+		}
+
+		fmt.Println("\nOptions:")
+		fmt.Println("  1) ➕ Add Favorite")
+		fmt.Println("  2) ➖ Remove Favorite")
+		fmt.Println("  b) Back to Main Menu")
+		fmt.Println()
+		fmt.Print("Select option: ")
+
+		reader := bufio.NewReader(os.Stdin)
+		choice, _ := reader.ReadString('\n')
+		choice = strings.TrimSpace(choice)
+
+		switch choice {
+		case "1":
+			if err := addFavoriteInteractive(cfgMgr); err != nil {
+				fmt.Printf("⚠️  Error: %v\n", err)
+			}
+		case "2":
+			if err := removeFavoriteInteractive(cfgMgr); err != nil {
+				fmt.Printf("⚠️  Error: %v\n", err)
+			}
+		case "b", "B":
+			return nil
+		default:
+			fmt.Println("⚠️  Invalid option")
+		}
+	}
+}
+
+func addFavoriteInteractive(cfgMgr *config.Manager) error {
+	fmt.Println("\nFetching available models...")
+
+	bridge := provider.NewBridge()
+	providerNames := provider.GetProviderNames()
+
+	for _, name := range providerNames {
+		if err := setupProvider(bridge, cfgMgr, name); err != nil {
+			continue
+		}
+	}
+
+	allModels, err := bridge.ListModels()
+	if err != nil || len(allModels) == 0 {
+		return fmt.Errorf("no models found. Configure providers first")
+	}
+
+	fmt.Println("\nSelect model to favorite:")
+	fmt.Println("─────────────────────────────────────────────────────")
+	for i, m := range allModels {
+		prefix := "   "
+		if cfgMgr.IsFavoriteModel(m.Name) {
+			prefix = "⭐ "
+		}
+		fmt.Printf("  %d) %s%s (%s)\n", i+1, prefix, m.Name, strings.Title(m.Provider))
+	}
+
+	reader := bufio.NewReader(os.Stdin)
+	fmt.Printf("\nEnter number (1-%d): ", len(allModels))
+
+	input, _ := reader.ReadString('\n')
+	input = strings.TrimSpace(input)
+
+	index := 0
+	if _, err := fmt.Sscanf(input, "%d", &index); err != nil || index < 1 || index > len(allModels) {
+		return fmt.Errorf("invalid selection")
+	}
+
+	selected := allModels[index-1]
+	if err := cfgMgr.AddFavoriteModel(selected.Name); err != nil {
+		return err
+	}
+
+	if err := cfgMgr.Save(); err != nil {
+		return fmt.Errorf("failed to save config: %w", err)
+	}
+
+	fmt.Printf("✅ Added %s to favorites\n", selected.Name)
+	return nil
+}
+
+func removeFavoriteInteractive(cfgMgr *config.Manager) error {
+	favorites := cfgMgr.GetFavoriteModels()
+	if len(favorites) == 0 {
+		return fmt.Errorf("no favorites to remove")
+	}
+
+	fmt.Println("\nSelect favorite to remove:")
+	fmt.Println("─────────────────────────────────────────────────────")
+	for i, fav := range favorites {
+		fmt.Printf("  %d) %s\n", i+1, fav)
+	}
+
+	reader := bufio.NewReader(os.Stdin)
+	fmt.Printf("\nEnter number (1-%d): ", len(favorites))
+
+	input, _ := reader.ReadString('\n')
+	input = strings.TrimSpace(input)
+
+	index := 0
+	if _, err := fmt.Sscanf(input, "%d", &index); err != nil || index < 1 || index > len(favorites) {
+		return fmt.Errorf("invalid selection")
+	}
+
+	selected := favorites[index-1]
+	if err := cfgMgr.RemoveFavoriteModel(selected); err != nil {
+		return err
+	}
+
+	if err := cfgMgr.Save(); err != nil {
+		return fmt.Errorf("failed to save config: %w", err)
+	}
+
+	fmt.Printf("✅ Removed %s from favorites\n", selected)
 	return nil
 }
 

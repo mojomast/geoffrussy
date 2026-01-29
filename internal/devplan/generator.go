@@ -119,6 +119,16 @@ PROBLEM: ` + interviewData.ProblemStatement + `
 ARCHITECTURE OVERVIEW:
 ` + architecture.SystemOverview + `
 
+Think step-by-step:
+1. Analyze the architecture components and their dependencies.
+2. Determine the logical implementation order (e.g., database -> API -> Frontend).
+3. Break down the work into 7-10 distinct phases.
+4. Ensure each phase results in verifiable working code.
+5. Identify clear success criteria for each phase.
+
+First, use a <scratchpad> block to plan your approach, listing the proposed phases and checking dependencies.
+Then, output the final phases as a strict JSON array.
+
 Each phase should:
 1. Build on previous phases
 2. Result in deployable, testable code
@@ -138,8 +148,11 @@ Follow this standard order:
 - Phase 8: Performance & Observability
 - Phase 9: Deployment & Hardening
 
-Output your response as a strict JSON array of phase objects. Do not include any text outside the JSON.
-The JSON format must be:
+Output your response in the following format:
+
+<scratchpad>
+Your thinking here...
+</scratchpad>
 
 [
   {
@@ -159,7 +172,7 @@ The JSON format must be:
   }
 ]
 
-Generate the phases JSON now:`
+Generate the response now:`
 
 	return prompt
 }
@@ -248,8 +261,20 @@ func (g *Generator) parsePhasesResponse(response string) ([]Phase, error) {
 
 	// Try to parse the response, fall back to defaults if parsing fails
 	if response != "" {
-		// Clean up the response (remove Markdown code blocks)
+		// Extract JSON from the response
 		jsonContent := response
+
+		// Remove scratchpad if present
+		if start := strings.Index(jsonContent, "<scratchpad>"); start != -1 {
+			if end := strings.Index(jsonContent, "</scratchpad>"); end != -1 {
+				// We keep what's after the scratchpad
+				if end+13 < len(jsonContent) {
+					jsonContent = jsonContent[end+13:]
+				}
+			}
+		}
+
+		// Handle Markdown code blocks
 		if strings.Contains(jsonContent, "```json") {
 			parts := strings.Split(jsonContent, "```json")
 			if len(parts) > 1 {
@@ -265,6 +290,14 @@ func (g *Generator) parsePhasesResponse(response string) ([]Phase, error) {
 			if len(parts) > 1 {
 				jsonContent = parts[1]
 			}
+		}
+
+		// Find JSON array start and end
+		startIdx := strings.Index(jsonContent, "[")
+		endIdx := strings.LastIndex(jsonContent, "]")
+
+		if startIdx != -1 && endIdx != -1 && endIdx > startIdx {
+			jsonContent = jsonContent[startIdx : endIdx+1]
 		}
 
 		jsonContent = strings.TrimSpace(jsonContent)

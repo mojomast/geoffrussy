@@ -1356,3 +1356,55 @@ func TestInterviewEngine_ProjectNameExport(t *testing.T) {
 		t.Errorf("Expected project_name to be '%s', got '%s'", projectName, exportedProjectName)
 	}
 }
+
+func TestValidateCompleteness_AllPhasesChecked(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+
+	store, err := state.NewStore(dbPath)
+	if err != nil {
+		t.Fatalf("Failed to create store: %v", err)
+	}
+	defer store.Close()
+
+	project := &state.Project{
+		ID:           "test-project",
+		Name:         "Test Project",
+		CreatedAt:    time.Now(),
+		CurrentStage: state.StageInterview,
+	}
+	store.CreateProject(project)
+
+	engine := NewEngine(store, nil, "")
+	session, _ := engine.StartInterview(project.ID)
+
+	// We'll intentionally NOT answer required questions from multiple phases
+	// PE_1 is required (Project Essence)
+	// TC_1 is required (Technical Constraints)
+
+	isComplete, missing := engine.ValidateCompleteness(session)
+
+	if isComplete {
+		t.Error("Session should not be complete")
+	}
+
+	// We expect at least one question from each phase to be missing
+	foundPE := false
+	foundTC := false
+
+	for _, msg := range missing {
+		if contains(msg, "Project Essence") && contains(msg, "What problem does your project solve") {
+			foundPE = true
+		}
+		if contains(msg, "Technical Constraints") && contains(msg, "What programming language") {
+			foundTC = true
+		}
+	}
+
+	if !foundPE {
+		t.Error("Expected missing question from Project Essence")
+	}
+	if !foundTC {
+		t.Error("Expected missing question from Technical Constraints")
+	}
+}
