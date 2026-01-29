@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3" // SQLite driver
@@ -15,48 +16,60 @@ import (
 type Store struct {
 	db               *sql.DB
 	migrationManager *MigrationManager
+	dbPath           string
 }
 
 // NewStore creates a new state store
 func NewStore(dbPath string) (*Store, error) {
+	store := &Store{
+		dbPath: dbPath,
+	}
+
+	if err := store.open(); err != nil {
+		return nil, err
+	}
+
+	return store, nil
+}
+
+// open opens the database connection and initializes the store
+func (s *Store) open() error {
 	// Create directory if it doesn't exist
-	dir := filepath.Dir(dbPath)
+	dir := filepath.Dir(s.dbPath)
 	if dir != "" && dir != "." {
 		if err := os.MkdirAll(dir, 0755); err != nil {
-			return nil, fmt.Errorf("failed to create database directory: %w", err)
+			return fmt.Errorf("failed to create database directory: %w", err)
 		}
 	}
-	
+
 	// Open database connection
-	db, err := sql.Open("sqlite3", dbPath)
+	db, err := sql.Open("sqlite3", s.dbPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open database: %w", err)
+		return fmt.Errorf("failed to open database: %w", err)
 	}
-	
+
 	// Enable foreign keys
 	if _, err := db.Exec("PRAGMA foreign_keys = ON"); err != nil {
 		db.Close()
-		return nil, fmt.Errorf("failed to enable foreign keys: %w", err)
+		return fmt.Errorf("failed to enable foreign keys: %w", err)
 	}
-	
+
 	// Enable WAL mode for better concurrency
 	if _, err := db.Exec("PRAGMA journal_mode = WAL"); err != nil {
 		db.Close()
-		return nil, fmt.Errorf("failed to enable WAL mode: %w", err)
+		return fmt.Errorf("failed to enable WAL mode: %w", err)
 	}
-	
-	store := &Store{
-		db:               db,
-		migrationManager: NewMigrationManager(db),
-	}
-	
+
+	s.db = db
+	s.migrationManager = NewMigrationManager(db)
+
 	// Run migrations
-	if err := store.migrationManager.Migrate(); err != nil {
+	if err := s.migrationManager.Migrate(); err != nil {
 		db.Close()
-		return nil, fmt.Errorf("failed to run migrations: %w", err)
+		return fmt.Errorf("failed to run migrations: %w", err)
 	}
-	
-	return store, nil
+
+	return nil
 }
 
 // Close closes the database connection
@@ -67,38 +80,118 @@ func (s *Store) Close() error {
 	return nil
 }
 
-// ResetProjectProgress resets InProgress phases and tasks to NotStarted for a project
-func (s *Store) ResetProjectProgress(projectID string) error {
-	tx, err := s.db.Begin()
-	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
-	}
-	defer tx.Rollback()
-
-	// Update phases
-	_, err = tx.Exec(`
-		UPDATE phases
-		SET status = ?
-		WHERE project_id = ? AND status = ?
-	`, PhaseNotStarted, projectID, PhaseInProgress)
-	if err != nil {
-		return fmt.Errorf("failed to reset phases: %w", err)
+// Backup creates a backup of the database to the specified path
+func (s *Store) Backup(destPath string) error {
+	// Ensure destination directory exists
+	dir := filepath.Dir(destPath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("failed to create backup directory: %w", err)
 	}
 
-	// Update tasks
-	_, err = tx.Exec(`
-		UPDATE tasks
-		SET status = ?
-		WHERE status = ? AND phase_id IN (
-			SELECT id FROM phases WHERE project_id = ?
+	// Use VACUUM INTO for online backup (requires SQLite 3.27.0+)
+	// Note: We need to quote the path to handle spaces and escape single quotes
+	escapedPath := strings.ReplaceAll(destPath, "'", "''")
+	query := fmt.Sprintf("VACUUM INTO '%s'", escapedPath)
+	if _, err := s.db.Exec(query); err != nil {
+		return fmt.Errorf("failed to backup database: %w", err)
+	}
+
+	return nil
+}
+
+// GetAllCheckpoints retrieves all checkpoints across all projects
+// This is used primarily for history preservation during rollback
+func (s *Store) GetAllCheckpoints() ([]*Checkpoint, error) {
+	query := `
+		SELECT id, project_id, name, git_tag, created_at, metadata
+		FROM checkpoints
+		ORDER BY created_at DESC
+	`
+	rows, err := s.db.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list checkpoints: %w", err)
+	}
+	defer rows.Close()
+
+	var checkpoints []*Checkpoint
+	for rows.Next() {
+		var checkpoint Checkpoint
+		var metadataJSON sql.NullString
+
+		err := rows.Scan(
+			&checkpoint.ID,
+			&checkpoint.ProjectID,
+			&checkpoint.Name,
+			&checkpoint.GitTag,
+			&checkpoint.CreatedAt,
+			&metadataJSON,
 		)
-	`, TaskNotStarted, TaskInProgress, projectID)
-	if err != nil {
-		return fmt.Errorf("failed to reset tasks: %w", err)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan checkpoint: %w", err)
+		}
+
+		// Unmarshal metadata if present
+		if metadataJSON.Valid && metadataJSON.String != "" {
+			var metadata map[string]string
+			if err := unmarshalJSON(metadataJSON.String, &metadata); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal checkpoint metadata: %w", err)
+			}
+			checkpoint.Metadata = metadata
+		}
+
+		checkpoints = append(checkpoints, &checkpoint)
 	}
 
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("failed to commit transaction: %w", err)
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating checkpoints: %w", err)
+	}
+
+	return checkpoints, nil
+}
+
+// Restore restores the database from a backup file
+// It preserves checkpoint history by saving current checkpoints before restore
+// and re-applying them after restore.
+func (s *Store) Restore(backupPath string) error {
+	// 1. Preserve history: Get all checkpoints from current state
+	checkpoints, err := s.GetAllCheckpoints()
+	if err != nil {
+		return fmt.Errorf("failed to retrieve current checkpoints for preservation: %w", err)
+	}
+
+	// 2. Close current connection
+	if err := s.Close(); err != nil {
+		return fmt.Errorf("failed to close database connection: %w", err)
+	}
+
+	// Clean up WAL files to prevent corruption
+	// We ignore errors here as the files might not exist
+	os.Remove(s.dbPath + "-wal")
+	os.Remove(s.dbPath + "-shm")
+
+	// 3. Overwrite database file with backup
+	input, err := os.ReadFile(backupPath)
+	if err != nil {
+		// Attempt to re-open original DB so we don't leave struct in bad state
+		_ = s.open()
+		return fmt.Errorf("failed to read backup file: %w", err)
+	}
+
+	if err := os.WriteFile(s.dbPath, input, 0644); err != nil {
+		_ = s.open()
+		return fmt.Errorf("failed to write database file: %w", err)
+	}
+
+	// 4. Re-open database
+	if err := s.open(); err != nil {
+		return fmt.Errorf("failed to re-open database: %w", err)
+	}
+
+	// 5. Restore preserved checkpoints
+	for _, cp := range checkpoints {
+		if err := s.SaveCheckpoint(cp); err != nil {
+			return fmt.Errorf("failed to restore checkpoint %s: %w", cp.ID, err)
+		}
 	}
 
 	return nil
