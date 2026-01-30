@@ -86,6 +86,30 @@ func runMCPServer(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to register tools: %w", err)
 	}
 
+	// Register interview tools
+	interviewHandlers := mcp.NewInterviewHandlers(cfgMgr)
+	if err := interviewHandlers.RegisterHandlers(server.GetToolRegistry()); err != nil {
+		return fmt.Errorf("failed to register interview tools: %w", err)
+	}
+
+	// Register design tools
+	designHandlers := mcp.NewDesignHandlers(cfgMgr)
+	if err := designHandlers.RegisterHandlers(server.GetToolRegistry()); err != nil {
+		return fmt.Errorf("failed to register design tools: %w", err)
+	}
+
+	// Register plan tools
+	planHandlers := mcp.NewPlanHandlers(cfgMgr)
+	if err := planHandlers.RegisterHandlers(server.GetToolRegistry()); err != nil {
+		return fmt.Errorf("failed to register plan tools: %w", err)
+	}
+
+	// Register execution tools
+	execHandlers := mcp.NewExecHandlers(cfgMgr)
+	if err := execHandlers.RegisterHandlers(server.GetToolRegistry()); err != nil {
+		return fmt.Errorf("failed to register execution tools: %w", err)
+	}
+
 	// Register resources
 	resourceHandlers := mcp.NewResourceHandlers(cfgMgr, projectPath)
 	if err := resourceHandlers.RegisterAllResources(server.GetResourceRegistry()); err != nil {

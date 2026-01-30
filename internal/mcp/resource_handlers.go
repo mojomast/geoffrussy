@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/mojomast/geoffrussy/internal/config"
+	"github.com/mojomast/geoffrussy/internal/interview"
 	"github.com/mojomast/geoffrussy/internal/state"
 	"github.com/mojomast/geoffrussy/internal/token"
 )
@@ -39,6 +40,8 @@ func (h *ResourceHandlers) RegisterAllResources(registry *ResourceRegistry) erro
 		{h.interviewResource(), h.handleInterviewResource},
 		{h.checkpointsResource(), h.handleCheckpointsResource},
 		{h.statsResource(), h.handleStatsResource},
+		{h.currentQuestionResource(), h.handleCurrentQuestionResource},
+		{h.taskDetailsResource(), h.handleTaskDetailsResource},
 	}
 
 	for _, r := range resources {
@@ -111,6 +114,24 @@ func (h *ResourceHandlers) statsResource() Resource {
 		URI:         "project://stats",
 		Name:        "Statistics",
 		Description: "Token usage and cost statistics",
+		MimeType:    "application/json",
+	}
+}
+
+func (h *ResourceHandlers) currentQuestionResource() Resource {
+	return Resource{
+		URI:         "project://current_question",
+		Name:        "Current Interview Question",
+		Description: "Current interview question if interview is in progress",
+		MimeType:    "application/json",
+	}
+}
+
+func (h *ResourceHandlers) taskDetailsResource() Resource {
+	return Resource{
+		URI:         "project://task_details",
+		Name:        "Task Details",
+		Description: "Detailed task information including outputs and status",
 		MimeType:    "application/json",
 	}
 }
@@ -341,6 +362,136 @@ func (h *ResourceHandlers) handleStatsResource(ctx context.Context, uri string) 
 	data, err := json.MarshalIndent(stats, "", "  ")
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal stats: %w", err)
+	}
+
+	return &ReadResourceResult{
+		Contents: []Content{
+			{
+				Type:     "text",
+				Text:     string(data),
+				MimeType: "application/json",
+			},
+		},
+	}, nil
+}
+
+func (h *ResourceHandlers) handleCurrentQuestionResource(ctx context.Context, uri string) (*ReadResourceResult, error) {
+	store, projectID, err := h.getStore()
+	if err != nil {
+		return nil, err
+	}
+	defer store.Close()
+
+	// Initialize engine without provider (we just need state)
+	engine := interview.NewEngine(store, nil, "")
+	session, err := engine.LoadSession(projectID)
+	if err != nil {
+		// No active session
+		return &ReadResourceResult{
+			Contents: []Content{
+				{Type: "text", Text: `{"isComplete": false, "status": "no_session"}`, MimeType: "application/json"},
+			},
+		}, nil
+	}
+
+	if session.Completed {
+		return &ReadResourceResult{
+			Contents: []Content{
+				{Type: "text", Text: `{"isComplete": true, "status": "completed"}`, MimeType: "application/json"},
+			},
+		}, nil
+	}
+
+	question, err := engine.GetNextQuestion(session)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get next question: %w", err)
+	}
+	
+	if question == nil {
+		return &ReadResourceResult{
+			Contents: []Content{
+				{Type: "text", Text: `{"isComplete": true, "status": "just_completed"}`, MimeType: "application/json"},
+			},
+		}, nil
+	}
+
+	// Format phase title manually or helper
+	phaseTitle := string(session.CurrentPhase) // Simplified
+
+	response := map[string]interface{}{
+		"phase":       session.CurrentPhase,
+		"phaseTitle":  phaseTitle,
+		"questionId":  question.ID,
+		"question":    question.Text,
+		"isComplete":  false,
+	}
+
+	data, err := json.MarshalIndent(response, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal response: %w", err)
+	}
+
+	return &ReadResourceResult{
+		Contents: []Content{
+			{
+				Type:     "text",
+				Text:     string(data),
+				MimeType: "application/json",
+			},
+		},
+	}, nil
+}
+
+func (h *ResourceHandlers) handleTaskDetailsResource(ctx context.Context, uri string) (*ReadResourceResult, error) {
+	store, projectID, err := h.getStore()
+	if err != nil {
+		return nil, err
+	}
+	defer store.Close()
+
+	tasks, err := store.ListTasksByProject(projectID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list tasks: %w", err)
+	}
+
+	// Enrich tasks with logs if available?
+	// Reading logs for all tasks might be slow.
+	// But "Detailed task information including outputs" suggests we should.
+	
+	enrichedTasks := make([]map[string]interface{}, len(tasks))
+	for i, task := range tasks {
+		t := map[string]interface{}{
+			"id":          task.ID,
+			"phaseId":     task.PhaseID,
+			"number":      task.Number,
+			"description": task.Description,
+			"status":      task.Status,
+			"startedAt":   task.StartedAt,
+			"completedAt": task.CompletedAt,
+		}
+		
+		// Check for logs
+		logFile := filepath.Join(h.projectRoot, ".geoffrussy", "logs", fmt.Sprintf("%s.log", task.ID))
+		if _, err := os.Stat(logFile); err == nil {
+			t["hasLog"] = true
+			// We could include snippet or full log? 
+			// Full log might be huge. Let's include snippet.
+			content, _ := os.ReadFile(logFile)
+			if len(content) > 1000 {
+				t["outputSnippet"] = string(content[len(content)-1000:])
+			} else {
+				t["outputSnippet"] = string(content)
+			}
+		} else {
+			t["hasLog"] = false
+		}
+		
+		enrichedTasks[i] = t
+	}
+
+	data, err := json.MarshalIndent(enrichedTasks, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal tasks: %w", err)
 	}
 
 	return &ReadResourceResult{

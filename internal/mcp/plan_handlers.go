@@ -1,0 +1,217 @@
+package mcp
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"time"
+
+	"github.com/mojomast/geoffrussy/internal/config"
+	"github.com/mojomast/geoffrussy/internal/design"
+	"github.com/mojomast/geoffrussy/internal/devplan"
+	"github.com/mojomast/geoffrussy/internal/provider"
+	"github.com/mojomast/geoffrussy/internal/state"
+)
+
+// PlanHandlers contains handlers for planning-related tools
+type PlanHandlers struct {
+	configManager *config.Manager
+}
+
+// NewPlanHandlers creates a new plan handlers instance
+func NewPlanHandlers(configManager *config.Manager) *PlanHandlers {
+	return &PlanHandlers{
+		configManager: configManager,
+	}
+}
+
+// RegisterHandlers registers plan tools with the registry
+func (h *PlanHandlers) RegisterHandlers(registry *ToolRegistry) error {
+	tools := []struct {
+		tool    Tool
+		handler ToolHandler
+	}{
+		{h.createDevPlanTool(), h.handleCreateDevPlan},
+	}
+
+	for _, t := range tools {
+		if err := registry.RegisterTool(t.tool, t.handler); err != nil {
+			return fmt.Errorf("failed to register tool %s: %w", t.tool.Name, err)
+		}
+	}
+
+	return nil
+}
+
+// Tool definitions
+
+func (h *PlanHandlers) createDevPlanTool() Tool {
+	return Tool{
+		Name:        "create_devplan",
+		Description: "Generate development plan with 7-10 phases and 3-5 tasks each",
+		InputSchema: CreateInputSchema(
+			map[string]interface{}{
+				"projectPath": StringParam("Absolute path to the project directory"),
+				"model":       StringParam("Model to use for devplan generation"),
+			},
+			[]string{"projectPath"},
+		),
+	}
+}
+
+// Handler implementations
+
+func (h *PlanHandlers) handleCreateDevPlan(ctx context.Context, args map[string]interface{}) (*CallToolResult, error) {
+	projectPath, err := ValidateAndGetString(args, "projectPath", true)
+	if err != nil {
+		return ErrorResult(err.Error()), nil
+	}
+
+	model, _ := ValidateAndGetString(args, "model", false)
+
+	store, err := openStateStore(projectPath)
+	if err != nil {
+		return ErrorResult(err.Error()), nil
+	}
+	defer store.Close()
+
+	projectID := getProjectID(projectPath)
+	
+	// Check if architecture exists
+	_, err = store.GetArchitecture(projectID)
+	// We check file mostly as fallback or primary if DB failed in previous step
+	
+	// Let's try to load architecture from file since that's where I saved it.
+	archPath := filepath.Join(projectPath, ".geoffrussy", "architecture.json")
+	// Read file
+	archContent, err := openFile(archPath) 
+	if err != nil {
+		return ErrorResult(fmt.Sprintf("Architecture file not found at %s. Please run generate_design first.", archPath)), nil
+	}
+	
+	var designArch design.Architecture
+	if err := unmarshalJSON(string(archContent), &designArch); err != nil {
+		return ErrorResult(fmt.Sprintf("Failed to parse architecture file: %v", err)), nil
+	}
+	
+	// Get interview data
+	interviewData, err := store.GetInterviewData(projectID)
+	if err != nil {
+		return ErrorResult(fmt.Sprintf("Failed to get interview data: %v", err)), nil
+	}
+
+	prov, modelName, err := h.initProvider("plan", model)
+	if err != nil {
+		return ErrorResult(fmt.Sprintf("Failed to initialize provider: %v", err)), nil
+	}
+
+	generator := devplan.NewGenerator(prov, modelName)
+
+	phases, err := generator.GeneratePhases(&designArch, interviewData)
+	if err != nil {
+		return ErrorResult(fmt.Sprintf("Failed to generate phases: %v", err)), nil
+	}
+
+	// Save phases and tasks to DB
+	// We need to convert devplan.Phase to state.Phase and devplan.Task to state.Task
+	
+	// Reset existing progress if any?
+	if err := store.ResetProjectProgress(projectID); err != nil {
+		// Just log or ignore? Safer to reset to avoid duplicates if re-planning.
+	}
+	
+	// Also delete existing phases? ResetProjectProgress just updates status.
+	// If we are regenerating plan, we probably want to wipe old phases.
+	// `store.ListPhases` then `store.DeletePhase` loop?
+	existingPhases, _ := store.ListPhases(projectID)
+	for _, p := range existingPhases {
+		store.DeletePhase(p.ID)
+	}
+
+	totalTasks := 0
+	for _, p := range phases {
+		// Save phase
+		// Generate markdown content for the phase
+		content, _ := generator.ExportPhaseMarkdown(&p)
+		
+		statePhase := &state.Phase{
+			ID:        p.ID,
+			ProjectID: projectID,
+			Number:    p.Number,
+			Title:     p.Title,
+			Content:   content,
+			Status:    state.PhaseNotStarted, // Default
+			CreatedAt: time.Now(),
+		}
+		
+		if err := store.SavePhase(statePhase); err != nil {
+			return ErrorResult(fmt.Sprintf("Failed to save phase %d: %v", p.Number, err)), nil
+		}
+		
+		// Save tasks
+		for _, t := range p.Tasks {
+			stateTask := &state.Task{
+				ID:          t.ID,
+				PhaseID:     p.ID,
+				Number:      t.Number,
+				Description: t.Description,
+				Status:      state.TaskNotStarted,
+			}
+			if err := store.SaveTask(stateTask); err != nil {
+				return ErrorResult(fmt.Sprintf("Failed to save task %s: %v", t.ID, err)), nil
+			}
+			totalTasks++
+		}
+	}
+
+	// Update project stage
+	if err := store.UpdateProjectStage(projectID, "plan_complete"); err != nil {
+		// Log warning
+	}
+
+	summary := fmt.Sprintf("📋 DevPlan Generation Complete\n\nGenerated development plan with:\n- %d phases\n- %d tasks total\n- Average %.1f tasks per phase\n\nNext step: Run execute_phase to start development.", 
+		len(phases), totalTasks, float64(totalTasks)/float64(len(phases)))
+
+	return SuccessResult(summary), nil
+}
+
+// Helpers
+
+func (h *PlanHandlers) initProvider(stage, overrideModel string) (provider.Provider, string, error) {
+	// Duplicated again... ideally refactor later
+	providerName, modelName, err := getProviderAndModel(h.configManager, stage, overrideModel)
+	if err != nil {
+		return nil, "", err
+	}
+
+	p, err := provider.CreateProvider(providerName)
+	if err != nil {
+		return nil, "", err
+	}
+
+	if providerName == "ollama" {
+		if err := p.Authenticate(""); err != nil {
+			return nil, "", err
+		}
+	} else {
+		apiKey, err := h.configManager.GetAPIKey(providerName)
+		if err != nil {
+			return nil, "", err
+		}
+		if err := p.Authenticate(apiKey); err != nil {
+			return nil, "", err
+		}
+	}
+
+	return p, modelName, nil
+}
+
+func openFile(path string) ([]byte, error) {
+	return os.ReadFile(path)
+}
+
+func unmarshalJSON(data string, v interface{}) error {
+	return json.Unmarshal([]byte(data), v)
+}
