@@ -120,23 +120,23 @@ func (h *SimpleToolHandlers) listCheckpointsTool() Tool {
 // Tool handlers
 
 func (h *SimpleToolHandlers) handleGetStatus(ctx context.Context, args map[string]interface{}) (*CallToolResult, error) {
-	projectPath, ok := args["projectPath"].(string)
-	if !ok {
-		return ErrorResult("projectPath must be a string"), nil
+	projectPath, err := ValidateAndGetString(args, "projectPath", true)
+	if err != nil {
+		return ErrorResult(err.Error()), nil
 	}
 
 	// Open state store
 	dbPath := filepath.Join(projectPath, ".geoffrussy", "state.db")
 	store, err := state.NewStore(dbPath)
 	if err != nil {
-		return ErrorResult(fmt.Sprintf("Failed to open state store: %v", err)), nil
+		return ErrorResult(fmt.Sprintf("Failed to open state store at %s: %v. Ensure the project has been initialized with 'geoffrussy init'.", dbPath, err)), nil
 	}
 	defer store.Close()
 
-	projectID := filepath.Base(projectPath)
+	projectID := getProjectID(projectPath)
 	project, err := store.GetProject(projectID)
 	if err != nil {
-		return ErrorResult("Project not found"), nil
+		return ErrorResult(fmt.Sprintf("Project '%s' not found. Ensure the project has been initialized with 'geoffrussy init'.", projectID)), nil
 	}
 
 	// Calculate progress
@@ -147,7 +147,7 @@ func (h *SimpleToolHandlers) handleGetStatus(ctx context.Context, args map[strin
 
 	// Build status report
 	status := fmt.Sprintf("📊 Project Status: %s\n", project.Name)
-	status += fmt.Sprintf("═══════════════════════════════\n")
+	status += fmt.Sprintf("═════════════════════════════\n")
 	status += fmt.Sprintf("Stage: %s\n", project.CurrentStage)
 	status += fmt.Sprintf("Progress: %.1f%%\n", progress.CompletionPercentage)
 	status += fmt.Sprintf("Tasks: %d/%d completed\n", progress.CompletedTasks, progress.TotalTasks)
@@ -164,9 +164,9 @@ func (h *SimpleToolHandlers) handleGetStatus(ctx context.Context, args map[strin
 }
 
 func (h *SimpleToolHandlers) handleGetStats(ctx context.Context, args map[string]interface{}) (*CallToolResult, error) {
-	projectPath, ok := args["projectPath"].(string)
-	if !ok {
-		return ErrorResult("projectPath must be a string"), nil
+	projectPath, err := ValidateAndGetString(args, "projectPath", true)
+	if err != nil {
+		return ErrorResult(err.Error()), nil
 	}
 
 	// Open state store
@@ -177,7 +177,7 @@ func (h *SimpleToolHandlers) handleGetStats(ctx context.Context, args map[string
 	}
 	defer store.Close()
 
-	projectID := filepath.Base(projectPath)
+	projectID := getProjectID(projectPath)
 	_, err = store.GetProject(projectID)
 	if err != nil {
 		return ErrorResult("Project not found"), nil
@@ -217,9 +217,9 @@ func (h *SimpleToolHandlers) handleGetStats(ctx context.Context, args map[string
 }
 
 func (h *SimpleToolHandlers) handleListPhases(ctx context.Context, args map[string]interface{}) (*CallToolResult, error) {
-	projectPath, ok := args["projectPath"].(string)
-	if !ok {
-		return ErrorResult("projectPath must be a string"), nil
+	projectPath, err := ValidateAndGetString(args, "projectPath", true)
+	if err != nil {
+		return ErrorResult(err.Error()), nil
 	}
 
 	// Open state store
@@ -230,7 +230,7 @@ func (h *SimpleToolHandlers) handleListPhases(ctx context.Context, args map[stri
 	}
 	defer store.Close()
 
-	projectID := filepath.Base(projectPath)
+	projectID := getProjectID(projectPath)
 	phases, err := store.ListPhases(projectID)
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("Failed to list phases: %v", err)), nil
@@ -265,14 +265,14 @@ func (h *SimpleToolHandlers) handleListPhases(ctx context.Context, args map[stri
 }
 
 func (h *SimpleToolHandlers) handleCreateCheckpoint(ctx context.Context, args map[string]interface{}) (*CallToolResult, error) {
-	projectPath, ok := args["projectPath"].(string)
-	if !ok {
-		return ErrorResult("projectPath must be a string"), nil
+	projectPath, err := ValidateAndGetString(args, "projectPath", true)
+	if err != nil {
+		return ErrorResult(err.Error()), nil
 	}
 
-	name, ok := args["name"].(string)
-	if !ok {
-		return ErrorResult("name must be a string"), nil
+	name, err := ValidateAndGetString(args, "name", true)
+	if err != nil {
+		return ErrorResult(err.Error()), nil
 	}
 
 	// Open state store
@@ -283,7 +283,7 @@ func (h *SimpleToolHandlers) handleCreateCheckpoint(ctx context.Context, args ma
 	}
 	defer store.Close()
 
-	projectID := filepath.Base(projectPath)
+	projectID := getProjectID(projectPath)
 	_, err = store.GetProject(projectID)
 	if err != nil {
 		return ErrorResult("Project not found"), nil
@@ -303,9 +303,9 @@ func (h *SimpleToolHandlers) handleCreateCheckpoint(ctx context.Context, args ma
 }
 
 func (h *SimpleToolHandlers) handleListCheckpoints(ctx context.Context, args map[string]interface{}) (*CallToolResult, error) {
-	projectPath, ok := args["projectPath"].(string)
-	if !ok {
-		return ErrorResult("projectPath must be a string"), nil
+	projectPath, err := ValidateAndGetString(args, "projectPath", true)
+	if err != nil {
+		return ErrorResult(err.Error()), nil
 	}
 
 	// Open state store
@@ -316,7 +316,7 @@ func (h *SimpleToolHandlers) handleListCheckpoints(ctx context.Context, args map
 	}
 	defer store.Close()
 
-	projectID := filepath.Base(projectPath)
+	projectID := getProjectID(projectPath)
 	checkpoints, err := store.ListCheckpoints(projectID)
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("Failed to list checkpoints: %v", err)), nil
@@ -335,6 +335,16 @@ func (h *SimpleToolHandlers) handleListCheckpoints(ctx context.Context, args map
 }
 
 // Helper functions
+
+func getProjectID(projectPath string) string {
+	projectID := filepath.Base(projectPath)
+	if projectID == "." {
+		if absPath, err := filepath.Abs(projectPath); err == nil {
+			projectID = filepath.Base(absPath)
+		}
+	}
+	return projectID
+}
 
 func getStatusIcon(status state.PhaseStatus) string {
 	switch status {

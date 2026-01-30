@@ -214,15 +214,29 @@ Add MCP settings to `~/.geoffrussy/config.yaml`:
 ```yaml
 mcp:
   enabled: true
-  log_level: info
-  server_mode: stdio  # Currently only stdio is supported
+  log_level: info  # Options: debug, info, warn, error
+  server_mode: stdio  # Currently only "stdio" is supported
 ```
 
 ### Configuration Fields
 
 - `enabled`: Enable/disable MCP server functionality (default: true)
-- `log_level`: Logging level for MCP server (debug, info, warn, error)
+- `log_level`: Logging level for MCP server (options: debug, info, warn, error)
 - `server_mode`: Transport mode, currently only "stdio" is supported
+
+### Debug Mode
+
+Enable debug mode for troubleshooting:
+
+```bash
+geoffrussy mcp-server --project-path /path/to/project --debug
+```
+
+Debug mode provides verbose logging to stderr including:
+- Incoming requests (method, ID, parameters)
+- Tool/resource execution details
+- Outgoing responses (success/error)
+- Protocol-level debugging information
 
 ## Protocol Details
 

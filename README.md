@@ -246,10 +246,27 @@ Start the MCP server:
 geoffrussy mcp-server --project-path /path/to/your/project
 ```
 
+**Optional:** Enable debug logging for troubleshooting:
+
+```bash
+geoffrussy mcp-server --project-path /path/to/your/project --debug
+```
+
 ### Claude for Desktop Configuration
 
-Add Geoffrey to `claude_desktop_config.json`:
+Add Geoffrey to your `claude_desktop_config.json`:
 
+**macOS/Linux:**
+```bash
+code ~/Library/Application\ Support/Claude/claude_desktop_config.json
+```
+
+**Windows:**
+```bash
+code %APPDATA%\Claude\claude_desktop_config.json
+```
+
+**Configuration:**
 ```json
 {
   "mcpServers": {
@@ -261,25 +278,32 @@ Add Geoffrey to `claude_desktop_config.json`:
 }
 ```
 
-Then restart Claude for Desktop.
+**Note:** Use absolute paths for both the `command` and `--project-path` arguments.
 
 ### Available Tools
 
-- `get_status` - Get project status and progress
-- `get_stats` - Get token usage and cost statistics
+- `get_status` - Get project status
+- `get_stats` - Get token usage statistics
 - `list_phases` - List all development phases
 - `create_checkpoint` - Create a checkpoint
 - `list_checkpoints` - List all checkpoints
 
 ### Available Resources
 
-- `project://status` - Current project status (JSON)
-- `project://architecture` - Architecture document (Markdown)
+- `project://status` - Project status (JSON)
+- `project://architecture` - Architecture documentation (Markdown)
 - `project://devplan` - Development plan (JSON)
-- `project://phases` - All phases with status (JSON)
-- `project://interview` - Interview data (JSON)
+- `project://phases` - All phases (JSON)
+- `project://interview` - Interview requirements (JSON)
 - `project://checkpoints` - All checkpoints (JSON)
 - `project://stats` - Token usage statistics (JSON)
+
+### New Features
+
+- ✅ **Debug Mode:** `--debug` flag enables verbose logging for troubleshooting
+- ✅ **Relative Path Support:** Works with both absolute and relative project paths
+- ✅ **Proper Error Handling:** All errors returned as JSON-RPC errors with helpful messages
+- ✅ **Parameter Validation:** Type-safe validation for all tool parameters
 
 ### Documentation
 
@@ -289,6 +313,8 @@ See [docs/mcp-integration.md](docs/mcp-integration.md) for complete MCP document
 - Use cases for autonomous agents
 - Troubleshooting guide
 - Advanced usage examples
+
+See [mcphandoff.md](mcphandoff.md) for comprehensive testing report and handoff information.
 
 ## Development
 

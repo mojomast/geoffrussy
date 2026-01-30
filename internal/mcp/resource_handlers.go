@@ -373,5 +373,11 @@ func (h *ResourceHandlers) getStore() (*state.Store, string, error) {
 	}
 
 	projectID := filepath.Base(projectPath)
+	// Handle case where projectPath resolves to "." by getting actual directory name
+	if projectID == "." {
+		if absPath, err := filepath.Abs(projectPath); err == nil {
+			projectID = filepath.Base(absPath)
+		}
+	}
 	return store, projectID, nil
 }

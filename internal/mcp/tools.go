@@ -150,3 +150,101 @@ func CreateInputSchema(properties map[string]interface{}, required []string) map
 	}
 	return schema
 }
+
+// ValidateAndGetString validates and extracts a string parameter from arguments
+func ValidateAndGetString(args map[string]interface{}, paramName string, required bool) (string, error) {
+	value, exists := args[paramName]
+	if required && !exists {
+		return "", fmt.Errorf("required parameter '%s' is missing", paramName)
+	}
+	if !exists {
+		return "", nil
+	}
+	if value == nil {
+		if required {
+			return "", fmt.Errorf("required parameter '%s' is null", paramName)
+		}
+		return "", nil
+	}
+	strValue, ok := value.(string)
+	if !ok {
+		return "", fmt.Errorf("parameter '%s' must be a string, got %T", paramName, value)
+	}
+	if strValue == "" && required {
+		return "", fmt.Errorf("required parameter '%s' cannot be empty", paramName)
+	}
+	return strValue, nil
+}
+
+// ValidateAndGetBool validates and extracts a boolean parameter from arguments
+func ValidateAndGetBool(args map[string]interface{}, paramName string, required bool, defaultValue bool) (bool, error) {
+	value, exists := args[paramName]
+	if required && !exists {
+		return false, fmt.Errorf("required parameter '%s' is missing", paramName)
+	}
+	if !exists {
+		return defaultValue, nil
+	}
+	if value == nil {
+		if required {
+			return false, fmt.Errorf("required parameter '%s' is null", paramName)
+		}
+		return defaultValue, nil
+	}
+	boolValue, ok := value.(bool)
+	if !ok {
+		return false, fmt.Errorf("parameter '%s' must be a boolean, got %T", paramName, value)
+	}
+	return boolValue, nil
+}
+
+// ValidateAndGetInt validates and extracts an integer parameter from arguments
+func ValidateAndGetInt(args map[string]interface{}, paramName string, required bool, defaultValue int) (int, error) {
+	value, exists := args[paramName]
+	if required && !exists {
+		return 0, fmt.Errorf("required parameter '%s' is missing", paramName)
+	}
+	if !exists {
+		return defaultValue, nil
+	}
+	if value == nil {
+		if required {
+			return 0, fmt.Errorf("required parameter '%s' is null", paramName)
+		}
+		return defaultValue, nil
+	}
+
+	// Handle both int and float64 (JSON numbers are parsed as float64)
+	switch v := value.(type) {
+	case int:
+		return v, nil
+	case float64:
+		return int(v), nil
+	case int64:
+		return int(v), nil
+	default:
+		return 0, fmt.Errorf("parameter '%s' must be a number, got %T", paramName, value)
+	}
+}
+
+// ValidateAndGetArray validates and extracts an array parameter from arguments
+func ValidateAndGetArray(args map[string]interface{}, paramName string, required bool) ([]interface{}, error) {
+	value, exists := args[paramName]
+	if required && !exists {
+		return nil, fmt.Errorf("required parameter '%s' is missing", paramName)
+	}
+	if !exists {
+		return nil, nil
+	}
+	if value == nil {
+		if required {
+			return nil, fmt.Errorf("required parameter '%s' is null", paramName)
+		}
+		return nil, nil
+	}
+	arrayValue, ok := value.([]interface{})
+	if !ok {
+		return nil, fmt.Errorf("parameter '%s' must be an array, got %T", paramName, value)
+	}
+	return arrayValue, nil
+}

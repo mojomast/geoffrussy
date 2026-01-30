@@ -23,6 +23,7 @@ type Server struct {
 	stdin            io.Reader
 	stdout           io.Writer
 	stderr           io.Writer
+	debugEnabled     bool
 }
 
 // ServerConfig contains configuration for the MCP server
@@ -33,6 +34,7 @@ type ServerConfig struct {
 	Stdin   io.Reader
 	Stdout  io.Writer
 	Stderr  io.Writer
+	Debug   bool
 }
 
 // NewServer creates a new MCP server instance
@@ -75,9 +77,17 @@ func NewServer(config ServerConfig) *Server {
 		stdin:            stdin,
 		stdout:           stdout,
 		stderr:           stderr,
+		debugEnabled:     config.Debug,
 	}
 
 	return server
+}
+
+// logDebug logs debug messages to stderr if debug mode is enabled
+func (s *Server) logDebug(format string, args ...interface{}) {
+	if s.debugEnabled {
+		fmt.Fprintf(s.stderr, "[DEBUG] "+format+"\n", args...)
+	}
 }
 
 // Start starts the MCP server and begins processing requests
@@ -122,8 +132,11 @@ func (s *Server) handleMessage(data []byte) error {
 	// Try to parse as a request
 	var req JSONRPCRequest
 	if err := json.Unmarshal(data, &req); err != nil {
+		s.logDebug("Failed to parse request: %v", err)
 		return s.sendError(nil, ParseError, "Parse error", err)
 	}
+
+	s.logDebug("Received request: method=%s, id=%v", req.Method, req.ID)
 
 	// Check JSON-RPC version
 	if req.JSONRPC != "2.0" {
@@ -136,6 +149,7 @@ func (s *Server) handleMessage(data []byte) error {
 		return s.handleInitialize(req)
 	case "initialized":
 		// Notification, no response needed
+		s.logDebug("Received initialized notification")
 		return nil
 	case "tools/list":
 		return s.handleToolsList(req)
@@ -186,16 +200,33 @@ func (s *Server) handleToolsList(req JSONRPCRequest) error {
 
 // handleToolsCall handles tools/call requests
 func (s *Server) handleToolsCall(req JSONRPCRequest) error {
+	s.logDebug("Tool call: name=%s, args=%+v", req.Params)
 	var params CallToolParams
 	if err := json.Unmarshal(req.Params, &params); err != nil {
 		return s.sendError(req.ID, InvalidParams, "Invalid params", err)
 	}
 
+	s.logDebug("Executing tool: %s", params.Name)
 	result, err := s.toolRegistry.CallTool(s.ctx, params.Name, params.Arguments)
 	if err != nil {
+		s.logDebug("Tool execution error: %v", err)
 		return s.sendError(req.ID, InternalError, "Tool execution failed", err)
 	}
 
+	// Check if tool returned an error via isError flag
+	if result.IsError {
+		s.logDebug("Tool returned error result")
+		var errMsg string
+		if len(result.Content) > 0 {
+			errMsg = result.Content[0].Text
+		}
+		if errMsg == "" {
+			errMsg = "Tool execution failed"
+		}
+		return s.sendError(req.ID, InternalError, "Tool execution failed", fmt.Errorf("%s", errMsg))
+	}
+
+	s.logDebug("Tool execution successful")
 	return s.sendResult(req.ID, result)
 }
 
@@ -230,6 +261,7 @@ func (s *Server) sendResult(id interface{}, result interface{}) error {
 		ID:      id,
 		Result:  result,
 	}
+	s.logDebug("Sending success response: id=%v", id)
 	return s.sendResponse(response)
 }
 
@@ -248,6 +280,7 @@ func (s *Server) sendError(id interface{}, code int, message string, err error) 
 		ID:      id,
 		Error:   rpcErr,
 	}
+	s.logDebug("Sending error response: id=%v, code=%d, message=%s", id, code, message)
 	return s.sendResponse(response)
 }
 

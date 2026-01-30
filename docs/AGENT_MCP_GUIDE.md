@@ -614,14 +614,36 @@ When working on tasks:
 - Report completion percentage changes
 - Highlight any blocked tasks discovered
 
-### 10. Use Absolute Paths
-All tool calls require absolute paths:
-- Bad: `./project`, `~/project`, `project`
-- Good: `/home/user/project`, `/absolute/path/to/project`
+### 10. Use Absolute or Relative Paths
+
+All tool calls now support both absolute and relative paths:
+- **Absolute paths:** `/home/user/project`, `/absolute/path/to/project`
+- **Relative paths:** `./project`, `~/project`, `project` (resolved relative to server's working directory)
+
+When in doubt, use absolute paths:
+- Good: `/home/user/myproject`
+- Good: `$(pwd)` (uses current directory as absolute path)
+- Bad: `./myproject` (ambiguous - resolved relative to server working directory)
 
 ---
 
 ## Error Handling Guide
+
+### Error Response Format
+
+All tool and resource errors are returned as proper JSON-RPC error responses:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "error": {
+    "code": -32603,
+    "message": "Tool execution failed",
+    "data": "Failed to open state store at /path/to/project/.geoffrussy/state.db: failed to create database directory: mkdir /path/to/project: permission denied. Ensure project has been initialized with 'geoffrussy init'."
+  }
+}
+```
 
 ### Common Errors and Solutions
 

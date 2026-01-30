@@ -66,9 +66,14 @@ docker-compose run geoffrussy version
    ```
 
 3. **Use MCP (optional)**:
-   ```bash
-   geoffrussy mcp-server --project-path /path/to/project
-   ```
+    ```bash
+    geoffrussy mcp-server --project-path /path/to/project
+    ```
+    
+    **Tip:** Add `--debug` flag for verbose logging when troubleshooting:
+    ```bash
+    geoffrussy mcp-server --project-path /path/to/project --debug
+    ```
 
 4. **Read the full documentation**:
     - [README.md](README.md) - Complete overview

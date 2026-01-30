@@ -13,6 +13,7 @@ import (
 
 var (
 	mcpProjectPath string
+	mcpDebug       bool
 )
 
 var mcpCmd = &cobra.Command{
@@ -38,6 +39,7 @@ Example configuration for Claude for Desktop (claude_desktop_config.json):
 
 func init() {
 	mcpCmd.Flags().StringVar(&mcpProjectPath, "project-path", "", "Project root path (defaults to current directory)")
+	mcpCmd.Flags().BoolVar(&mcpDebug, "debug", false, "Enable debug logging to stderr")
 }
 
 func runMCPServer(cmd *cobra.Command, args []string) error {
@@ -75,6 +77,7 @@ func runMCPServer(cmd *cobra.Command, args []string) error {
 		Stdin:   os.Stdin,
 		Stdout:  os.Stdout,
 		Stderr:  os.Stderr,
+		Debug:   mcpDebug,
 	})
 
 	// Register tools

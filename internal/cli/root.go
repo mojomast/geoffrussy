@@ -40,8 +40,8 @@ pipeline: Interview → Architecture Design → DevPlan Generation → Phase Rev
 		Version: version,
 		RunE:    runRootWithResumeCheck,
 		PersistentPreRun: func(cmd *cobra.Command, args []string) {
-			// Don't print banner for help commands
-			if !argsContains(args, "--help") && !argsContains(args, "-h") {
+			// Don't print banner for help commands or MCP server
+			if !argsContains(args, "--help") && !argsContains(args, "-h") && cmd.Name() != "mcp-server" {
 				fmt.Print(Banner())
 				fmt.Println()
 			}
