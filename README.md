@@ -16,6 +16,7 @@ Geoffrey is a next-generation AI-powered development orchestration platform that
 - ⏸️ **Phase Control**: Stop after current phase or continue through all phases automatically
 - 🎨 **Interactive Terminal UI**: Beautiful terminal interface with ASCII art banner
 - 📦 **Single Binary**: No dependencies, works on Linux, macOS, and Windows
+- 🔌 **MCP Integration**: Model Context Protocol support for autonomous AI agents
 
 ## Installation
 
@@ -187,6 +188,7 @@ geoffrussy stats             # Show token usage and cost statistics
 geoffrussy quota             # Check rate limits and quotas
 geoffrussy checkpoint        # Create or list checkpoints
 geoffrussy rollback          # Rollback to a checkpoint
+geoffrussy mcp-server        # Start MCP server for AI agents
 geoffrussy version           # Print version number
 ```
 
@@ -216,6 +218,12 @@ default_models:
 
 budget_limit: 100.0  # USD
 verbose_logging: false
+
+# MCP Server Configuration (optional)
+mcp:
+  enabled: true
+  log_level: info
+  server_mode: stdio
 ```
 
 ### Environment Variables
@@ -225,6 +233,62 @@ export GEOFFRUSSY_OPENAI_API_KEY=sk-...
 export GEOFFRUSSY_ANTHROPIC_API_KEY=sk-ant-...
 export GEOFFRUSSY_BUDGET_LIMIT=100.0
 ```
+
+## MCP (Model Context Protocol) Integration
+
+Geoffrey supports the Model Context Protocol, enabling AI agents to autonomously use Geoffrey for building software.
+
+### Quick Start
+
+Start the MCP server:
+
+```bash
+geoffrussy mcp-server --project-path /path/to/your/project
+```
+
+### Claude for Desktop Configuration
+
+Add Geoffrey to `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "geoffrey": {
+      "command": "/absolute/path/to/geoffrussy",
+      "args": ["mcp-server", "--project-path", "/absolute/path/to/project"]
+    }
+  }
+}
+```
+
+Then restart Claude for Desktop.
+
+### Available Tools
+
+- `get_status` - Get project status and progress
+- `get_stats` - Get token usage and cost statistics
+- `list_phases` - List all development phases
+- `create_checkpoint` - Create a checkpoint
+- `list_checkpoints` - List all checkpoints
+
+### Available Resources
+
+- `project://status` - Current project status (JSON)
+- `project://architecture` - Architecture document (Markdown)
+- `project://devplan` - Development plan (JSON)
+- `project://phases` - All phases with status (JSON)
+- `project://interview` - Interview data (JSON)
+- `project://checkpoints` - All checkpoints (JSON)
+- `project://stats` - Token usage statistics (JSON)
+
+### Documentation
+
+See [docs/mcp-integration.md](docs/mcp-integration.md) for complete MCP documentation including:
+- Detailed tool and resource schemas
+- Protocol specifications
+- Use cases for autonomous agents
+- Troubleshooting guide
+- Advanced usage examples
 
 ## Development
 

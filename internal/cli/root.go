@@ -68,6 +68,7 @@ pipeline: Interview → Architecture Design → DevPlan Generation → Phase Rev
 	rootCmd.AddCommand(rollbackCmd)
 	rootCmd.AddCommand(resumeCmd)
 	rootCmd.AddCommand(navigateCmd)
+	rootCmd.AddCommand(mcpCmd)
 }
 
 func argsContains(args []string, s string) bool {

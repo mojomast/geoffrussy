@@ -65,9 +65,16 @@ docker-compose run geoffrussy version
    geoffrussy interview
    ```
 
-3. **Read the full documentation**:
-   - [README.md](README.md) - Complete overview
-   - [docs/SETUP.md](docs/SETUP.md) - Detailed setup guide
+3. **Use MCP (optional)**:
+   ```bash
+   geoffrussy mcp-server --project-path /path/to/project
+   ```
+
+4. **Read the full documentation**:
+    - [README.md](README.md) - Complete overview
+    - [docs/SETUP.md](docs/SETUP.md) - Detailed setup guide
+    - [docs/mcp-integration.md](docs/mcp-integration.md) - MCP integration guide
+    - [docs/AGENT_MCP_GUIDE.md](docs/AGENT_MCP_GUIDE.md) - Agent guide for MCP
 
 ### For Developers
 

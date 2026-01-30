@@ -16,7 +16,15 @@ type Config struct {
 	FavoriteModels []string          `yaml:"favorite_models"`
 	BudgetLimit    float64           `yaml:"budget_limit"`
 	VerboseLogging bool              `yaml:"verbose_logging"`
+	MCP            *MCPConfig        `yaml:"mcp,omitempty"`
 	ConfigPath     string            `yaml:"-"` // Not serialized
+}
+
+// MCPConfig represents MCP server configuration
+type MCPConfig struct {
+	Enabled    bool   `yaml:"enabled"`
+	LogLevel   string `yaml:"log_level"`
+	ServerMode string `yaml:"server_mode"` // Currently only "stdio" is supported
 }
 
 // Manager handles configuration loading and management
@@ -54,9 +62,9 @@ func (m *Manager) SetValidator(validator APIKeyValidator) {
 func (m *Manager) Load(flagConfig *Config) error {
 	// Start with default config
 	m.config = &Config{
-		APIKeys:       make(map[string]string),
-		DefaultModels: make(map[string]string),
-		BudgetLimit:   0,
+		APIKeys:        make(map[string]string),
+		DefaultModels:  make(map[string]string),
+		BudgetLimit:    0,
 		VerboseLogging: false,
 	}
 
@@ -138,10 +146,10 @@ func (m *Manager) loadFromEnv() {
 		if len(parts) != 2 {
 			continue
 		}
-		
+
 		key := parts[0]
 		value := parts[1]
-		
+
 		// Check for API key
 		if len(key) > 22 && key[:22] == "GEOFFRUSSY_API_KEY_" {
 			provider := key[22:] // Remove "GEOFFRUSSY_API_KEY_" prefix
@@ -149,7 +157,7 @@ func (m *Manager) loadFromEnv() {
 				m.config.APIKeys[provider] = value
 			}
 		}
-		
+
 		// Check for default model
 		if len(key) > 28 && key[:28] == "GEOFFRUSSY_DEFAULT_MODEL_" {
 			stage := key[28:] // Remove "GEOFFRUSSY_DEFAULT_MODEL_" prefix
@@ -284,14 +292,14 @@ func (m *Manager) SetAPIKey(provider, key string) error {
 	if key == "" {
 		return fmt.Errorf("API key cannot be empty")
 	}
-	
+
 	// Validate API key if validator is set
 	if m.validator != nil {
 		if err := m.validator.ValidateAPIKey(provider, key); err != nil {
 			return fmt.Errorf("API key validation failed: %w", err)
 		}
 	}
-	
+
 	m.config.APIKeys[provider] = key
 	return nil
 }
