@@ -60,8 +60,9 @@ func TestZAIProvider_ListModels(t *testing.T) {
 
 	// Check for expected models
 	expectedModels := map[string]bool{
-		"z-coder-v1":       false,
-		"z-coder-v1-turbo": false,
+		"glm-4.7":  false,
+		"glm-4.6":  false,
+		"glm-4.6v": false,
 	}
 
 	for _, model := range models {

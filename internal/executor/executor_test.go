@@ -1,12 +1,69 @@
 package executor
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/mojomast/geoffrussy/internal/provider"
 	"github.com/mojomast/geoffrussy/internal/state"
 )
+
+type mockExecutorProvider struct{}
+
+func (m *mockExecutorProvider) Name() string { return "mock" }
+
+func (m *mockExecutorProvider) Authenticate(apiKey string) error { return nil }
+
+func (m *mockExecutorProvider) IsAuthenticated() bool { return true }
+
+func (m *mockExecutorProvider) ListModels() ([]provider.Model, error) { return nil, nil }
+
+func (m *mockExecutorProvider) DiscoverModels() ([]provider.Model, error) { return nil, nil }
+
+func (m *mockExecutorProvider) Call(model string, prompt string) (*provider.Response, error) {
+	return &provider.Response{
+		Content:      `{"explanation":"ok","files":[]}`,
+		TokensInput:  10,
+		TokensOutput: 5,
+		Model:        model,
+		Provider:     "mock",
+		Timestamp:    time.Now(),
+	}, nil
+}
+
+func (m *mockExecutorProvider) Stream(model string, prompt string) (<-chan string, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
+func (m *mockExecutorProvider) GetRateLimitInfo() (*provider.RateLimitInfo, error) { return nil, nil }
+
+func (m *mockExecutorProvider) GetQuotaInfo() (*provider.QuotaInfo, error) { return nil, nil }
+
+func (m *mockExecutorProvider) SupportsCodingPlan() bool { return false }
+
+func seedExecutionContext(t *testing.T, store *state.Store, projectID string) {
+	t.Helper()
+
+	interviewData := &state.InterviewData{
+		ProjectID:        projectID,
+		ProjectName:      "Test Project",
+		CreatedAt:        time.Now(),
+		ProblemStatement: "Test problem statement",
+	}
+	if err := store.SaveInterviewData(projectID, interviewData); err != nil {
+		t.Fatalf("failed to save interview data: %v", err)
+	}
+
+	arch := &state.Architecture{
+		ProjectID: projectID,
+		Content:   "# Test Architecture",
+		CreatedAt: time.Now(),
+	}
+	if err := store.SaveArchitecture(projectID, arch); err != nil {
+		t.Fatalf("failed to save architecture: %v", err)
+	}
+}
 
 func setupTestExecutor(t *testing.T) (*Executor, *state.Store) {
 	// Create in-memory store
@@ -15,11 +72,11 @@ func setupTestExecutor(t *testing.T) (*Executor, *state.Store) {
 		t.Fatalf("failed to create store: %v", err)
 	}
 
-	// Create mock provider (nil is acceptable for testing)
-	var mockProvider provider.Provider = nil
+	// Create mock provider
+	var mockProvider provider.Provider = &mockExecutorProvider{}
 
 	// Create executor
-	executor := NewExecutor(store, mockProvider)
+	executor := NewExecutor(store, mockProvider, "glm-4.7")
 
 	return executor, store
 }
@@ -133,6 +190,7 @@ func TestExecutor_SkipTask(t *testing.T) {
 	if err := store.CreateProject(project); err != nil {
 		t.Fatalf("failed to create project: %v", err)
 	}
+	seedExecutionContext(t, store, project.ID)
 
 	// Create a test phase
 	phase := &state.Phase{
@@ -189,6 +247,7 @@ func TestExecutor_MarkBlocked(t *testing.T) {
 	if err := store.CreateProject(project); err != nil {
 		t.Fatalf("failed to create project: %v", err)
 	}
+	seedExecutionContext(t, store, project.ID)
 
 	// Create a test phase
 	phase := &state.Phase{
@@ -342,6 +401,7 @@ func TestExecutor_ExecuteTask(t *testing.T) {
 	if err := store.CreateProject(project); err != nil {
 		t.Fatalf("failed to create project: %v", err)
 	}
+	seedExecutionContext(t, store, project.ID)
 
 	// Create a test phase
 	phase := &state.Phase{
@@ -422,6 +482,7 @@ func TestExecutor_ExecutePhase(t *testing.T) {
 	if err := store.CreateProject(project); err != nil {
 		t.Fatalf("failed to create project: %v", err)
 	}
+	seedExecutionContext(t, store, project.ID)
 
 	// Create a test phase
 	phase := &state.Phase{

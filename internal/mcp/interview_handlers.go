@@ -120,6 +120,11 @@ func (h *InterviewHandlers) handleRunInterview(ctx context.Context, args map[str
 		}
 	}
 
+	// Save the session so it can be retrieved on next call
+	if err := engine.SaveSession(session); err != nil {
+		return ErrorResult(fmt.Sprintf("Failed to save session: %v", err)), nil
+	}
+
 	// Get current question
 	question, err := engine.GetNextQuestion(session)
 	if err != nil {
