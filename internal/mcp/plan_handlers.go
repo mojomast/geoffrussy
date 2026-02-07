@@ -79,19 +79,14 @@ func (h *PlanHandlers) handleCreateDevPlan(ctx context.Context, args map[string]
 
 	projectID := getProjectID(projectPath)
 
-	// Check if architecture exists
-	_, err = store.GetArchitecture(projectID)
-	// We check file mostly as fallback or primary if DB failed in previous step
-
-	// Let's try to load architecture from file since that's where I saved it.
+	// Load architecture from disk (same path used by CLI design flow).
+	var designArch design.Architecture
 	archPath := filepath.Join(projectPath, ".geoffrussy", "architecture.json")
-	// Read file
 	archContent, err := openFile(archPath)
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("Architecture file not found at %s. Please run generate_design first.", archPath)), nil
 	}
 
-	var designArch design.Architecture
 	if err := unmarshalJSON(string(archContent), &designArch); err != nil {
 		return ErrorResult(fmt.Sprintf("Failed to parse architecture file: %v", err)), nil
 	}
@@ -119,22 +114,30 @@ func (h *PlanHandlers) handleCreateDevPlan(ctx context.Context, args map[string]
 
 	// Reset existing progress if any?
 	if err := store.ResetProjectProgress(projectID); err != nil {
-		// Just log or ignore? Safer to reset to avoid duplicates if re-planning.
+		return ErrorResult(fmt.Sprintf("Failed to reset project progress: %v", err)), nil
 	}
 
 	// Also delete existing phases? ResetProjectProgress just updates status.
 	// If we are regenerating plan, we probably want to wipe old phases.
 	// `store.ListPhases` then `store.DeletePhase` loop?
-	existingPhases, _ := store.ListPhases(projectID)
+	existingPhases, err := store.ListPhases(projectID)
+	if err != nil {
+		return ErrorResult(fmt.Sprintf("Failed to list existing phases: %v", err)), nil
+	}
 	for _, p := range existingPhases {
-		store.DeletePhase(p.ID)
+		if err := store.DeletePhase(p.ID); err != nil {
+			return ErrorResult(fmt.Sprintf("Failed to delete phase %s: %v", p.ID, err)), nil
+		}
 	}
 
 	totalTasks := 0
 	for _, p := range phases {
 		// Save phase
 		// Generate markdown content for the phase
-		content, _ := generator.ExportPhaseMarkdown(&p)
+		content, err := generator.ExportPhaseMarkdown(&p)
+		if err != nil {
+			return ErrorResult(fmt.Sprintf("Failed to export phase %d: %v", p.Number, err)), nil
+		}
 
 		statePhase := &state.Phase{
 			ID:        p.ID,
@@ -168,11 +171,16 @@ func (h *PlanHandlers) handleCreateDevPlan(ctx context.Context, args map[string]
 
 	// Update project stage
 	if err := store.UpdateProjectStage(projectID, "plan_complete"); err != nil {
-		// Log warning
+		return ErrorResult(fmt.Sprintf("Failed to update project stage: %v", err)), nil
+	}
+
+	avgTasks := 0.0
+	if len(phases) > 0 {
+		avgTasks = float64(totalTasks) / float64(len(phases))
 	}
 
 	summary := fmt.Sprintf("📋 DevPlan Generation Complete\n\nGenerated development plan with:\n- %d phases\n- %d tasks total\n- Average %.1f tasks per phase\n\nNext step: Run execute_phase to start development.",
-		len(phases), totalTasks, float64(totalTasks)/float64(len(phases)))
+		len(phases), totalTasks, avgTasks)
 
 	return SuccessResult(summary), nil
 }

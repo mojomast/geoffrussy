@@ -125,13 +125,17 @@ func (h *DesignHandlers) handleGenerateDesign(ctx context.Context, args map[stri
 		return ErrorResult(fmt.Sprintf("Failed to export architecture: %v", err)), nil
 	}
 
-	if err := os.WriteFile(archPath, []byte(jsonStr), 0644); err != nil {
+	if err := os.MkdirAll(filepath.Dir(archPath), 0o755); err != nil {
+		return ErrorResult(fmt.Sprintf("Failed to create architecture directory: %v", err)), nil
+	}
+
+	if err := os.WriteFile(archPath, []byte(jsonStr), 0o644); err != nil {
 		return ErrorResult(fmt.Sprintf("Failed to save architecture file: %v", err)), nil
 	}
 
 	// Update project stage
 	if err := store.UpdateProjectStage(projectID, "design_complete"); err != nil {
-		// Log warning but don't fail?
+		return ErrorResult(fmt.Sprintf("Failed to update project stage: %v", err)), nil
 	}
 
 	summary := fmt.Sprintf("🏗️ Architecture Generation Complete\n\nGenerated comprehensive system architecture including:\n- System Overview\n- %d Components\n- %d Data Flows\n\nArchitecture saved to: .geoffrussy/architecture.json\nView with: project://architecture resource\n\nNext step: Run create_devplan to generate development phases.", len(arch.Components), len(arch.DataFlows))
@@ -192,7 +196,10 @@ func (h *DesignHandlers) handleRegenerateDesign(ctx context.Context, args map[st
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("Failed to export: %v", err)), nil
 	}
-	if err := os.WriteFile(archPath, []byte(jsonStr), 0644); err != nil {
+	if err := os.MkdirAll(filepath.Dir(archPath), 0o755); err != nil {
+		return ErrorResult(fmt.Sprintf("Failed to create architecture directory: %v", err)), nil
+	}
+	if err := os.WriteFile(archPath, []byte(jsonStr), 0o644); err != nil {
 		return ErrorResult(fmt.Sprintf("Failed to save: %v", err)), nil
 	}
 
