@@ -219,26 +219,25 @@ func executeMerge(store *state.Store, generator *devplan.Generator, phases []dev
 		return fmt.Errorf("invalid phase numbers: %s", mergeSpec)
 	}
 
-	// Find phases by number
 	var phase1, phase2 *devplan.Phase
 	var p1Idx, p2Idx int
-	p1Found, p2Found := false, false
 
 	for i := range phases {
 		if phases[i].Number == idx1 {
 			phase1 = &phases[i]
 			p1Idx = i
-			p1Found = true
 		}
 		if phases[i].Number == idx2 {
 			phase2 = &phases[i]
 			p2Idx = i
-			p2Found = true
 		}
 	}
 
-	if !p1Found || !p2Found {
+	if phase1 == nil || phase2 == nil {
 		return fmt.Errorf("one or both phases not found")
+	}
+	if p1Idx == p2Idx {
+		return fmt.Errorf("cannot merge the same phase")
 	}
 
 	merged, err := generator.MergePhases(phase1, phase2)
@@ -246,49 +245,23 @@ func executeMerge(store *state.Store, generator *devplan.Generator, phases []dev
 		return fmt.Errorf("failed to merge phases: %w", err)
 	}
 
-	// Construct new list
-	newPhases := []devplan.Phase{}
-	// Determine insertion point (min of indices)
 	insertIdx := p1Idx
+	removeIdx := p2Idx
 	if p2Idx < p1Idx {
 		insertIdx = p2Idx
+		removeIdx = p1Idx
 	}
 
+	finalPhases := make([]devplan.Phase, 0, len(phases)-1)
 	for i, p := range phases {
-		if i == p1Idx || i == p2Idx {
+		switch i {
+		case insertIdx:
+			finalPhases = append(finalPhases, *merged)
+		case removeIdx:
 			continue
+		default:
+			finalPhases = append(finalPhases, p)
 		}
-		newPhases = append(newPhases, p)
-	}
-
-	// Insert merged phase at correct position
-	// Since we removed 2 items, indices shifted.
-	// We can't simply insert at insertIdx because removing might affect it if we removed iteratively.
-	// Simpler: rebuild list.
-
-	finalPhases := []devplan.Phase{}
-	added := false
-	for i := range phases {
-		if i == p1Idx || i == p2Idx {
-			if !added && (i == p1Idx || i == p2Idx) { // Only add once at the first occurrence
-				// Add the merged phase here?
-				// Usually merge means replacing 1 and 2 with merged.
-				// If 1 and 2 are adjacent, it's easy.
-				// If not adjacent (e.g. merge 1 and 5), where does it go?
-				// Let's assume it goes to the position of the first one.
-				if i == insertIdx {
-					finalPhases = append(finalPhases, *merged)
-					added = true
-				}
-			}
-			continue
-		}
-		finalPhases = append(finalPhases, phases[i])
-	}
-
-	// Double check if merged was added (e.g. if logic above was flawed)
-	if !added {
-		finalPhases = append(finalPhases, *merged)
 	}
 
 	return saveAllPhases(store, generator, finalPhases, projectID)
