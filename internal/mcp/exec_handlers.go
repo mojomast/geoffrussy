@@ -28,7 +28,7 @@ func NewExecHandlers(configManager *config.Manager) *ExecHandlers {
 // RegisterHandlers registers execution tools with the registry
 func (h *ExecHandlers) RegisterHandlers(registry *ToolRegistry) error {
 
-tools := []struct {
+	tools := []struct {
 		tool    Tool
 		handler ToolHandler
 	}{
@@ -161,7 +161,7 @@ func (h *ExecHandlers) handleExecutePhase(ctx context.Context, args map[string]i
 					logMap[update.TaskID] = &strings.Builder{}
 				}
 				logMap[update.TaskID].WriteString(fmt.Sprintf("[%s] %s\n", update.Type, update.Content))
-				
+
 				// Write to file
 				logFile := filepath.Join(logDir, fmt.Sprintf("%s.log", update.TaskID))
 				f, err := os.OpenFile(logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
@@ -194,7 +194,7 @@ func (h *ExecHandlers) handleExecutePhase(ctx context.Context, args map[string]i
 	} else {
 		execErr = exec.ExecuteProject(getProjectID(projectPath), phaseID, stopAfterPhase)
 	}
-	
+
 	// Wait for updates to process
 	// We need to close executor to close channel?
 	// Executor.Close() cancels context, but doesn't close channel immediately?
@@ -203,13 +203,13 @@ func (h *ExecHandlers) handleExecutePhase(ctx context.Context, args map[string]i
 	<-done
 
 	duration := time.Since(startTime)
-	
+
 	// Construct result
-	resultText := fmt.Sprintf("✅ Phase execution completed (Duration: %s)\n\nTasks Summary:\n%s\nFiles Created: (check logs)\nTotal Cost: (check stats)", 
+	resultText := fmt.Sprintf("✅ Phase execution completed (Duration: %s)\n\nTasks Summary:\n%s\nFiles Created: (check logs)\nTotal Cost: (check stats)",
 		duration.Round(time.Second), phaseSummary.String())
-	
+
 	if execErr != nil {
-		resultText = fmt.Sprintf("⚠️ Phase execution failed (Duration: %s)\nError: %v\n\nTasks Summary:\n%s", 
+		resultText = fmt.Sprintf("⚠️ Phase execution failed (Duration: %s)\nError: %v\n\nTasks Summary:\n%s",
 			duration.Round(time.Second), execErr, phaseSummary.String())
 		// Don't return error result, return tool result with error details
 	}
@@ -258,7 +258,7 @@ func (h *ExecHandlers) handleExecuteTask(ctx context.Context, args map[string]in
 		for update := range exec.StreamOutput() {
 			line := fmt.Sprintf("[%s] %s\n", update.Type, update.Content)
 			outputBuilder.WriteString(line)
-			
+
 			f, err := os.OpenFile(logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 			if err == nil {
 				f.WriteString(fmt.Sprintf("[%s] %s", time.Now().Format(time.RFC3339), line))
@@ -300,7 +300,7 @@ func (h *ExecHandlers) handleGetTaskOutput(ctx context.Context, args map[string]
 			return ErrorResult("Log not found and DB unavailable"), nil
 		}
 		defer store.Close()
-		
+
 		task, err := store.GetTask(taskID)
 		if err != nil {
 			return ErrorResult(fmt.Sprintf("Task not found: %s", taskID)), nil
@@ -338,7 +338,7 @@ func (h *ExecHandlers) handleHandleBlocker(ctx context.Context, args map[string]
 	// But those methods are on Executor struct.
 	// We can use a dummy provider for executor as we might not need LLM for simple actions
 	// unless 'analyze' or 'modify' needs it.
-	
+
 	prov, modelName, _ := h.initProvider("develop", "")
 	// If provider init fails (no key), we might still proceed if action is 'skip' or 'retry' if we don't need provider?
 	// But NewExecutor requires provider.
@@ -360,7 +360,7 @@ func (h *ExecHandlers) handleHandleBlocker(ctx context.Context, args map[string]
 			"projectPath": projectPath,
 			"taskId":      taskID,
 		})
-		
+
 	case "skip":
 		if err := exec.SkipTask(taskID); err != nil {
 			return ErrorResult(fmt.Sprintf("Failed to skip task: %v", err)), nil
@@ -377,20 +377,20 @@ func (h *ExecHandlers) handleHandleBlocker(ctx context.Context, args map[string]
 		if modification == "" {
 			return ErrorResult("Modification description required for 'modify' action"), nil
 		}
-		
+
 		task, err := store.GetTask(taskID)
 		if err != nil {
 			return ErrorResult("Task not found"), nil
 		}
-		
+
 		task.Description = modification
 		if err := store.SaveTask(task); err != nil {
 			return ErrorResult(fmt.Sprintf("Failed to update task: %v", err)), nil
 		}
-		
+
 		// Resolve blocker
 		_ = exec.ResolveBlocker(taskID, "Task modified")
-		
+
 		return SuccessResult(fmt.Sprintf("Task %s modified. You can now retry it.", taskID)), nil
 
 	case "analyze":
@@ -398,15 +398,15 @@ func (h *ExecHandlers) handleHandleBlocker(ctx context.Context, args map[string]
 		// Read logs
 		logFile := filepath.Join(projectPath, ".geoffrussy", "logs", fmt.Sprintf("%s.log", taskID))
 		logs, _ := os.ReadFile(logFile)
-		
+
 		prompt := fmt.Sprintf("Analyze the failure for task %s.\nLogs:\n%s", taskID, string(logs))
 		resp, err := prov.Call(modelName, prompt)
 		if err != nil {
 			return ErrorResult(fmt.Sprintf("Failed to analyze: %v", err)), nil
 		}
-		
+
 		return SuccessResult(fmt.Sprintf("Analysis:\n%s", resp.Content)), nil
-		
+
 	default:
 		return ErrorResult(fmt.Sprintf("Unknown action: %s", action)), nil
 	}

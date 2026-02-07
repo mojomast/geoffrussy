@@ -429,7 +429,9 @@ func TestExecutor_ExecuteTask(t *testing.T) {
 	}
 
 	// Execute the task
+	doneCh := make(chan struct{})
 	go func() {
+		defer close(doneCh)
 		if err := executor.ExecuteTask(task.ID); err != nil {
 			t.Errorf("failed to execute task: %v", err)
 		}
@@ -452,6 +454,12 @@ func TestExecutor_ExecuteTask(t *testing.T) {
 	}
 
 done:
+	select {
+	case <-doneCh:
+	case <-time.After(1 * time.Second):
+		t.Fatal("timeout waiting for execute task goroutine to finish")
+	}
+
 	// Verify we received updates
 	if len(updates) < 2 {
 		t.Errorf("expected at least 2 updates, got %d", len(updates))
@@ -510,7 +518,9 @@ func TestExecutor_ExecutePhase(t *testing.T) {
 	}
 
 	// Execute the phase
+	doneCh := make(chan struct{})
 	go func() {
+		defer close(doneCh)
 		if err := executor.ExecutePhase(phase.ID); err != nil {
 			t.Errorf("failed to execute phase: %v", err)
 		}
@@ -533,6 +543,12 @@ func TestExecutor_ExecutePhase(t *testing.T) {
 	}
 
 done:
+	select {
+	case <-doneCh:
+	case <-time.After(1 * time.Second):
+		t.Fatal("timeout waiting for execute phase goroutine to finish")
+	}
+
 	// Verify we received updates
 	if len(updates) < 2 {
 		t.Errorf("expected at least 2 updates, got %d", len(updates))

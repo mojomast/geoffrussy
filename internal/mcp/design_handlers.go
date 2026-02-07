@@ -26,7 +26,7 @@ func NewDesignHandlers(configManager *config.Manager) *DesignHandlers {
 // RegisterHandlers registers design tools with the registry
 func (h *DesignHandlers) RegisterHandlers(registry *ToolRegistry) error {
 
-tools := []struct {
+	tools := []struct {
 		tool    Tool
 		handler ToolHandler
 	}{
@@ -93,7 +93,7 @@ func (h *DesignHandlers) handleGenerateDesign(ctx context.Context, args map[stri
 	defer store.Close()
 
 	projectID := getProjectID(projectPath)
-	
+
 	// Check if interview is complete
 	interviewData, err := store.GetInterviewData(projectID)
 	if err != nil {
@@ -148,15 +148,15 @@ func (h *DesignHandlers) handleRegenerateDesign(ctx context.Context, args map[st
 	guidance, _ := ValidateAndGetString(args, "guidance", false)
 	// preserveComponents, _ := ValidateAndGetBool(args, "preserveComponents", false, true)
 
-	// For now, we will just re-run generation with guidance appended to prompts if possible, 
+	// For now, we will just re-run generation with guidance appended to prompts if possible,
 	// or just re-run generation if the generator doesn't support full refinement context yet.
 	// The current generator has RefineArchitecture but it's per section.
 	// To support full regeneration with guidance, we might need to modify the prompt in GenerateArchitecture
 	// or use a new method. Since I can't modify Generator easily, I will just re-run GenerateArchitecture
 	// but maybe append guidance to interview data temporarily? Or just warn that guidance is limited.
-	
+
 	// Actually, let's just use GenerateArchitecture for now.
-	
+
 	store, err := openStateStore(projectPath)
 	if err != nil {
 		return ErrorResult(err.Error()), nil
@@ -205,7 +205,7 @@ func (h *DesignHandlers) initProvider(stage, overrideModel string) (provider.Pro
 	// Re-use logic or duplicate
 	// Since I can't easily share the private helper from interview_handlers, I'll duplicate the logic for now
 	// or better, make a shared internal utility. But for this task, duplication is safer than refactoring widely.
-	
+
 	providerName, modelName, err := getProviderAndModel(h.configManager, stage, overrideModel)
 	if err != nil {
 		return nil, "", err

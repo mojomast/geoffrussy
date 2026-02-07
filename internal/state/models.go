@@ -6,13 +6,13 @@ import "time"
 type Stage string
 
 const (
-	StageInit     Stage = "init"
+	StageInit      Stage = "init"
 	StageInterview Stage = "interview"
-	StageDesign   Stage = "design"
-	StagePlan     Stage = "plan"
-	StageReview   Stage = "review"
-	StageDevelop  Stage = "develop"
-	StageComplete Stage = "complete"
+	StageDesign    Stage = "design"
+	StagePlan      Stage = "plan"
+	StageReview    Stage = "review"
+	StageDevelop   Stage = "develop"
+	StageComplete  Stage = "complete"
 )
 
 // PhaseStatus represents the status of a phase
@@ -106,22 +106,22 @@ type Refinement struct {
 
 // Architecture represents the system design
 type Architecture struct {
-	ProjectID   string
-	Content     string // Markdown content
-	CreatedAt   time.Time
+	ProjectID string
+	Content   string // Markdown content
+	CreatedAt time.Time
 }
 
 // Phase represents a development phase
 type Phase struct {
-	ID              string
-	ProjectID       string
-	Number          int
-	Title           string
-	Content         string // Full phase content (markdown)
-	Status          PhaseStatus
-	CreatedAt       time.Time
-	StartedAt       *time.Time
-	CompletedAt     *time.Time
+	ID          string
+	ProjectID   string
+	Number      int
+	Title       string
+	Content     string // Full phase content (markdown)
+	Status      PhaseStatus
+	CreatedAt   time.Time
+	StartedAt   *time.Time
+	CompletedAt *time.Time
 }
 
 // Task represents a single development task
@@ -181,11 +181,11 @@ type QuotaInfo struct {
 
 // TokenStats contains token usage statistics
 type TokenStats struct {
-	TotalInput    int
-	TotalOutput   int
-	ByProvider    map[string]int
-	ByPhase       map[string]int
-	LastUpdated   time.Time
+	TotalInput  int
+	TotalOutput int
+	ByProvider  map[string]int
+	ByPhase     map[string]int
+	LastUpdated time.Time
 }
 
 // CostStats contains cost statistics

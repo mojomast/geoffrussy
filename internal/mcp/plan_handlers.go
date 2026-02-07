@@ -78,24 +78,24 @@ func (h *PlanHandlers) handleCreateDevPlan(ctx context.Context, args map[string]
 	defer store.Close()
 
 	projectID := getProjectID(projectPath)
-	
+
 	// Check if architecture exists
 	_, err = store.GetArchitecture(projectID)
 	// We check file mostly as fallback or primary if DB failed in previous step
-	
+
 	// Let's try to load architecture from file since that's where I saved it.
 	archPath := filepath.Join(projectPath, ".geoffrussy", "architecture.json")
 	// Read file
-	archContent, err := openFile(archPath) 
+	archContent, err := openFile(archPath)
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("Architecture file not found at %s. Please run generate_design first.", archPath)), nil
 	}
-	
+
 	var designArch design.Architecture
 	if err := unmarshalJSON(string(archContent), &designArch); err != nil {
 		return ErrorResult(fmt.Sprintf("Failed to parse architecture file: %v", err)), nil
 	}
-	
+
 	// Get interview data
 	interviewData, err := store.GetInterviewData(projectID)
 	if err != nil {
@@ -116,12 +116,12 @@ func (h *PlanHandlers) handleCreateDevPlan(ctx context.Context, args map[string]
 
 	// Save phases and tasks to DB
 	// We need to convert devplan.Phase to state.Phase and devplan.Task to state.Task
-	
+
 	// Reset existing progress if any?
 	if err := store.ResetProjectProgress(projectID); err != nil {
 		// Just log or ignore? Safer to reset to avoid duplicates if re-planning.
 	}
-	
+
 	// Also delete existing phases? ResetProjectProgress just updates status.
 	// If we are regenerating plan, we probably want to wipe old phases.
 	// `store.ListPhases` then `store.DeletePhase` loop?
@@ -135,7 +135,7 @@ func (h *PlanHandlers) handleCreateDevPlan(ctx context.Context, args map[string]
 		// Save phase
 		// Generate markdown content for the phase
 		content, _ := generator.ExportPhaseMarkdown(&p)
-		
+
 		statePhase := &state.Phase{
 			ID:        p.ID,
 			ProjectID: projectID,
@@ -145,11 +145,11 @@ func (h *PlanHandlers) handleCreateDevPlan(ctx context.Context, args map[string]
 			Status:    state.PhaseNotStarted, // Default
 			CreatedAt: time.Now(),
 		}
-		
+
 		if err := store.SavePhase(statePhase); err != nil {
 			return ErrorResult(fmt.Sprintf("Failed to save phase %d: %v", p.Number, err)), nil
 		}
-		
+
 		// Save tasks
 		for _, t := range p.Tasks {
 			stateTask := &state.Task{
@@ -171,7 +171,7 @@ func (h *PlanHandlers) handleCreateDevPlan(ctx context.Context, args map[string]
 		// Log warning
 	}
 
-	summary := fmt.Sprintf("📋 DevPlan Generation Complete\n\nGenerated development plan with:\n- %d phases\n- %d tasks total\n- Average %.1f tasks per phase\n\nNext step: Run execute_phase to start development.", 
+	summary := fmt.Sprintf("📋 DevPlan Generation Complete\n\nGenerated development plan with:\n- %d phases\n- %d tasks total\n- Average %.1f tasks per phase\n\nNext step: Run execute_phase to start development.",
 		len(phases), totalTasks, float64(totalTasks)/float64(len(phases)))
 
 	return SuccessResult(summary), nil

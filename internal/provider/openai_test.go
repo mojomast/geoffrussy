@@ -88,8 +88,8 @@ func TestOpenAIProvider_ListModels(t *testing.T) {
 			wantModels: 2, // Only GPT models should be included
 		},
 		{
-			name:          "API error",
-			authenticated: true,
+			name:           "API error",
+			authenticated:  true,
 			serverResponse: `{"error": {"message": "Invalid API key"}}`,
 			statusCode:     http.StatusUnauthorized,
 			wantErr:        true,
@@ -368,10 +368,10 @@ data: [DONE]
 			wantChunks: []string{"Hello", "!"},
 		},
 		{
-			name:          "API error",
-			authenticated: true,
-			model:         "gpt-4",
-			prompt:        "Hello",
+			name:           "API error",
+			authenticated:  true,
+			model:          "gpt-4",
+			prompt:         "Hello",
 			serverResponse: `{"error": {"message": "Rate limit exceeded"}}`,
 			statusCode:     http.StatusTooManyRequests,
 			wantErr:        true,

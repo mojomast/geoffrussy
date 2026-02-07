@@ -13,9 +13,9 @@ import (
 )
 
 var (
-	statusPhaseFilter   []int
-	statusStatusFilter  []string
-	statusVerbose       bool
+	statusPhaseFilter  []int
+	statusStatusFilter []string
+	statusVerbose      bool
 )
 
 var statusCmd = &cobra.Command{
@@ -239,4 +239,3 @@ func formatStage(stage state.Stage) string {
 		return string(stage)
 	}
 }
-

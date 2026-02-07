@@ -43,9 +43,9 @@ func (m *Manager) DetectIncompleteWork(projectID string) (*ResumeInfo, error) {
 	}
 
 	info := &ResumeInfo{
-		ProjectID:    project.ID,
-		ProjectName:  project.Name,
-		CurrentStage: project.CurrentStage,
+		ProjectID:      project.ID,
+		ProjectName:    project.Name,
+		CurrentStage:   project.CurrentStage,
 		CurrentPhaseID: project.CurrentPhase,
 	}
 

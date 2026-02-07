@@ -147,11 +147,11 @@ func (o *OpenAIProvider) ListModels() ([]Model, error) {
 			// Set pricing based on known models
 			switch {
 			case strings.HasPrefix(m.ID, "gpt-4"):
-				model.PriceInput = 0.03   // $0.03 per 1K tokens
-				model.PriceOutput = 0.06  // $0.06 per 1K tokens
+				model.PriceInput = 0.03  // $0.03 per 1K tokens
+				model.PriceOutput = 0.06 // $0.06 per 1K tokens
 			case strings.HasPrefix(m.ID, "gpt-3.5"):
-				model.PriceInput = 0.0015  // $0.0015 per 1K tokens
-				model.PriceOutput = 0.002  // $0.002 per 1K tokens
+				model.PriceInput = 0.0015 // $0.0015 per 1K tokens
+				model.PriceOutput = 0.002 // $0.002 per 1K tokens
 			default:
 				// Default pricing for unknown models
 				model.PriceInput = 0.0

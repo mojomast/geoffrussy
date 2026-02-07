@@ -26,21 +26,21 @@ func NewGenerator(provider provider.Provider, model string) *Generator {
 
 // Architecture represents the system architecture
 type Architecture struct {
-	ProjectID         string
-	SystemOverview    string
-	Components        []Component
-	DataFlows         []DataFlow
-	TechRationale     map[string]string
-	ScalingStrategy   ScalingPlan
-	APIContract       APISpec
-	DatabaseSchema    Schema
-	SecurityApproach  SecurityPlan
-	Observability     ObservabilityPlan
-	Deployment        DeploymentPlan
-	Risks             []Risk
-	Assumptions       []string
-	Unknowns          []string
-	CreatedAt         time.Time
+	ProjectID        string
+	SystemOverview   string
+	Components       []Component
+	DataFlows        []DataFlow
+	TechRationale    map[string]string
+	ScalingStrategy  ScalingPlan
+	APIContract      APISpec
+	DatabaseSchema   Schema
+	SecurityApproach SecurityPlan
+	Observability    ObservabilityPlan
+	Deployment       DeploymentPlan
+	Risks            []Risk
+	Assumptions      []string
+	Unknowns         []string
+	CreatedAt        time.Time
 }
 
 // Component represents a system component
@@ -91,8 +91,8 @@ type ScalingPlan struct {
 
 // APISpec describes the API contract
 type APISpec struct {
-	RESTEndpoints []Endpoint
-	WebSockets    []WebSocketEvent
+	RESTEndpoints  []Endpoint
+	WebSockets     []WebSocketEvent
 	Authentication string
 }
 
@@ -115,7 +115,7 @@ type WebSocketEvent struct {
 
 // Schema represents the database schema
 type Schema struct {
-	Tables       []Table
+	Tables        []Table
 	Relationships []Relationship
 }
 
@@ -407,11 +407,11 @@ func (g *Generator) ExportJSON(architecture *Architecture) (string, error) {
 
 // ArchitectureIteration represents a refinement of the architecture
 type ArchitectureIteration struct {
-	Timestamp   time.Time
-	Section     string
-	OldValue    string
-	NewValue    string
-	Reason      string
+	Timestamp time.Time
+	Section   string
+	OldValue  string
+	NewValue  string
+	Reason    string
 }
 
 // RefineArchitecture refines a specific section of the architecture
@@ -429,7 +429,7 @@ CURRENT CONTENT:
 REFINEMENT REQUEST:
 %s
 
-Please provide the updated content for this section, maintaining consistency with the rest of the architecture.`, 
+Please provide the updated content for this section, maintaining consistency with the rest of the architecture.`,
 		section, g.getSectionContent(architecture, section), refinementRequest)
 
 	response, err := g.provider.Call(g.model, prompt)
@@ -439,7 +439,7 @@ Please provide the updated content for this section, maintaining consistency wit
 
 	// Update the architecture with the refined content
 	updatedArch := g.updateArchitectureSection(architecture, section, response.Content)
-	
+
 	return updatedArch, nil
 }
 
@@ -479,7 +479,7 @@ func (g *Generator) getSectionContent(architecture *Architecture, section string
 // updateArchitectureSection updates a specific section with new content
 func (g *Generator) updateArchitectureSection(architecture *Architecture, section string, newContent string) *Architecture {
 	updated := *architecture
-	
+
 	switch section {
 	case "system_overview":
 		updated.SystemOverview = newContent
@@ -496,7 +496,7 @@ func (g *Generator) updateArchitectureSection(architecture *Architecture, sectio
 		// Parse and update deployment
 		updated.Deployment.Development = newContent
 	}
-	
+
 	return &updated
 }
 

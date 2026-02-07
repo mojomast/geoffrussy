@@ -135,13 +135,13 @@ func TestExecuteWithRecovery_RetriesExhausted(t *testing.T) {
 
 func TestCalculateDelay(t *testing.T) {
 	testCases := []struct {
-		name          string
-		attempt       int
-		initial       time.Duration
-		max           time.Duration
-		factor        float64
-		expectedMin   time.Duration
-		expectedMax   time.Duration
+		name        string
+		attempt     int
+		initial     time.Duration
+		max         time.Duration
+		factor      float64
+		expectedMin time.Duration
+		expectedMax time.Duration
 	}{
 		{
 			name:        "First retry",

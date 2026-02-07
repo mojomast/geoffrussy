@@ -14,10 +14,10 @@ import (
 type Phase string
 
 const (
-	PhaseProjectEssence     Phase = "project_essence"
+	PhaseProjectEssence       Phase = "project_essence"
 	PhaseTechnicalConstraints Phase = "technical_constraints"
-	PhaseIntegrationPoints  Phase = "integration_points"
-	PhaseScopeDefinition    Phase = "scope_definition"
+	PhaseIntegrationPoints    Phase = "integration_points"
+	PhaseScopeDefinition      Phase = "scope_definition"
 	PhaseRefinementValidation Phase = "refinement_validation"
 )
 
@@ -69,11 +69,11 @@ type InterviewSession struct {
 
 // Iteration represents a reiteration of answers
 type Iteration struct {
-	Timestamp   time.Time
-	QuestionID  string
-	OldAnswer   string
-	NewAnswer   string
-	Reason      string
+	Timestamp  time.Time
+	QuestionID string
+	OldAnswer  string
+	NewAnswer  string
+	Reason     string
 }
 
 // GetPhaseQuestions returns the questions for a specific phase
@@ -141,7 +141,7 @@ func (e *Engine) StartInterview(projectID string) (*InterviewSession, error) {
 		Paused:          false,
 		Iterations:      []Iteration{},
 	}
-	
+
 	return session, nil
 }
 
@@ -151,10 +151,10 @@ func (e *Engine) ResumeInterview(projectID string) (*InterviewSession, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to load session: %w", err)
 	}
-	
+
 	session.Paused = false
 	session.LastUpdatedAt = time.Now()
-	
+
 	return session, nil
 }
 
@@ -162,14 +162,14 @@ func (e *Engine) ResumeInterview(projectID string) (*InterviewSession, error) {
 func (e *Engine) PauseInterview(session *InterviewSession) error {
 	session.Paused = true
 	session.LastUpdatedAt = time.Now()
-	
+
 	return e.SaveSession(session)
 }
 
 // GetNextQuestion returns the next question in the interview
 func (e *Engine) GetNextQuestion(session *InterviewSession) (*Question, error) {
 	questions := e.GetPhaseQuestions(session.CurrentPhase)
-	
+
 	if session.CurrentQuestion >= len(questions) {
 		// Move to next phase
 		phases := e.GetAllPhases()
@@ -180,27 +180,27 @@ func (e *Engine) GetNextQuestion(session *InterviewSession) (*Question, error) {
 				break
 			}
 		}
-		
+
 		if currentPhaseIndex == -1 {
 			return nil, fmt.Errorf("invalid current phase")
 		}
-		
+
 		if currentPhaseIndex >= len(phases)-1 {
 			// Interview complete
 			session.Completed = true
 			return nil, nil
 		}
-		
+
 		// Move to next phase
 		session.CurrentPhase = phases[currentPhaseIndex+1]
 		session.CurrentQuestion = 0
 		questions = e.GetPhaseQuestions(session.CurrentPhase)
 	}
-	
+
 	if session.CurrentQuestion >= len(questions) {
 		return nil, fmt.Errorf("no more questions in phase")
 	}
-	
+
 	question := questions[session.CurrentQuestion]
 	return &question, nil
 }
@@ -212,11 +212,11 @@ func (e *Engine) RecordAnswer(session *InterviewSession, questionID string, answ
 		Text:       answerText,
 		Timestamp:  time.Now(),
 	}
-	
+
 	session.Answers[questionID] = answer
 	session.CurrentQuestion++
 	session.LastUpdatedAt = time.Now()
-	
+
 	return nil
 }
 
@@ -227,14 +227,14 @@ func (e *Engine) RecordFollowUpAnswer(session *InterviewSession, questionID stri
 		Text:       answerText,
 		Timestamp:  time.Now(),
 	}
-	
+
 	if session.FollowUpAnswers == nil {
 		session.FollowUpAnswers = make(map[string][]Answer)
 	}
-	
+
 	session.FollowUpAnswers[questionID] = append(session.FollowUpAnswers[questionID], answer)
 	session.LastUpdatedAt = time.Now()
-	
+
 	return nil
 }
 
@@ -244,7 +244,7 @@ func (e *Engine) ReiterateAnswer(session *InterviewSession, questionID string, n
 	if !exists {
 		return fmt.Errorf("no previous answer found for question %s", questionID)
 	}
-	
+
 	// Record the iteration
 	iteration := Iteration{
 		Timestamp:  time.Now(),
@@ -253,18 +253,18 @@ func (e *Engine) ReiterateAnswer(session *InterviewSession, questionID string, n
 		NewAnswer:  newAnswer,
 		Reason:     reason,
 	}
-	
+
 	session.Iterations = append(session.Iterations, iteration)
-	
+
 	// Update the answer
 	session.Answers[questionID] = Answer{
 		QuestionID: questionID,
 		Text:       newAnswer,
 		Timestamp:  time.Now(),
 	}
-	
+
 	session.LastUpdatedAt = time.Now()
-	
+
 	return nil
 }
 
@@ -274,7 +274,7 @@ func (e *Engine) GetAnswer(session *InterviewSession, questionID string) (*Answe
 	if !exists {
 		return nil, fmt.Errorf("no answer found for question %s", questionID)
 	}
-	
+
 	return &answer, nil
 }
 
@@ -294,7 +294,7 @@ func (e *Engine) GenerateFollowUp(question Question, answer Answer) (string, err
 	if e.provider == nil {
 		return "", nil // No follow-up if no provider
 	}
-	
+
 	prompt := fmt.Sprintf(`You are conducting a technical interview to gather project requirements. Based on the question and answer below, generate ONE brief, specific follow-up question to clarify or expand on the answer. 
 
 The follow-up should:
@@ -309,18 +309,18 @@ Question: %s
 Answer: %s
 
 Follow-up question:`, question.Text, answer.Text)
-	
+
 	response, err := e.provider.Call(e.model, prompt)
 	if err != nil {
 		return "", fmt.Errorf("failed to generate follow-up: %w", err)
 	}
-	
+
 	// Check if LLM indicated no follow-up needed
 	content := response.Content
 	if content == "SKIP" || content == "" {
 		return "", nil
 	}
-	
+
 	return content, nil
 }
 
@@ -333,7 +333,7 @@ func (e *Engine) AnalyzeAnswer(question Question, answer Answer) (*AnswerAnalysi
 			Suggestions:  []string{},
 		}, nil
 	}
-	
+
 	prompt := fmt.Sprintf(`Analyze this interview answer and provide a structured analysis.
 
 Question: %s
@@ -345,23 +345,23 @@ COMPLETENESS: Rate as "complete", "partial", or "incomplete"
 SUGGESTIONS: If incomplete, suggest what additional information would be helpful (comma-separated, or "none")
 
 Analysis:`, question.Text, answer.Text)
-	
+
 	response, err := e.provider.Call(e.model, prompt)
 	if err != nil {
 		return nil, fmt.Errorf("failed to analyze answer: %w", err)
 	}
-	
+
 	// Parse the response (simplified parsing)
 	analysis := &AnswerAnalysis{
 		KeyPoints:    []string{answer.Text},
 		Completeness: "unknown",
 		Suggestions:  []string{},
 	}
-	
+
 	// In a production system, you'd parse the structured response more carefully
 	// For now, we'll just store the raw analysis
 	analysis.RawAnalysis = response.Content
-	
+
 	return analysis, nil
 }
 
@@ -463,20 +463,20 @@ func formatPhaseName(phase Phase) string {
 // ValidateCompleteness checks if all required questions have been answered
 func (e *Engine) ValidateCompleteness(session *InterviewSession) (bool, []string) {
 	var missingQuestions []string
-	
+
 	phases := e.GetAllPhases()
 	for _, phase := range phases {
 		questions := e.GetPhaseQuestions(phase)
 		for _, q := range questions {
 			if q.Required {
 				if _, ok := session.Answers[q.ID]; !ok {
-					missingQuestions = append(missingQuestions, 
+					missingQuestions = append(missingQuestions,
 						fmt.Sprintf("%s: %s", formatPhaseName(phase), q.Text))
 				}
 			}
 		}
 	}
-	
+
 	return len(missingQuestions) == 0, missingQuestions
 }
 
@@ -484,7 +484,7 @@ func (e *Engine) ValidateCompleteness(session *InterviewSession) (bool, []string
 func (e *Engine) ExportToJSON(session *InterviewSession) (string, error) {
 	// Validate completeness first
 	isComplete, missingQuestions := e.ValidateCompleteness(session)
-	
+
 	data := make(map[string]interface{})
 	data["project_id"] = session.ProjectID
 
@@ -500,33 +500,33 @@ func (e *Engine) ExportToJSON(session *InterviewSession) (string, error) {
 	data["started_at"] = session.StartedAt
 	data["completed_at"] = time.Now()
 	data["is_complete"] = isComplete
-	
+
 	if !isComplete {
 		data["missing_questions"] = missingQuestions
 	}
-	
+
 	// Extract structured data from answers
 	extractedData := e.extractStructuredData(session)
 	for key, value := range extractedData {
 		data[key] = value
 	}
-	
+
 	// Organize answers by phase
 	phases := e.GetAllPhases()
 	phaseAnswers := make(map[string]interface{})
-	
+
 	for _, phase := range phases {
 		questions := e.GetPhaseQuestions(phase)
 		phaseData := make(map[string]interface{})
-		
+
 		for _, q := range questions {
 			if answer, ok := session.Answers[q.ID]; ok {
 				answerData := map[string]interface{}{
-					"question": q.Text,
-					"answer":   answer.Text,
+					"question":  q.Text,
+					"answer":    answer.Text,
 					"timestamp": answer.Timestamp,
 				}
-				
+
 				// Include follow-ups if any
 				if followUps, ok := session.FollowUpAnswers[q.ID]; ok && len(followUps) > 0 {
 					followUpTexts := make([]string, len(followUps))
@@ -535,7 +535,7 @@ func (e *Engine) ExportToJSON(session *InterviewSession) (string, error) {
 					}
 					answerData["follow_ups"] = followUpTexts
 				}
-				
+
 				// Include iterations if any
 				iterations := e.GetIterationHistory(session, q.ID)
 				if len(iterations) > 0 {
@@ -550,18 +550,18 @@ func (e *Engine) ExportToJSON(session *InterviewSession) (string, error) {
 					}
 					answerData["revisions"] = iterData
 				}
-				
+
 				phaseData[q.Category] = answerData
 			}
 		}
-		
+
 		if len(phaseData) > 0 {
 			phaseAnswers[string(phase)] = phaseData
 		}
 	}
-	
+
 	data["phases"] = phaseAnswers
-	
+
 	// Add metadata
 	data["metadata"] = map[string]interface{}{
 		"total_questions_answered": len(session.Answers),
@@ -569,39 +569,39 @@ func (e *Engine) ExportToJSON(session *InterviewSession) (string, error) {
 		"current_phase":            string(session.CurrentPhase),
 		"paused":                   session.Paused,
 	}
-	
+
 	jsonData, err := json.MarshalIndent(data, "", "  ")
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal JSON: %w", err)
 	}
-	
+
 	return string(jsonData), nil
 }
 
 // extractStructuredData extracts key structured data from answers
 func (e *Engine) extractStructuredData(session *InterviewSession) map[string]interface{} {
 	data := make(map[string]interface{})
-	
+
 	// Extract problem statement
 	if answer, ok := session.Answers["pe_1"]; ok {
 		data["problem_statement"] = answer.Text
 	}
-	
+
 	// Extract target users
 	if answer, ok := session.Answers["pe_2"]; ok {
 		data["target_users"] = []string{answer.Text}
 	}
-	
+
 	// Extract success metrics
 	if answer, ok := session.Answers["pe_3"]; ok {
 		data["success_metrics"] = []string{answer.Text}
 	}
-	
+
 	// Extract value proposition
 	if answer, ok := session.Answers["pe_4"]; ok {
 		data["value_proposition"] = answer.Text
 	}
-	
+
 	// Extract technical stack
 	techStack := make(map[string]interface{})
 	if answer, ok := session.Answers["tc_1"]; ok {
@@ -619,7 +619,7 @@ func (e *Engine) extractStructuredData(session *InterviewSession) map[string]int
 	if len(techStack) > 0 {
 		data["technical_stack"] = techStack
 	}
-	
+
 	// Extract integrations
 	integrations := make(map[string]interface{})
 	if answer, ok := session.Answers["ip_1"]; ok {
@@ -637,7 +637,7 @@ func (e *Engine) extractStructuredData(session *InterviewSession) map[string]int
 	if len(integrations) > 0 {
 		data["integrations"] = integrations
 	}
-	
+
 	// Extract scope
 	scope := make(map[string]interface{})
 	if answer, ok := session.Answers["sd_1"]; ok {
@@ -655,7 +655,7 @@ func (e *Engine) extractStructuredData(session *InterviewSession) map[string]int
 	if len(scope) > 0 {
 		data["scope"] = scope
 	}
-	
+
 	return data
 }
 
@@ -663,23 +663,23 @@ func (e *Engine) extractStructuredData(session *InterviewSession) map[string]int
 func (e *Engine) SaveSession(session *InterviewSession) error {
 	// Serialize the entire session to JSON for storage
 	sessionData := map[string]interface{}{
-		"project_id":        session.ProjectID,
-		"current_phase":     string(session.CurrentPhase),
-		"current_question":  session.CurrentQuestion,
-		"answers":           session.Answers,
-		"followup_answers":  session.FollowUpAnswers,
-		"started_at":        session.StartedAt,
-		"last_updated_at":   session.LastUpdatedAt,
-		"completed":         session.Completed,
-		"paused":            session.Paused,
-		"iterations":        session.Iterations,
+		"project_id":       session.ProjectID,
+		"current_phase":    string(session.CurrentPhase),
+		"current_question": session.CurrentQuestion,
+		"answers":          session.Answers,
+		"followup_answers": session.FollowUpAnswers,
+		"started_at":       session.StartedAt,
+		"last_updated_at":  session.LastUpdatedAt,
+		"completed":        session.Completed,
+		"paused":           session.Paused,
+		"iterations":       session.Iterations,
 	}
-	
+
 	sessionJSON, err := json.Marshal(sessionData)
 	if err != nil {
 		return fmt.Errorf("failed to marshal session: %w", err)
 	}
-	
+
 	// Get actual project name
 	projectName := session.ProjectID
 	if project, err := e.store.GetProject(session.ProjectID); err == nil {
@@ -693,7 +693,7 @@ func (e *Engine) SaveSession(session *InterviewSession) error {
 		CreatedAt:   session.StartedAt,
 		RawSession:  string(sessionJSON), // Store the full session as JSON
 	}
-	
+
 	// Extract key data from answers for easy access
 	for qid, answer := range session.Answers {
 		switch qid {
@@ -705,10 +705,10 @@ func (e *Engine) SaveSession(session *InterviewSession) error {
 		case "pe_3":
 			// Parse success metrics
 			interviewData.SuccessMetrics = []string{answer.Text}
-		// Add more mappings as needed
+			// Add more mappings as needed
 		}
 	}
-	
+
 	return e.store.SaveInterviewData(session.ProjectID, interviewData)
 }
 
@@ -718,14 +718,14 @@ func (e *Engine) LoadSession(projectID string) (*InterviewSession, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// If we have raw session data, deserialize it
 	if data.RawSession != "" {
 		var sessionData map[string]interface{}
 		if err := json.Unmarshal([]byte(data.RawSession), &sessionData); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal session: %w", err)
 		}
-		
+
 		session := &InterviewSession{
 			ProjectID:       projectID,
 			CurrentPhase:    Phase(sessionData["current_phase"].(string)),
@@ -738,7 +738,7 @@ func (e *Engine) LoadSession(projectID string) (*InterviewSession, error) {
 			Paused:          sessionData["paused"].(bool),
 			Iterations:      []Iteration{},
 		}
-		
+
 		// Reconstruct answers
 		if answersData, ok := sessionData["answers"].(map[string]interface{}); ok {
 			for qid, answerData := range answersData {
@@ -751,7 +751,7 @@ func (e *Engine) LoadSession(projectID string) (*InterviewSession, error) {
 				}
 			}
 		}
-		
+
 		// Reconstruct iterations
 		if iterationsData, ok := sessionData["iterations"].([]interface{}); ok {
 			for _, iterData := range iterationsData {
@@ -766,10 +766,10 @@ func (e *Engine) LoadSession(projectID string) (*InterviewSession, error) {
 				}
 			}
 		}
-		
+
 		return session, nil
 	}
-	
+
 	// Fallback: Create session from basic data
 	session := &InterviewSession{
 		ProjectID:       projectID,
@@ -783,7 +783,7 @@ func (e *Engine) LoadSession(projectID string) (*InterviewSession, error) {
 		Paused:          false,
 		Iterations:      []Iteration{},
 	}
-	
+
 	// Reconstruct basic answers from data
 	if data.ProblemStatement != "" {
 		session.Answers["pe_1"] = Answer{
@@ -792,7 +792,7 @@ func (e *Engine) LoadSession(projectID string) (*InterviewSession, error) {
 			Timestamp:  data.CreatedAt,
 		}
 	}
-	
+
 	return session, nil
 }
 
@@ -807,16 +807,16 @@ func (e *Engine) ProposeDefault(question Question) (string, error) {
 		"ip_3": "JWT-based authentication",
 		"sd_2": "3-6 months",
 	}
-	
+
 	if defaultVal, ok := defaults[question.ID]; ok {
 		return defaultVal, nil
 	}
-	
+
 	// If no static default and we have a provider, use LLM to propose one
 	if e.provider != nil {
 		return e.ProposeDefaultWithLLM(question)
 	}
-	
+
 	return "", nil
 }
 
@@ -828,39 +828,39 @@ Question: %s
 Category: %s
 
 Proposed default answer:`, question.Text, question.Category)
-	
+
 	response, err := e.provider.Call(e.model, prompt)
 	if err != nil {
 		return "", fmt.Errorf("failed to propose default: %w", err)
 	}
-	
+
 	return response.Content, nil
 }
 
 // AskWithFollowUp asks a question and optionally generates follow-up questions
 func (e *Engine) AskWithFollowUp(session *InterviewSession, question Question, enableFollowUp bool) ([]string, error) {
 	followUps := []string{}
-	
+
 	if !enableFollowUp || e.provider == nil {
 		return followUps, nil
 	}
-	
+
 	// Get the answer for this question
 	answer, ok := session.Answers[question.ID]
 	if !ok {
 		return followUps, nil
 	}
-	
+
 	// Generate follow-up question
 	followUp, err := e.GenerateFollowUp(question, answer)
 	if err != nil {
 		// Don't fail the interview if follow-up generation fails
 		return followUps, nil
 	}
-	
+
 	if followUp != "" {
 		followUps = append(followUps, followUp)
 	}
-	
+
 	return followUps, nil
 }

@@ -126,7 +126,7 @@ func handleGeneration(generator *design.Generator, store *state.Store, interview
 
 	fmt.Println("🧠 Analyzing interview data and generating architecture...")
 	fmt.Println("   This may take a minute...")
-	
+
 	arch, err := generator.GenerateArchitecture(interviewData)
 	if err != nil {
 		return fmt.Errorf("failed to generate architecture: %w", err)
@@ -165,7 +165,7 @@ func handleGeneration(generator *design.Generator, store *state.Store, interview
 	fmt.Println("\n💡 Next steps:")
 	fmt.Println("   Run 'geoffrussy design --refine <section>' to refine specific parts")
 	fmt.Println("   Run 'geoffrussy plan' to generate a development plan")
-	
+
 	return nil
 }
 

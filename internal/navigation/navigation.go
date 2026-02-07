@@ -26,11 +26,11 @@ func NewNavigator(store *state.Store, gitMgr *git.Manager) *Navigator {
 
 // NavigationResult contains the result of a navigation operation
 type NavigationResult struct {
-	FromStage          state.Stage
-	ToStage            state.Stage
-	PreservedWork      []string // List of preserved artifacts
+	FromStage            state.Stage
+	ToStage              state.Stage
+	PreservedWork        []string // List of preserved artifacts
 	RegeneratedArtifacts []string // List of artifacts that will need regeneration
-	NextAction         string
+	NextAction           string
 }
 
 // NavigateToStage navigates from current stage to target stage
@@ -75,10 +75,10 @@ func (n *Navigator) NavigateToStage(projectID string, targetStage state.Stage) (
 		currentStage, targetStage, result.PreservedWork, result.RegeneratedArtifacts)
 
 	metadata := map[string]string{
-		"type":        "navigation",
-		"from_stage":  string(currentStage),
-		"to_stage":    string(targetStage),
-		"timestamp":   time.Now().Format(time.RFC3339),
+		"type":       "navigation",
+		"from_stage": string(currentStage),
+		"to_stage":   string(targetStage),
+		"timestamp":  time.Now().Format(time.RFC3339),
 	}
 
 	if err := n.gitMgr.CommitAll(commitMsg, metadata); err != nil {
@@ -96,13 +96,13 @@ func (n *Navigator) NavigateToStage(projectID string, targetStage state.Stage) (
 func (n *Navigator) ValidateNavigation(from, to state.Stage) error {
 	// Get stage order
 	stageOrder := map[state.Stage]int{
-		state.StageInit:     0,
+		state.StageInit:      0,
 		state.StageInterview: 1,
-		state.StageDesign:   2,
-		state.StagePlan:     3,
-		state.StageReview:   4,
-		state.StageDevelop:  5,
-		state.StageComplete: 6,
+		state.StageDesign:    2,
+		state.StagePlan:      3,
+		state.StageReview:    4,
+		state.StageDevelop:   5,
+		state.StageComplete:  6,
 	}
 
 	fromOrder, fromOk := stageOrder[from]
@@ -185,13 +185,13 @@ func (n *Navigator) checkPrerequisites(from, to state.Stage) error {
 func (n *Navigator) determineArtifacts(projectID string, from, to state.Stage, result *NavigationResult) error {
 	// When going backwards, preserve current work
 	stageOrder := map[state.Stage]int{
-		state.StageInit:     0,
+		state.StageInit:      0,
 		state.StageInterview: 1,
-		state.StageDesign:   2,
-		state.StagePlan:     3,
-		state.StageReview:   4,
-		state.StageDevelop:  5,
-		state.StageComplete: 6,
+		state.StageDesign:    2,
+		state.StagePlan:      3,
+		state.StageReview:    4,
+		state.StageDevelop:   5,
+		state.StageComplete:  6,
 	}
 
 	fromOrder := stageOrder[from]
@@ -273,13 +273,13 @@ func (n *Navigator) GetNavigationOptions(projectID string) (*NavigationOptions, 
 
 	// Define stage order
 	stageOrder := map[state.Stage]int{
-		state.StageInit:     0,
+		state.StageInit:      0,
 		state.StageInterview: 1,
-		state.StageDesign:   2,
-		state.StagePlan:     3,
-		state.StageReview:   4,
-		state.StageDevelop:  5,
-		state.StageComplete: 6,
+		state.StageDesign:    2,
+		state.StagePlan:      3,
+		state.StageReview:    4,
+		state.StageDevelop:   5,
+		state.StageComplete:  6,
 	}
 
 	allStages := []state.Stage{
@@ -338,13 +338,13 @@ func NewHistoryTracker(store *state.Store, gitMgr *git.Manager) *HistoryTracker 
 
 // NavigationEvent represents a navigation event in the pipeline
 type NavigationEvent struct {
-	ID          string
-	ProjectID   string
-	FromStage   state.Stage
-	ToStage     state.Stage
-	Timestamp   time.Time
-	Reason      string
-	GitCommit   string
+	ID        string
+	ProjectID string
+	FromStage state.Stage
+	ToStage   state.Stage
+	Timestamp time.Time
+	Reason    string
+	GitCommit string
 }
 
 // RecordNavigation records a navigation event

@@ -69,7 +69,7 @@ func runStats(cmd *cobra.Command, args []string) error {
 
 	fmt.Println("📊 Token Usage & Cost Statistics")
 	fmt.Println("============================================================")
-	
+
 	// Display Overall Totals
 	fmt.Printf("Total Cost:   $%.4f\n", costStats.TotalCost)
 	fmt.Printf("Total Input:  %d tokens\n", tokenStats.TotalInput)

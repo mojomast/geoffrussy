@@ -27,13 +27,13 @@ const (
 
 // CategorizedError wraps an error with additional context
 type CategorizedError struct {
-	Category    ErrorCategory
-	Err         error
-	Message     string
-	Suggestion  string
-	Retryable   bool
-	Fatal       bool
-	Context     map[string]interface{}
+	Category   ErrorCategory
+	Err        error
+	Message    string
+	Suggestion string
+	Retryable  bool
+	Fatal      bool
+	Context    map[string]interface{}
 }
 
 // Error implements the error interface

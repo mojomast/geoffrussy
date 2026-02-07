@@ -13,7 +13,7 @@ func TestNewCounter(t *testing.T) {
 		t.Fatalf("Failed to create store: %v", err)
 	}
 	defer store.Close()
-	
+
 	counter := NewCounter(store)
 	if counter == nil {
 		t.Fatal("NewCounter returned nil")
@@ -29,15 +29,15 @@ func TestCounter_CountTokens(t *testing.T) {
 		t.Fatalf("Failed to create store: %v", err)
 	}
 	defer store.Close()
-	
+
 	counter := NewCounter(store)
-	
+
 	tests := []struct {
-		name     string
-		text     string
-		model    string
-		wantMin  int
-		wantMax  int
+		name    string
+		text    string
+		model   string
+		wantMin int
+		wantMax int
 	}{
 		{
 			name:    "empty text",
@@ -68,7 +68,7 @@ func TestCounter_CountTokens(t *testing.T) {
 			wantMax: 30,
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tokens, err := counter.CountTokens(tt.text, tt.model)
@@ -88,9 +88,9 @@ func TestCounter_EstimateTokens(t *testing.T) {
 		t.Fatalf("Failed to create store: %v", err)
 	}
 	defer store.Close()
-	
+
 	counter := NewCounter(store)
-	
+
 	tokens, err := counter.EstimateTokens("This is a test")
 	if err != nil {
 		t.Fatalf("EstimateTokens failed: %v", err)
@@ -106,7 +106,7 @@ func TestCounter_RecordUsage(t *testing.T) {
 		t.Fatalf("Failed to create store: %v", err)
 	}
 	defer store.Close()
-	
+
 	// Create a project first
 	project := &state.Project{
 		ID:           "test-project",
@@ -117,7 +117,7 @@ func TestCounter_RecordUsage(t *testing.T) {
 	if err := store.CreateProject(project); err != nil {
 		t.Fatalf("Failed to create project: %v", err)
 	}
-	
+
 	// Create a phase
 	phase := &state.Phase{
 		ID:        "phase-1",
@@ -131,7 +131,7 @@ func TestCounter_RecordUsage(t *testing.T) {
 	if err := store.SavePhase(phase); err != nil {
 		t.Fatalf("Failed to create phase: %v", err)
 	}
-	
+
 	// Create a task
 	task := &state.Task{
 		ID:          "task-1",
@@ -143,9 +143,9 @@ func TestCounter_RecordUsage(t *testing.T) {
 	if err := store.SaveTask(task); err != nil {
 		t.Fatalf("Failed to create task: %v", err)
 	}
-	
+
 	counter := NewCounter(store)
-	
+
 	err = counter.RecordUsage(
 		"test-project",
 		"phase-1",
@@ -159,7 +159,7 @@ func TestCounter_RecordUsage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RecordUsage failed: %v", err)
 	}
-	
+
 	// Verify the usage was recorded
 	cost, err := store.GetTotalCost("test-project")
 	if err != nil {
@@ -176,7 +176,7 @@ func TestCounter_GetTotalTokens(t *testing.T) {
 		t.Fatalf("Failed to create store: %v", err)
 	}
 	defer store.Close()
-	
+
 	// Create a project
 	project := &state.Project{
 		ID:           "test-project",
@@ -187,7 +187,7 @@ func TestCounter_GetTotalTokens(t *testing.T) {
 	if err := store.CreateProject(project); err != nil {
 		t.Fatalf("Failed to create project: %v", err)
 	}
-	
+
 	// Create a phase
 	phase := &state.Phase{
 		ID:        "phase-1",
@@ -201,7 +201,7 @@ func TestCounter_GetTotalTokens(t *testing.T) {
 	if err := store.SavePhase(phase); err != nil {
 		t.Fatalf("Failed to create phase: %v", err)
 	}
-	
+
 	// Create tasks
 	task1 := &state.Task{
 		ID:          "task-1",
@@ -213,7 +213,7 @@ func TestCounter_GetTotalTokens(t *testing.T) {
 	if err := store.SaveTask(task1); err != nil {
 		t.Fatalf("Failed to create task 1: %v", err)
 	}
-	
+
 	task2 := &state.Task{
 		ID:          "task-2",
 		PhaseID:     "phase-1",
@@ -224,22 +224,22 @@ func TestCounter_GetTotalTokens(t *testing.T) {
 	if err := store.SaveTask(task2); err != nil {
 		t.Fatalf("Failed to create task 2: %v", err)
 	}
-	
+
 	counter := NewCounter(store)
-	
+
 	// Record some usage
 	counter.RecordUsage("test-project", "phase-1", "task-1", "openai", "gpt-4", 100, 200, 0.05)
 	counter.RecordUsage("test-project", "phase-1", "task-2", "openai", "gpt-4", 150, 250, 0.07)
-	
+
 	stats, err := counter.GetTotalTokens("test-project")
 	if err != nil {
 		t.Fatalf("GetTotalTokens failed: %v", err)
 	}
-	
+
 	if stats == nil {
 		t.Fatal("Expected non-nil stats")
 	}
-	
+
 	// Stats should have been calculated
 	if stats.TotalInput != 250 {
 		t.Errorf("Expected total input 250, got %d", stats.TotalInput)
@@ -255,9 +255,9 @@ func TestCounter_GetTotalTokens_EmptyProject(t *testing.T) {
 		t.Fatalf("Failed to create store: %v", err)
 	}
 	defer store.Close()
-	
+
 	counter := NewCounter(store)
-	
+
 	_, err = counter.GetTotalTokens("")
 	if err == nil {
 		t.Error("Expected error for empty project ID")
@@ -270,7 +270,7 @@ func TestCounter_GetTokensByProvider(t *testing.T) {
 		t.Fatalf("Failed to create store: %v", err)
 	}
 	defer store.Close()
-	
+
 	// Create a project
 	project := &state.Project{
 		ID:           "test-project",
@@ -281,18 +281,18 @@ func TestCounter_GetTokensByProvider(t *testing.T) {
 	if err := store.CreateProject(project); err != nil {
 		t.Fatalf("Failed to create project: %v", err)
 	}
-	
+
 	counter := NewCounter(store)
-	
+
 	// Record usage for different providers
 	counter.RecordUsage("test-project", "phase-1", "task-1", "openai", "openai-gpt-4", 100, 200, 0.05)
 	counter.RecordUsage("test-project", "phase-1", "task-2", "anthropic", "anthropic-claude", 150, 250, 0.07)
-	
+
 	stats, err := counter.GetTokensByProvider("test-project", "openai")
 	if err != nil {
 		t.Fatalf("GetTokensByProvider failed: %v", err)
 	}
-	
+
 	if stats == nil {
 		t.Fatal("Expected non-nil stats")
 	}
@@ -304,14 +304,14 @@ func TestCounter_GetTokensByProvider_EmptyParams(t *testing.T) {
 		t.Fatalf("Failed to create store: %v", err)
 	}
 	defer store.Close()
-	
+
 	counter := NewCounter(store)
-	
+
 	_, err = counter.GetTokensByProvider("", "openai")
 	if err == nil {
 		t.Error("Expected error for empty project ID")
 	}
-	
+
 	_, err = counter.GetTokensByProvider("test-project", "")
 	if err == nil {
 		t.Error("Expected error for empty provider")
@@ -324,7 +324,7 @@ func TestCounter_GetTokensByPhase(t *testing.T) {
 		t.Fatalf("Failed to create store: %v", err)
 	}
 	defer store.Close()
-	
+
 	// Create a project
 	project := &state.Project{
 		ID:           "test-project",
@@ -335,18 +335,18 @@ func TestCounter_GetTokensByPhase(t *testing.T) {
 	if err := store.CreateProject(project); err != nil {
 		t.Fatalf("Failed to create project: %v", err)
 	}
-	
+
 	counter := NewCounter(store)
-	
+
 	// Record usage for different phases
 	counter.RecordUsage("test-project", "phase-1", "task-1", "openai", "gpt-4", 100, 200, 0.05)
 	counter.RecordUsage("test-project", "phase-2", "task-2", "openai", "gpt-4", 150, 250, 0.07)
-	
+
 	stats, err := counter.GetTokensByPhase("test-project", "phase-1")
 	if err != nil {
 		t.Fatalf("GetTokensByPhase failed: %v", err)
 	}
-	
+
 	if stats == nil {
 		t.Fatal("Expected non-nil stats")
 	}
@@ -358,14 +358,14 @@ func TestCounter_GetTokensByPhase_EmptyParams(t *testing.T) {
 		t.Fatalf("Failed to create store: %v", err)
 	}
 	defer store.Close()
-	
+
 	counter := NewCounter(store)
-	
+
 	_, err = counter.GetTokensByPhase("", "phase-1")
 	if err == nil {
 		t.Error("Expected error for empty project ID")
 	}
-	
+
 	_, err = counter.GetTokensByPhase("test-project", "")
 	if err == nil {
 		t.Error("Expected error for empty phase ID")

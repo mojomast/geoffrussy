@@ -173,5 +173,3 @@ func displayProviderStatus(providerName string, status *quota.ProviderStatus) {
 
 	fmt.Println()
 }
-
-

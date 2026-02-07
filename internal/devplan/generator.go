@@ -181,7 +181,7 @@ Generate the response now:`
 func (g *Generator) parsePhasesResponse(response string) ([]Phase, error) {
 	// Simplified parser - in production you'd want more robust parsing
 	phases := []Phase{}
-	
+
 	// Create default phases as a fallback
 	defaultPhases := []Phase{
 		{
@@ -568,7 +568,7 @@ func (g *Generator) ReorderPhases(phases []Phase, newOrder []int) ([]Phase, erro
 	for newIdx, oldIdx := range newOrder {
 		reordered[newIdx] = phases[oldIdx]
 		reordered[newIdx].Number = newIdx
-		
+
 		// Update task numbers
 		for i := range reordered[newIdx].Tasks {
 			reordered[newIdx].Tasks[i].Number = fmt.Sprintf("%d.%d", newIdx, i+1)
@@ -826,8 +826,8 @@ func (changelog *Changelog) RecordTaskCompletion(taskID, taskDescription, phaseT
 		fmt.Sprintf("Completed task: %s", taskDescription),
 		"geoffrussy-agent",
 		map[string]string{
-			"task_id":     taskID,
-			"phase":       phaseTitle,
+			"task_id":      taskID,
+			"phase":        phaseTitle,
 			"completed_at": time.Now().Format(time.RFC3339),
 		},
 	)
@@ -840,9 +840,9 @@ func (changelog *Changelog) RecordPhaseCompletion(phaseID, phaseTitle string, ta
 		fmt.Sprintf("Completed phase: %s (%d tasks)", phaseTitle, tasksCompleted),
 		"geoffrussy-agent",
 		map[string]string{
-			"phase_id":      phaseID,
-			"tasks_count":   fmt.Sprintf("%d", tasksCompleted),
-			"completed_at":  time.Now().Format(time.RFC3339),
+			"phase_id":     phaseID,
+			"tasks_count":  fmt.Sprintf("%d", tasksCompleted),
+			"completed_at": time.Now().Format(time.RFC3339),
 		},
 	)
 }

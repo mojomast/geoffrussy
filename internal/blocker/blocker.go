@@ -72,10 +72,10 @@ func (d *Detector) GatherBlockerInformation(blocker *state.Blocker) (map[string]
 
 	// For now, return a simplified structure
 	info := map[string]string{
-		"blocker_id":   blocker.ID,
-		"task_id":      blocker.TaskID,
-		"description":  blocker.Description,
-		"gathered_at":  time.Now().Format(time.RFC3339),
+		"blocker_id":  blocker.ID,
+		"task_id":     blocker.TaskID,
+		"description": blocker.Description,
+		"gathered_at": time.Now().Format(time.RFC3339),
 	}
 
 	return info, nil
@@ -239,8 +239,8 @@ func (d *Detector) AnalyzeBlockerPattern(projectID string) (*BlockerAnalysis, er
 	}
 
 	analysis := &BlockerAnalysis{
-		TotalBlockers:     len(blockers),
-		BlockersByTask:    make(map[string]int),
+		TotalBlockers:      len(blockers),
+		BlockersByTask:     make(map[string]int),
 		CommonDescriptions: make(map[string]int),
 	}
 

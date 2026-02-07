@@ -63,14 +63,14 @@ type Issue struct {
 type IssueType string
 
 const (
-	IssueClarity       IssueType = "clarity"
-	IssueCompleteness  IssueType = "completeness"
-	IssueDependencies  IssueType = "dependencies"
-	IssueScope         IssueType = "scope"
-	IssueRisks         IssueType = "risks"
-	IssueFeasibility   IssueType = "feasibility"
-	IssueTesting       IssueType = "testing"
-	IssueIntegration   IssueType = "integration"
+	IssueClarity      IssueType = "clarity"
+	IssueCompleteness IssueType = "completeness"
+	IssueDependencies IssueType = "dependencies"
+	IssueScope        IssueType = "scope"
+	IssueRisks        IssueType = "risks"
+	IssueFeasibility  IssueType = "feasibility"
+	IssueTesting      IssueType = "testing"
+	IssueIntegration  IssueType = "integration"
 )
 
 // Severity represents the severity of an issue

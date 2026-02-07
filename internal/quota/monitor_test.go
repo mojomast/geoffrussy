@@ -94,37 +94,37 @@ func TestCheckQuotaWarning(t *testing.T) {
 	monitor := NewMonitor(store)
 
 	testCases := []struct {
-		name           string
+		name            string
 		tokensRemaining int
 		tokensLimit     int
 		expectedLevel   WarningLevel
 	}{
 		{
-			name:           "Plenty of tokens",
+			name:            "Plenty of tokens",
 			tokensRemaining: 900000,
 			tokensLimit:     1000000,
 			expectedLevel:   WarningInfo,
 		},
 		{
-			name:           "Caution threshold",
+			name:            "Caution threshold",
 			tokensRemaining: 250000,
 			tokensLimit:     1000000,
 			expectedLevel:   WarningCaution,
 		},
 		{
-			name:           "Warning threshold",
+			name:            "Warning threshold",
 			tokensRemaining: 100000,
 			tokensLimit:     1000000,
 			expectedLevel:   WarningWarning,
 		},
 		{
-			name:           "Critical threshold",
+			name:            "Critical threshold",
 			tokensRemaining: 30000,
 			tokensLimit:     1000000,
 			expectedLevel:   WarningCritical,
 		},
 		{
-			name:           "Exceeded",
+			name:            "Exceeded",
 			tokensRemaining: 0,
 			tokensLimit:     1000000,
 			expectedLevel:   WarningExceeded,

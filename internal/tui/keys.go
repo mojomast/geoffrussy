@@ -6,22 +6,22 @@ import (
 
 // KeyMap defines the keyboard shortcuts for the TUI
 type KeyMap struct {
-	Up          []string
-	Down        []string
-	Left        []string
-	Right       []string
-	Enter       []string
-	Space       []string
-	Escape      []string
-	Quit        []string
-	Pause       []string
-	Skip        []string
-	SelectAll   []string
-	Help        []string
-	PageUp      []string
-	PageDown    []string
-	Home        []string
-	End         []string
+	Up        []string
+	Down      []string
+	Left      []string
+	Right     []string
+	Enter     []string
+	Space     []string
+	Escape    []string
+	Quit      []string
+	Pause     []string
+	Skip      []string
+	SelectAll []string
+	Help      []string
+	PageUp    []string
+	PageDown  []string
+	Home      []string
+	End       []string
 }
 
 // DefaultKeyMap returns the default key mappings
@@ -138,8 +138,8 @@ func (k KeyMap) IsEnd(msg tea.KeyMsg) bool {
 
 // Viewport represents a scrollable viewport
 type Viewport struct {
-	Width  int
-	Height int
+	Width   int
+	Height  int
 	YOffset int
 	Content []string
 }

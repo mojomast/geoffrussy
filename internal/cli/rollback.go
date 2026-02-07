@@ -93,7 +93,7 @@ func runRollback(cmd *cobra.Command, args []string) error {
 	fmt.Println("  2. Restore the database state to what it was at that time.")
 	fmt.Println("  3. Lose any uncommitted changes and commits made after the checkpoint.")
 	fmt.Println("\nAre you sure you want to continue? (yes/no): ")
-	
+
 	confirm, _ := reader.ReadString('\n')
 	confirm = strings.TrimSpace(strings.ToLower(confirm))
 

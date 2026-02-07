@@ -406,7 +406,7 @@ func (h *ResourceHandlers) handleCurrentQuestionResource(ctx context.Context, ur
 	if err != nil {
 		return nil, fmt.Errorf("failed to get next question: %w", err)
 	}
-	
+
 	if question == nil {
 		return &ReadResourceResult{
 			Contents: []Content{
@@ -419,11 +419,11 @@ func (h *ResourceHandlers) handleCurrentQuestionResource(ctx context.Context, ur
 	phaseTitle := string(session.CurrentPhase) // Simplified
 
 	response := map[string]interface{}{
-		"phase":       session.CurrentPhase,
-		"phaseTitle":  phaseTitle,
-		"questionId":  question.ID,
-		"question":    question.Text,
-		"isComplete":  false,
+		"phase":      session.CurrentPhase,
+		"phaseTitle": phaseTitle,
+		"questionId": question.ID,
+		"question":   question.Text,
+		"isComplete": false,
 	}
 
 	data, err := json.MarshalIndent(response, "", "  ")
@@ -457,7 +457,7 @@ func (h *ResourceHandlers) handleTaskDetailsResource(ctx context.Context, uri st
 	// Enrich tasks with logs if available?
 	// Reading logs for all tasks might be slow.
 	// But "Detailed task information including outputs" suggests we should.
-	
+
 	enrichedTasks := make([]map[string]interface{}, len(tasks))
 	for i, task := range tasks {
 		t := map[string]interface{}{
@@ -469,12 +469,12 @@ func (h *ResourceHandlers) handleTaskDetailsResource(ctx context.Context, uri st
 			"startedAt":   task.StartedAt,
 			"completedAt": task.CompletedAt,
 		}
-		
+
 		// Check for logs
 		logFile := filepath.Join(h.projectRoot, ".geoffrussy", "logs", fmt.Sprintf("%s.log", task.ID))
 		if _, err := os.Stat(logFile); err == nil {
 			t["hasLog"] = true
-			// We could include snippet or full log? 
+			// We could include snippet or full log?
 			// Full log might be huge. Let's include snippet.
 			content, _ := os.ReadFile(logFile)
 			if len(content) > 1000 {
@@ -485,7 +485,7 @@ func (h *ResourceHandlers) handleTaskDetailsResource(ctx context.Context, uri st
 		} else {
 			t["hasLog"] = false
 		}
-		
+
 		enrichedTasks[i] = t
 	}
 

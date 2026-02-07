@@ -67,11 +67,11 @@ func (m *MigrationManager) CurrentVersion() (int, error) {
 		SELECT COALESCE(MAX(version), 0) 
 		FROM schema_migrations
 	`).Scan(&version)
-	
+
 	if err != nil {
 		return 0, fmt.Errorf("failed to get current version: %w", err)
 	}
-	
+
 	return version, nil
 }
 
@@ -80,23 +80,23 @@ func (m *MigrationManager) Migrate() error {
 	if err := m.Initialize(); err != nil {
 		return fmt.Errorf("failed to initialize migrations table: %w", err)
 	}
-	
+
 	currentVersion, err := m.CurrentVersion()
 	if err != nil {
 		return err
 	}
-	
+
 	// Run all migrations newer than current version
 	for _, migration := range migrations {
 		if migration.Version <= currentVersion {
 			continue
 		}
-		
+
 		if err := m.applyMigration(migration); err != nil {
 			return fmt.Errorf("failed to apply migration %d: %w", migration.Version, err)
 		}
 	}
-	
+
 	return nil
 }
 
@@ -107,26 +107,26 @@ func (m *MigrationManager) applyMigration(migration Migration) error {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer tx.Rollback()
-	
+
 	// Execute the migration
 	if _, err := tx.Exec(migration.Up); err != nil {
 		return fmt.Errorf("failed to execute migration: %w", err)
 	}
-	
+
 	// Record the migration
 	_, err = tx.Exec(`
 		INSERT INTO schema_migrations (version, description, applied_at)
 		VALUES (?, ?, ?)
 	`, migration.Version, migration.Description, time.Now())
-	
+
 	if err != nil {
 		return fmt.Errorf("failed to record migration: %w", err)
 	}
-	
+
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
-	
+
 	return nil
 }
 
@@ -136,11 +136,11 @@ func (m *MigrationManager) Rollback() error {
 	if err != nil {
 		return err
 	}
-	
+
 	if currentVersion == 0 {
 		return fmt.Errorf("no migrations to rollback")
 	}
-	
+
 	// Find the migration to rollback
 	var targetMigration *Migration
 	for i := range migrations {
@@ -149,36 +149,36 @@ func (m *MigrationManager) Rollback() error {
 			break
 		}
 	}
-	
+
 	if targetMigration == nil {
 		return fmt.Errorf("migration %d not found", currentVersion)
 	}
-	
+
 	tx, err := m.db.Begin()
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer tx.Rollback()
-	
+
 	// Execute the rollback
 	if _, err := tx.Exec(targetMigration.Down); err != nil {
 		return fmt.Errorf("failed to execute rollback: %w", err)
 	}
-	
+
 	// Remove the migration record
 	_, err = tx.Exec(`
 		DELETE FROM schema_migrations 
 		WHERE version = ?
 	`, currentVersion)
-	
+
 	if err != nil {
 		return fmt.Errorf("failed to remove migration record: %w", err)
 	}
-	
+
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
-	
+
 	return nil
 }
 
@@ -188,18 +188,18 @@ func (m *MigrationManager) MigrateToVersion(targetVersion int) error {
 	if err != nil {
 		return err
 	}
-	
+
 	if targetVersion == currentVersion {
 		return nil
 	}
-	
+
 	if targetVersion > currentVersion {
 		// Migrate up
 		for _, migration := range migrations {
 			if migration.Version <= currentVersion || migration.Version > targetVersion {
 				continue
 			}
-			
+
 			if err := m.applyMigration(migration); err != nil {
 				return fmt.Errorf("failed to apply migration %d: %w", migration.Version, err)
 			}
@@ -211,13 +211,13 @@ func (m *MigrationManager) MigrateToVersion(targetVersion int) error {
 			if migration.Version > currentVersion || migration.Version <= targetVersion {
 				continue
 			}
-			
+
 			if err := m.Rollback(); err != nil {
 				return fmt.Errorf("failed to rollback migration %d: %w", migration.Version, err)
 			}
 		}
 	}
-	
+
 	return nil
 }
 
@@ -237,22 +237,22 @@ func (m *MigrationManager) GetAppliedMigrations() ([]Migration, error) {
 		return nil, fmt.Errorf("failed to query migrations: %w", err)
 	}
 	defer rows.Close()
-	
+
 	var applied []Migration
 	for rows.Next() {
 		var migration Migration
 		var appliedAt time.Time
-		
+
 		if err := rows.Scan(&migration.Version, &migration.Description, &appliedAt); err != nil {
 			return nil, fmt.Errorf("failed to scan migration: %w", err)
 		}
-		
+
 		applied = append(applied, migration)
 	}
-	
+
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("error iterating migrations: %w", err)
 	}
-	
+
 	return applied, nil
 }

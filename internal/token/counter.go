@@ -26,26 +26,26 @@ func (c *Counter) CountTokens(text string, model string) (int, error) {
 	if text == "" {
 		return 0, nil
 	}
-	
+
 	// Simple estimation based on words and characters
 	// Real implementation would use tiktoken or similar for accurate counting
 	words := len(strings.Fields(text))
 	chars := len(text)
-	
+
 	// Rough approximation: ~4 characters per token on average
 	// This varies by model and language
 	tokens := chars / 4
-	
+
 	// Adjust based on word count (accounts for spaces)
 	if words > 0 {
 		tokens = (tokens + words) / 2
 	}
-	
+
 	// Minimum 1 token for non-empty text
 	if tokens == 0 && text != "" {
 		tokens = 1
 	}
-	
+
 	return tokens, nil
 }
 
@@ -59,7 +59,7 @@ func (c *Counter) GetTotalTokens(projectID string) (*state.TokenStats, error) {
 	if projectID == "" {
 		return nil, fmt.Errorf("project ID cannot be empty")
 	}
-	
+
 	// Try to get cached stats first
 	cachedStats, err := c.store.GetCachedTokenStats(projectID)
 	if err == nil {
@@ -68,20 +68,20 @@ func (c *Counter) GetTotalTokens(projectID string) (*state.TokenStats, error) {
 			return cachedStats, nil
 		}
 	}
-	
+
 	// Get fresh stats from store
 	stats, err := c.store.GetTokenStats(projectID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get token stats: %w", err)
 	}
-	
+
 	// Cache the fresh stats
 	if err := c.store.CacheTokenStats(projectID, stats); err != nil {
 		// Log error but don't fail - caching is optional
 		// In production, you'd use a proper logger here
 		_ = err
 	}
-	
+
 	return stats, nil
 }
 
@@ -93,13 +93,13 @@ func (c *Counter) GetTokensByProvider(projectID string, provider string) (*state
 	if provider == "" {
 		return nil, fmt.Errorf("provider cannot be empty")
 	}
-	
+
 	// Get all stats and filter by provider
 	allStats, err := c.GetTotalTokens(projectID)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Create filtered stats
 	stats := &state.TokenStats{
 		TotalInput:  0,
@@ -108,16 +108,16 @@ func (c *Counter) GetTokensByProvider(projectID string, provider string) (*state
 		ByPhase:     allStats.ByPhase, // Keep phase breakdown
 		LastUpdated: allStats.LastUpdated,
 	}
-	
+
 	// Get tokens for this specific provider
 	if tokens, ok := allStats.ByProvider[provider]; ok {
 		stats.ByProvider[provider] = tokens
 		// Calculate totals based on this provider's usage
 		// This is simplified - in production you'd query the database directly
-		stats.TotalInput = tokens / 2  // Rough estimate
+		stats.TotalInput = tokens / 2 // Rough estimate
 		stats.TotalOutput = tokens / 2
 	}
-	
+
 	return stats, nil
 }
 
@@ -129,13 +129,13 @@ func (c *Counter) GetTokensByPhase(projectID string, phaseID string) (*state.Tok
 	if phaseID == "" {
 		return nil, fmt.Errorf("phase ID cannot be empty")
 	}
-	
+
 	// Get all stats and filter by phase
 	allStats, err := c.GetTotalTokens(projectID)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Create filtered stats for this phase
 	stats := &state.TokenStats{
 		TotalInput:  0,
@@ -144,15 +144,15 @@ func (c *Counter) GetTokensByPhase(projectID string, phaseID string) (*state.Tok
 		ByPhase:     make(map[string]int),
 		LastUpdated: allStats.LastUpdated,
 	}
-	
+
 	// Get tokens for this specific phase
 	if tokens, ok := allStats.ByPhase[phaseID]; ok {
 		stats.ByPhase[phaseID] = tokens
 		// Calculate totals based on this phase's usage
-		stats.TotalInput = tokens / 2  // Rough estimate
+		stats.TotalInput = tokens / 2 // Rough estimate
 		stats.TotalOutput = tokens / 2
 	}
-	
+
 	return stats, nil
 }
 
@@ -169,16 +169,16 @@ func (c *Counter) RecordUsage(projectID, phaseID, taskID, provider, model string
 		Cost:         cost,
 		Timestamp:    time.Now(),
 	}
-	
+
 	if err := c.store.RecordTokenUsage(usage); err != nil {
 		return err
 	}
-	
+
 	// Invalidate cache since we have new data
 	if err := c.store.InvalidateTokenStatsCache(projectID); err != nil {
 		// Log error but don't fail - cache invalidation is optional
 		_ = err
 	}
-	
+
 	return nil
 }

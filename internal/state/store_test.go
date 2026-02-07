@@ -11,19 +11,19 @@ func TestNewStore(t *testing.T) {
 	// Create a temporary directory for test database
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "test.db")
-	
+
 	// Create store
 	store, err := NewStore(dbPath)
 	if err != nil {
 		t.Fatalf("Failed to create store: %v", err)
 	}
 	defer store.Close()
-	
+
 	// Verify database file was created
 	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
 		t.Errorf("Database file was not created")
 	}
-	
+
 	// Verify health check passes
 	if err := store.HealthCheck(); err != nil {
 		t.Errorf("Health check failed: %v", err)
@@ -34,20 +34,20 @@ func TestNewStore_CreatesDirectory(t *testing.T) {
 	// Create a temporary directory
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "subdir", "nested", "test.db")
-	
+
 	// Create store (should create nested directories)
 	store, err := NewStore(dbPath)
 	if err != nil {
 		t.Fatalf("Failed to create store: %v", err)
 	}
 	defer store.Close()
-	
+
 	// Verify directory was created
 	dir := filepath.Dir(dbPath)
 	if _, err := os.Stat(dir); os.IsNotExist(err) {
 		t.Errorf("Directory was not created: %s", dir)
 	}
-	
+
 	// Verify database file was created
 	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
 		t.Errorf("Database file was not created")
@@ -57,13 +57,13 @@ func TestNewStore_CreatesDirectory(t *testing.T) {
 func TestStore_HealthCheck(t *testing.T) {
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "test.db")
-	
+
 	store, err := NewStore(dbPath)
 	if err != nil {
 		t.Fatalf("Failed to create store: %v", err)
 	}
 	defer store.Close()
-	
+
 	// Health check should pass
 	if err := store.HealthCheck(); err != nil {
 		t.Errorf("Health check failed: %v", err)
@@ -73,17 +73,17 @@ func TestStore_HealthCheck(t *testing.T) {
 func TestStore_Close(t *testing.T) {
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "test.db")
-	
+
 	store, err := NewStore(dbPath)
 	if err != nil {
 		t.Fatalf("Failed to create store: %v", err)
 	}
-	
+
 	// Close should not return error
 	if err := store.Close(); err != nil {
 		t.Errorf("Close returned error: %v", err)
 	}
-	
+
 	// Second close should not panic
 	if err := store.Close(); err != nil {
 		t.Errorf("Second close returned error: %v", err)
@@ -97,7 +97,7 @@ func TestStore_InMemory(t *testing.T) {
 		t.Fatalf("Failed to create in-memory store: %v", err)
 	}
 	defer store.Close()
-	
+
 	// Health check should pass
 	if err := store.HealthCheck(); err != nil {
 		t.Errorf("Health check failed: %v", err)
@@ -110,14 +110,14 @@ func TestStore_ForeignKeys(t *testing.T) {
 		t.Fatalf("Failed to create store: %v", err)
 	}
 	defer store.Close()
-	
+
 	// Verify foreign keys are enabled
 	var fkEnabled int
 	err = store.DB().QueryRow("PRAGMA foreign_keys").Scan(&fkEnabled)
 	if err != nil {
 		t.Fatalf("Failed to check foreign keys: %v", err)
 	}
-	
+
 	if fkEnabled != 1 {
 		t.Errorf("Foreign keys not enabled: got %d, want 1", fkEnabled)
 	}
@@ -126,20 +126,20 @@ func TestStore_ForeignKeys(t *testing.T) {
 func TestStore_WALMode(t *testing.T) {
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "test.db")
-	
+
 	store, err := NewStore(dbPath)
 	if err != nil {
 		t.Fatalf("Failed to create store: %v", err)
 	}
 	defer store.Close()
-	
+
 	// Verify WAL mode is enabled
 	var journalMode string
 	err = store.DB().QueryRow("PRAGMA journal_mode").Scan(&journalMode)
 	if err != nil {
 		t.Fatalf("Failed to check journal mode: %v", err)
 	}
-	
+
 	if journalMode != "wal" {
 		t.Errorf("WAL mode not enabled: got %s, want wal", journalMode)
 	}
@@ -151,13 +151,13 @@ func TestStore_BeginTx(t *testing.T) {
 		t.Fatalf("Failed to create store: %v", err)
 	}
 	defer store.Close()
-	
+
 	// Begin transaction
 	tx, err := store.BeginTx()
 	if err != nil {
 		t.Fatalf("Failed to begin transaction: %v", err)
 	}
-	
+
 	// Rollback transaction
 	if err := tx.Rollback(); err != nil {
 		t.Errorf("Failed to rollback transaction: %v", err)
@@ -172,7 +172,7 @@ func TestStore_CreateProject(t *testing.T) {
 		t.Fatalf("Failed to create store: %v", err)
 	}
 	defer store.Close()
-	
+
 	project := &Project{
 		ID:           "proj-123",
 		Name:         "Test Project",
@@ -180,18 +180,18 @@ func TestStore_CreateProject(t *testing.T) {
 		CurrentStage: StageInit,
 		CurrentPhase: "",
 	}
-	
+
 	err = store.CreateProject(project)
 	if err != nil {
 		t.Fatalf("Failed to create project: %v", err)
 	}
-	
+
 	// Verify project was created
 	retrieved, err := store.GetProject(project.ID)
 	if err != nil {
 		t.Fatalf("Failed to get project: %v", err)
 	}
-	
+
 	if retrieved.ID != project.ID {
 		t.Errorf("ID mismatch: got %s, want %s", retrieved.ID, project.ID)
 	}
@@ -209,7 +209,7 @@ func TestStore_GetProject_NotFound(t *testing.T) {
 		t.Fatalf("Failed to create store: %v", err)
 	}
 	defer store.Close()
-	
+
 	_, err = store.GetProject("nonexistent")
 	if err == nil {
 		t.Error("Expected error for nonexistent project, got nil")
@@ -222,7 +222,7 @@ func TestStore_UpdateProject(t *testing.T) {
 		t.Fatalf("Failed to create store: %v", err)
 	}
 	defer store.Close()
-	
+
 	project := &Project{
 		ID:           "proj-123",
 		Name:         "Test Project",
@@ -230,28 +230,28 @@ func TestStore_UpdateProject(t *testing.T) {
 		CurrentStage: StageInit,
 		CurrentPhase: "",
 	}
-	
+
 	err = store.CreateProject(project)
 	if err != nil {
 		t.Fatalf("Failed to create project: %v", err)
 	}
-	
+
 	// Update project
 	project.Name = "Updated Project"
 	project.CurrentStage = StageInterview
 	project.CurrentPhase = "phase-1"
-	
+
 	err = store.UpdateProject(project)
 	if err != nil {
 		t.Fatalf("Failed to update project: %v", err)
 	}
-	
+
 	// Verify update
 	retrieved, err := store.GetProject(project.ID)
 	if err != nil {
 		t.Fatalf("Failed to get project: %v", err)
 	}
-	
+
 	if retrieved.Name != "Updated Project" {
 		t.Errorf("Name not updated: got %s, want %s", retrieved.Name, "Updated Project")
 	}
@@ -271,7 +271,7 @@ func TestStore_SaveAndGetInterviewData(t *testing.T) {
 		t.Fatalf("Failed to create store: %v", err)
 	}
 	defer store.Close()
-	
+
 	// Create project first
 	project := &Project{
 		ID:           "proj-123",
@@ -283,7 +283,7 @@ func TestStore_SaveAndGetInterviewData(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create project: %v", err)
 	}
-	
+
 	// Create interview data
 	data := &InterviewData{
 		ProjectID:        "proj-123",
@@ -296,18 +296,18 @@ func TestStore_SaveAndGetInterviewData(t *testing.T) {
 		Assumptions:      []string{"users have internet access"},
 		Unknowns:         []string{"exact user count"},
 	}
-	
+
 	err = store.SaveInterviewData(project.ID, data)
 	if err != nil {
 		t.Fatalf("Failed to save interview data: %v", err)
 	}
-	
+
 	// Retrieve interview data
 	retrieved, err := store.GetInterviewData(project.ID)
 	if err != nil {
 		t.Fatalf("Failed to get interview data: %v", err)
 	}
-	
+
 	if retrieved.ProjectID != data.ProjectID {
 		t.Errorf("ProjectID mismatch: got %s, want %s", retrieved.ProjectID, data.ProjectID)
 	}
@@ -325,7 +325,7 @@ func TestStore_SaveInterviewData_Update(t *testing.T) {
 		t.Fatalf("Failed to create store: %v", err)
 	}
 	defer store.Close()
-	
+
 	// Create project
 	project := &Project{
 		ID:           "proj-123",
@@ -337,7 +337,7 @@ func TestStore_SaveInterviewData_Update(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create project: %v", err)
 	}
-	
+
 	// Save initial data
 	data := &InterviewData{
 		ProjectID:        "proj-123",
@@ -349,20 +349,20 @@ func TestStore_SaveInterviewData_Update(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to save interview data: %v", err)
 	}
-	
+
 	// Update data
 	data.ProblemStatement = "Updated problem"
 	err = store.SaveInterviewData(project.ID, data)
 	if err != nil {
 		t.Fatalf("Failed to update interview data: %v", err)
 	}
-	
+
 	// Verify update
 	retrieved, err := store.GetInterviewData(project.ID)
 	if err != nil {
 		t.Fatalf("Failed to get interview data: %v", err)
 	}
-	
+
 	if retrieved.ProblemStatement != "Updated problem" {
 		t.Errorf("ProblemStatement not updated: got %s, want %s", retrieved.ProblemStatement, "Updated problem")
 	}
@@ -376,7 +376,7 @@ func TestStore_SaveAndGetArchitecture(t *testing.T) {
 		t.Fatalf("Failed to create store: %v", err)
 	}
 	defer store.Close()
-	
+
 	// Create project
 	project := &Project{
 		ID:           "proj-123",
@@ -388,7 +388,7 @@ func TestStore_SaveAndGetArchitecture(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create project: %v", err)
 	}
-	
+
 	// Save architecture
 	arch := &Architecture{
 		ProjectID: "proj-123",
@@ -399,13 +399,13 @@ func TestStore_SaveAndGetArchitecture(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to save architecture: %v", err)
 	}
-	
+
 	// Retrieve architecture
 	retrieved, err := store.GetArchitecture(project.ID)
 	if err != nil {
 		t.Fatalf("Failed to get architecture: %v", err)
 	}
-	
+
 	if retrieved.ProjectID != arch.ProjectID {
 		t.Errorf("ProjectID mismatch: got %s, want %s", retrieved.ProjectID, arch.ProjectID)
 	}
@@ -422,7 +422,7 @@ func TestStore_SaveAndGetPhase(t *testing.T) {
 		t.Fatalf("Failed to create store: %v", err)
 	}
 	defer store.Close()
-	
+
 	// Create project
 	project := &Project{
 		ID:           "proj-123",
@@ -434,7 +434,7 @@ func TestStore_SaveAndGetPhase(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create project: %v", err)
 	}
-	
+
 	// Save phase
 	phase := &Phase{
 		ID:        "phase-1",
@@ -449,13 +449,13 @@ func TestStore_SaveAndGetPhase(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to save phase: %v", err)
 	}
-	
+
 	// Retrieve phase
 	retrieved, err := store.GetPhase(phase.ID)
 	if err != nil {
 		t.Fatalf("Failed to get phase: %v", err)
 	}
-	
+
 	if retrieved.ID != phase.ID {
 		t.Errorf("ID mismatch: got %s, want %s", retrieved.ID, phase.ID)
 	}
@@ -473,7 +473,7 @@ func TestStore_ListPhases(t *testing.T) {
 		t.Fatalf("Failed to create store: %v", err)
 	}
 	defer store.Close()
-	
+
 	// Create project
 	project := &Project{
 		ID:           "proj-123",
@@ -485,7 +485,7 @@ func TestStore_ListPhases(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create project: %v", err)
 	}
-	
+
 	// Save multiple phases
 	phases := []*Phase{
 		{
@@ -516,24 +516,24 @@ func TestStore_ListPhases(t *testing.T) {
 			CreatedAt: time.Now(),
 		},
 	}
-	
+
 	for _, phase := range phases {
 		err = store.SavePhase(phase)
 		if err != nil {
 			t.Fatalf("Failed to save phase: %v", err)
 		}
 	}
-	
+
 	// List phases
 	retrieved, err := store.ListPhases(project.ID)
 	if err != nil {
 		t.Fatalf("Failed to list phases: %v", err)
 	}
-	
+
 	if len(retrieved) != len(phases) {
 		t.Errorf("Phase count mismatch: got %d, want %d", len(retrieved), len(phases))
 	}
-	
+
 	// Verify order
 	for i, phase := range retrieved {
 		if phase.Number != i+1 {
@@ -548,7 +548,7 @@ func TestStore_UpdatePhaseStatus(t *testing.T) {
 		t.Fatalf("Failed to create store: %v", err)
 	}
 	defer store.Close()
-	
+
 	// Create project
 	project := &Project{
 		ID:           "proj-123",
@@ -560,7 +560,7 @@ func TestStore_UpdatePhaseStatus(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create project: %v", err)
 	}
-	
+
 	// Save phase
 	phase := &Phase{
 		ID:        "phase-1",
@@ -575,38 +575,38 @@ func TestStore_UpdatePhaseStatus(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to save phase: %v", err)
 	}
-	
+
 	// Update to in progress
 	err = store.UpdatePhaseStatus(phase.ID, PhaseInProgress)
 	if err != nil {
 		t.Fatalf("Failed to update phase status: %v", err)
 	}
-	
+
 	// Verify status and started_at
 	retrieved, err := store.GetPhase(phase.ID)
 	if err != nil {
 		t.Fatalf("Failed to get phase: %v", err)
 	}
-	
+
 	if retrieved.Status != PhaseInProgress {
 		t.Errorf("Status not updated: got %s, want %s", retrieved.Status, PhaseInProgress)
 	}
 	if retrieved.StartedAt == nil {
 		t.Error("StartedAt should be set")
 	}
-	
+
 	// Update to completed
 	err = store.UpdatePhaseStatus(phase.ID, PhaseCompleted)
 	if err != nil {
 		t.Fatalf("Failed to update phase status: %v", err)
 	}
-	
+
 	// Verify completed_at
 	retrieved, err = store.GetPhase(phase.ID)
 	if err != nil {
 		t.Fatalf("Failed to get phase: %v", err)
 	}
-	
+
 	if retrieved.Status != PhaseCompleted {
 		t.Errorf("Status not updated: got %s, want %s", retrieved.Status, PhaseCompleted)
 	}
@@ -623,7 +623,7 @@ func TestStore_SaveAndGetTask(t *testing.T) {
 		t.Fatalf("Failed to create store: %v", err)
 	}
 	defer store.Close()
-	
+
 	// Create project and phase
 	project := &Project{
 		ID:           "proj-123",
@@ -635,7 +635,7 @@ func TestStore_SaveAndGetTask(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create project: %v", err)
 	}
-	
+
 	phase := &Phase{
 		ID:        "phase-1",
 		ProjectID: "proj-123",
@@ -649,7 +649,7 @@ func TestStore_SaveAndGetTask(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to save phase: %v", err)
 	}
-	
+
 	// Save task
 	task := &Task{
 		ID:          "task-1",
@@ -662,13 +662,13 @@ func TestStore_SaveAndGetTask(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to save task: %v", err)
 	}
-	
+
 	// Retrieve task
 	retrieved, err := store.GetTask(task.ID)
 	if err != nil {
 		t.Fatalf("Failed to get task: %v", err)
 	}
-	
+
 	if retrieved.ID != task.ID {
 		t.Errorf("ID mismatch: got %s, want %s", retrieved.ID, task.ID)
 	}
@@ -686,7 +686,7 @@ func TestStore_UpdateTaskStatus(t *testing.T) {
 		t.Fatalf("Failed to create store: %v", err)
 	}
 	defer store.Close()
-	
+
 	// Create project and phase
 	project := &Project{
 		ID:           "proj-123",
@@ -698,7 +698,7 @@ func TestStore_UpdateTaskStatus(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create project: %v", err)
 	}
-	
+
 	phase := &Phase{
 		ID:        "phase-1",
 		ProjectID: "proj-123",
@@ -712,7 +712,7 @@ func TestStore_UpdateTaskStatus(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to save phase: %v", err)
 	}
-	
+
 	// Save task
 	task := &Task{
 		ID:          "task-1",
@@ -725,38 +725,38 @@ func TestStore_UpdateTaskStatus(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to save task: %v", err)
 	}
-	
+
 	// Update to in progress
 	err = store.UpdateTaskStatus(task.ID, TaskInProgress)
 	if err != nil {
 		t.Fatalf("Failed to update task status: %v", err)
 	}
-	
+
 	// Verify status and started_at
 	retrieved, err := store.GetTask(task.ID)
 	if err != nil {
 		t.Fatalf("Failed to get task: %v", err)
 	}
-	
+
 	if retrieved.Status != TaskInProgress {
 		t.Errorf("Status not updated: got %s, want %s", retrieved.Status, TaskInProgress)
 	}
 	if retrieved.StartedAt == nil {
 		t.Error("StartedAt should be set")
 	}
-	
+
 	// Update to completed
 	err = store.UpdateTaskStatus(task.ID, TaskCompleted)
 	if err != nil {
 		t.Fatalf("Failed to update task status: %v", err)
 	}
-	
+
 	// Verify completed_at
 	retrieved, err = store.GetTask(task.ID)
 	if err != nil {
 		t.Fatalf("Failed to get task: %v", err)
 	}
-	
+
 	if retrieved.Status != TaskCompleted {
 		t.Errorf("Status not updated: got %s, want %s", retrieved.Status, TaskCompleted)
 	}
@@ -775,7 +775,7 @@ func TestStore_SaveAndGetCheckpoint(t *testing.T) {
 		t.Fatalf("Failed to create store: %v", err)
 	}
 	defer store.Close()
-	
+
 	// Create project
 	project := &Project{
 		ID:           "proj-123",
@@ -787,7 +787,7 @@ func TestStore_SaveAndGetCheckpoint(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create project: %v", err)
 	}
-	
+
 	// Save checkpoint
 	checkpoint := &Checkpoint{
 		ID:        "checkpoint-1",
@@ -797,18 +797,18 @@ func TestStore_SaveAndGetCheckpoint(t *testing.T) {
 		CreatedAt: time.Now(),
 		Metadata:  map[string]string{"phase": "1", "status": "completed"},
 	}
-	
+
 	err = store.SaveCheckpoint(checkpoint)
 	if err != nil {
 		t.Fatalf("Failed to save checkpoint: %v", err)
 	}
-	
+
 	// Retrieve checkpoint
 	retrieved, err := store.GetCheckpoint(checkpoint.ID)
 	if err != nil {
 		t.Fatalf("Failed to get checkpoint: %v", err)
 	}
-	
+
 	if retrieved.ID != checkpoint.ID {
 		t.Errorf("ID mismatch: got %s, want %s", retrieved.ID, checkpoint.ID)
 	}
@@ -826,7 +826,7 @@ func TestStore_ListCheckpoints(t *testing.T) {
 		t.Fatalf("Failed to create store: %v", err)
 	}
 	defer store.Close()
-	
+
 	// Create project
 	project := &Project{
 		ID:           "proj-123",
@@ -838,7 +838,7 @@ func TestStore_ListCheckpoints(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create project: %v", err)
 	}
-	
+
 	// Save multiple checkpoints
 	checkpoints := []*Checkpoint{
 		{
@@ -856,20 +856,20 @@ func TestStore_ListCheckpoints(t *testing.T) {
 			CreatedAt: time.Now(),
 		},
 	}
-	
+
 	for _, checkpoint := range checkpoints {
 		err = store.SaveCheckpoint(checkpoint)
 		if err != nil {
 			t.Fatalf("Failed to save checkpoint: %v", err)
 		}
 	}
-	
+
 	// List checkpoints
 	retrieved, err := store.ListCheckpoints(project.ID)
 	if err != nil {
 		t.Fatalf("Failed to list checkpoints: %v", err)
 	}
-	
+
 	if len(retrieved) != len(checkpoints) {
 		t.Errorf("Checkpoint count mismatch: got %d, want %d", len(retrieved), len(checkpoints))
 	}
@@ -883,7 +883,7 @@ func TestStore_RecordTokenUsage(t *testing.T) {
 		t.Fatalf("Failed to create store: %v", err)
 	}
 	defer store.Close()
-	
+
 	// Create project
 	project := &Project{
 		ID:           "proj-123",
@@ -895,7 +895,7 @@ func TestStore_RecordTokenUsage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create project: %v", err)
 	}
-	
+
 	// Record token usage
 	usage := &TokenUsage{
 		ProjectID:    "proj-123",
@@ -906,12 +906,12 @@ func TestStore_RecordTokenUsage(t *testing.T) {
 		Cost:         0.015,
 		Timestamp:    time.Now(),
 	}
-	
+
 	err = store.RecordTokenUsage(usage)
 	if err != nil {
 		t.Fatalf("Failed to record token usage: %v", err)
 	}
-	
+
 	// Verify usage was recorded (ID should be set)
 	if usage.ID == 0 {
 		t.Error("Token usage ID should be set after recording")
@@ -924,7 +924,7 @@ func TestStore_GetTotalCost(t *testing.T) {
 		t.Fatalf("Failed to create store: %v", err)
 	}
 	defer store.Close()
-	
+
 	// Create project
 	project := &Project{
 		ID:           "proj-123",
@@ -936,7 +936,7 @@ func TestStore_GetTotalCost(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create project: %v", err)
 	}
-	
+
 	// Record multiple token usages
 	usages := []*TokenUsage{
 		{
@@ -958,7 +958,7 @@ func TestStore_GetTotalCost(t *testing.T) {
 			Timestamp:    time.Now(),
 		},
 	}
-	
+
 	expectedTotal := 0.0
 	for _, usage := range usages {
 		err = store.RecordTokenUsage(usage)
@@ -967,13 +967,13 @@ func TestStore_GetTotalCost(t *testing.T) {
 		}
 		expectedTotal += usage.Cost
 	}
-	
+
 	// Get total cost
 	totalCost, err := store.GetTotalCost(project.ID)
 	if err != nil {
 		t.Fatalf("Failed to get total cost: %v", err)
 	}
-	
+
 	if totalCost != expectedTotal {
 		t.Errorf("Total cost mismatch: got %f, want %f", totalCost, expectedTotal)
 	}
@@ -987,7 +987,7 @@ func TestStore_SaveAndGetRateLimit(t *testing.T) {
 		t.Fatalf("Failed to create store: %v", err)
 	}
 	defer store.Close()
-	
+
 	// Save rate limit
 	rateLimit := &RateLimitInfo{
 		Provider:          "openai",
@@ -996,18 +996,18 @@ func TestStore_SaveAndGetRateLimit(t *testing.T) {
 		ResetAt:           time.Now().Add(1 * time.Hour),
 		CheckedAt:         time.Now(),
 	}
-	
+
 	err = store.SaveRateLimit(rateLimit.Provider, rateLimit)
 	if err != nil {
 		t.Fatalf("Failed to save rate limit: %v", err)
 	}
-	
+
 	// Retrieve rate limit
 	retrieved, err := store.GetRateLimit(rateLimit.Provider)
 	if err != nil {
 		t.Fatalf("Failed to get rate limit: %v", err)
 	}
-	
+
 	if retrieved.Provider != rateLimit.Provider {
 		t.Errorf("Provider mismatch: got %s, want %s", retrieved.Provider, rateLimit.Provider)
 	}
@@ -1024,13 +1024,13 @@ func TestStore_SaveAndGetQuota(t *testing.T) {
 		t.Fatalf("Failed to create store: %v", err)
 	}
 	defer store.Close()
-	
+
 	// Save quota
 	tokensRemaining := 10000
 	tokensLimit := 20000
 	costRemaining := 50.0
 	costLimit := 100.0
-	
+
 	quota := &QuotaInfo{
 		Provider:        "openai",
 		TokensRemaining: &tokensRemaining,
@@ -1040,18 +1040,18 @@ func TestStore_SaveAndGetQuota(t *testing.T) {
 		ResetAt:         time.Now().Add(24 * time.Hour),
 		CheckedAt:       time.Now(),
 	}
-	
+
 	err = store.SaveQuota(quota.Provider, quota)
 	if err != nil {
 		t.Fatalf("Failed to save quota: %v", err)
 	}
-	
+
 	// Retrieve quota
 	retrieved, err := store.GetQuota(quota.Provider)
 	if err != nil {
 		t.Fatalf("Failed to get quota: %v", err)
 	}
-	
+
 	if retrieved.Provider != quota.Provider {
 		t.Errorf("Provider mismatch: got %s, want %s", retrieved.Provider, quota.Provider)
 	}
@@ -1068,7 +1068,7 @@ func TestStore_SaveAndGetBlocker(t *testing.T) {
 		t.Fatalf("Failed to create store: %v", err)
 	}
 	defer store.Close()
-	
+
 	// Create project, phase, and task
 	project := &Project{
 		ID:           "proj-123",
@@ -1080,7 +1080,7 @@ func TestStore_SaveAndGetBlocker(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create project: %v", err)
 	}
-	
+
 	phase := &Phase{
 		ID:        "phase-1",
 		ProjectID: "proj-123",
@@ -1094,7 +1094,7 @@ func TestStore_SaveAndGetBlocker(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to save phase: %v", err)
 	}
-	
+
 	task := &Task{
 		ID:          "task-1",
 		PhaseID:     "phase-1",
@@ -1106,7 +1106,7 @@ func TestStore_SaveAndGetBlocker(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to save task: %v", err)
 	}
-	
+
 	// Save blocker
 	blocker := &Blocker{
 		ID:          "blocker-1",
@@ -1114,22 +1114,22 @@ func TestStore_SaveAndGetBlocker(t *testing.T) {
 		Description: "Missing API credentials",
 		CreatedAt:   time.Now(),
 	}
-	
+
 	err = store.SaveBlocker(blocker)
 	if err != nil {
 		t.Fatalf("Failed to save blocker: %v", err)
 	}
-	
+
 	// List active blockers
 	blockers, err := store.ListActiveBlockers(project.ID)
 	if err != nil {
 		t.Fatalf("Failed to list active blockers: %v", err)
 	}
-	
+
 	if len(blockers) != 1 {
 		t.Errorf("Expected 1 blocker, got %d", len(blockers))
 	}
-	
+
 	if blockers[0].ID != blocker.ID {
 		t.Errorf("Blocker ID mismatch: got %s, want %s", blockers[0].ID, blocker.ID)
 	}
@@ -1141,7 +1141,7 @@ func TestStore_ResolveBlocker(t *testing.T) {
 		t.Fatalf("Failed to create store: %v", err)
 	}
 	defer store.Close()
-	
+
 	// Create project, phase, and task
 	project := &Project{
 		ID:           "proj-123",
@@ -1153,7 +1153,7 @@ func TestStore_ResolveBlocker(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create project: %v", err)
 	}
-	
+
 	phase := &Phase{
 		ID:        "phase-1",
 		ProjectID: "proj-123",
@@ -1167,7 +1167,7 @@ func TestStore_ResolveBlocker(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to save phase: %v", err)
 	}
-	
+
 	task := &Task{
 		ID:          "task-1",
 		PhaseID:     "phase-1",
@@ -1179,7 +1179,7 @@ func TestStore_ResolveBlocker(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to save task: %v", err)
 	}
-	
+
 	// Save blocker
 	blocker := &Blocker{
 		ID:          "blocker-1",
@@ -1191,20 +1191,20 @@ func TestStore_ResolveBlocker(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to save blocker: %v", err)
 	}
-	
+
 	// Resolve blocker
 	resolution := "Added API credentials to config"
 	err = store.ResolveBlocker(blocker.ID, resolution)
 	if err != nil {
 		t.Fatalf("Failed to resolve blocker: %v", err)
 	}
-	
+
 	// Verify blocker is no longer active
 	blockers, err := store.ListActiveBlockers(project.ID)
 	if err != nil {
 		t.Fatalf("Failed to list active blockers: %v", err)
 	}
-	
+
 	if len(blockers) != 0 {
 		t.Errorf("Expected 0 active blockers, got %d", len(blockers))
 	}
@@ -1218,22 +1218,22 @@ func TestStore_SetAndGetConfig(t *testing.T) {
 		t.Fatalf("Failed to create store: %v", err)
 	}
 	defer store.Close()
-	
+
 	// Set config
 	key := "default_model"
 	value := "gpt-4"
-	
+
 	err = store.SetConfig(key, value)
 	if err != nil {
 		t.Fatalf("Failed to set config: %v", err)
 	}
-	
+
 	// Get config
 	retrieved, err := store.GetConfig(key)
 	if err != nil {
 		t.Fatalf("Failed to get config: %v", err)
 	}
-	
+
 	if retrieved != value {
 		t.Errorf("Config value mismatch: got %s, want %s", retrieved, value)
 	}
@@ -1245,7 +1245,7 @@ func TestStore_GetConfig_NotFound(t *testing.T) {
 		t.Fatalf("Failed to create store: %v", err)
 	}
 	defer store.Close()
-	
+
 	_, err = store.GetConfig("nonexistent_key")
 	if err == nil {
 		t.Error("Expected error for nonexistent config key, got nil")
@@ -1260,14 +1260,14 @@ func TestStore_UpdateProject_NotFound(t *testing.T) {
 		t.Fatalf("Failed to create store: %v", err)
 	}
 	defer store.Close()
-	
+
 	project := &Project{
 		ID:           "nonexistent",
 		Name:         "Test",
 		CreatedAt:    time.Now(),
 		CurrentStage: StageInit,
 	}
-	
+
 	err = store.UpdateProject(project)
 	if err == nil {
 		t.Error("Expected error for nonexistent project, got nil")
@@ -1280,7 +1280,7 @@ func TestStore_UpdateProjectStage_NotFound(t *testing.T) {
 		t.Fatalf("Failed to create store: %v", err)
 	}
 	defer store.Close()
-	
+
 	err = store.UpdateProjectStage("nonexistent", StageInterview)
 	if err == nil {
 		t.Error("Expected error for nonexistent project, got nil")
@@ -1293,7 +1293,7 @@ func TestStore_GetInterviewData_NotFound(t *testing.T) {
 		t.Fatalf("Failed to create store: %v", err)
 	}
 	defer store.Close()
-	
+
 	_, err = store.GetInterviewData("nonexistent")
 	if err == nil {
 		t.Error("Expected error for nonexistent interview data, got nil")
@@ -1306,7 +1306,7 @@ func TestStore_GetArchitecture_NotFound(t *testing.T) {
 		t.Fatalf("Failed to create store: %v", err)
 	}
 	defer store.Close()
-	
+
 	_, err = store.GetArchitecture("nonexistent")
 	if err == nil {
 		t.Error("Expected error for nonexistent architecture, got nil")
@@ -1319,7 +1319,7 @@ func TestStore_GetPhase_NotFound(t *testing.T) {
 		t.Fatalf("Failed to create store: %v", err)
 	}
 	defer store.Close()
-	
+
 	_, err = store.GetPhase("nonexistent")
 	if err == nil {
 		t.Error("Expected error for nonexistent phase, got nil")
@@ -1332,7 +1332,7 @@ func TestStore_UpdatePhaseStatus_NotFound(t *testing.T) {
 		t.Fatalf("Failed to create store: %v", err)
 	}
 	defer store.Close()
-	
+
 	err = store.UpdatePhaseStatus("nonexistent", PhaseInProgress)
 	if err == nil {
 		t.Error("Expected error for nonexistent phase, got nil")
@@ -1345,7 +1345,7 @@ func TestStore_GetTask_NotFound(t *testing.T) {
 		t.Fatalf("Failed to create store: %v", err)
 	}
 	defer store.Close()
-	
+
 	_, err = store.GetTask("nonexistent")
 	if err == nil {
 		t.Error("Expected error for nonexistent task, got nil")
@@ -1358,7 +1358,7 @@ func TestStore_UpdateTaskStatus_NotFound(t *testing.T) {
 		t.Fatalf("Failed to create store: %v", err)
 	}
 	defer store.Close()
-	
+
 	err = store.UpdateTaskStatus("nonexistent", TaskInProgress)
 	if err == nil {
 		t.Error("Expected error for nonexistent task, got nil")
@@ -1373,7 +1373,7 @@ func TestStore_ForeignKeyConstraint_InterviewData(t *testing.T) {
 		t.Fatalf("Failed to create store: %v", err)
 	}
 	defer store.Close()
-	
+
 	// Try to save interview data without creating project first
 	data := &InterviewData{
 		ProjectID:        "nonexistent",
@@ -1381,7 +1381,7 @@ func TestStore_ForeignKeyConstraint_InterviewData(t *testing.T) {
 		CreatedAt:        time.Now(),
 		ProblemStatement: "Test problem",
 	}
-	
+
 	err = store.SaveInterviewData("nonexistent", data)
 	if err == nil {
 		t.Error("Expected foreign key constraint error, got nil")
@@ -1394,7 +1394,7 @@ func TestStore_ForeignKeyConstraint_Phase(t *testing.T) {
 		t.Fatalf("Failed to create store: %v", err)
 	}
 	defer store.Close()
-	
+
 	// Try to save phase without creating project first
 	phase := &Phase{
 		ID:        "phase-1",
@@ -1405,7 +1405,7 @@ func TestStore_ForeignKeyConstraint_Phase(t *testing.T) {
 		Status:    PhaseNotStarted,
 		CreatedAt: time.Now(),
 	}
-	
+
 	err = store.SavePhase(phase)
 	if err == nil {
 		t.Error("Expected foreign key constraint error, got nil")
@@ -1418,7 +1418,7 @@ func TestStore_ForeignKeyConstraint_Task(t *testing.T) {
 		t.Fatalf("Failed to create store: %v", err)
 	}
 	defer store.Close()
-	
+
 	// Try to save task without creating phase first
 	task := &Task{
 		ID:          "task-1",
@@ -1427,7 +1427,7 @@ func TestStore_ForeignKeyConstraint_Task(t *testing.T) {
 		Description: "Test task",
 		Status:      TaskNotStarted,
 	}
-	
+
 	err = store.SaveTask(task)
 	if err == nil {
 		t.Error("Expected foreign key constraint error, got nil")
@@ -1442,7 +1442,7 @@ func TestStore_CascadeDelete_Project(t *testing.T) {
 		t.Fatalf("Failed to create store: %v", err)
 	}
 	defer store.Close()
-	
+
 	// Create project with related data
 	project := &Project{
 		ID:           "proj-123",
@@ -1454,7 +1454,7 @@ func TestStore_CascadeDelete_Project(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create project: %v", err)
 	}
-	
+
 	// Create interview data
 	data := &InterviewData{
 		ProjectID:        "proj-123",
@@ -1466,7 +1466,7 @@ func TestStore_CascadeDelete_Project(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to save interview data: %v", err)
 	}
-	
+
 	// Create phase
 	phase := &Phase{
 		ID:        "phase-1",
@@ -1481,19 +1481,19 @@ func TestStore_CascadeDelete_Project(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to save phase: %v", err)
 	}
-	
+
 	// Delete project
 	_, err = store.DB().Exec("DELETE FROM projects WHERE id = ?", project.ID)
 	if err != nil {
 		t.Fatalf("Failed to delete project: %v", err)
 	}
-	
+
 	// Verify interview data was deleted
 	_, err = store.GetInterviewData(project.ID)
 	if err == nil {
 		t.Error("Expected interview data to be deleted, but it still exists")
 	}
-	
+
 	// Verify phase was deleted
 	_, err = store.GetPhase(phase.ID)
 	if err == nil {
@@ -1509,13 +1509,13 @@ func TestStore_Transaction_Rollback(t *testing.T) {
 		t.Fatalf("Failed to create store: %v", err)
 	}
 	defer store.Close()
-	
+
 	// Begin transaction
 	tx, err := store.BeginTx()
 	if err != nil {
 		t.Fatalf("Failed to begin transaction: %v", err)
 	}
-	
+
 	// Insert project in transaction
 	_, err = tx.Exec(`
 		INSERT INTO projects (id, name, created_at, current_stage)
@@ -1524,13 +1524,13 @@ func TestStore_Transaction_Rollback(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to insert project: %v", err)
 	}
-	
+
 	// Rollback transaction
 	err = tx.Rollback()
 	if err != nil {
 		t.Fatalf("Failed to rollback transaction: %v", err)
 	}
-	
+
 	// Verify project was not saved
 	_, err = store.GetProject("proj-123")
 	if err == nil {
@@ -1544,13 +1544,13 @@ func TestStore_Transaction_Commit(t *testing.T) {
 		t.Fatalf("Failed to create store: %v", err)
 	}
 	defer store.Close()
-	
+
 	// Begin transaction
 	tx, err := store.BeginTx()
 	if err != nil {
 		t.Fatalf("Failed to begin transaction: %v", err)
 	}
-	
+
 	// Insert project in transaction
 	_, err = tx.Exec(`
 		INSERT INTO projects (id, name, created_at, current_stage, current_phase_id)
@@ -1559,13 +1559,13 @@ func TestStore_Transaction_Commit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to insert project: %v", err)
 	}
-	
+
 	// Commit transaction
 	err = tx.Commit()
 	if err != nil {
 		t.Fatalf("Failed to commit transaction: %v", err)
 	}
-	
+
 	// Verify project was saved
 	project, err := store.GetProject("proj-123")
 	if err != nil {
@@ -1582,13 +1582,13 @@ func TestStore_CorruptedDatabase_InvalidPath(t *testing.T) {
 	// Try to create store with invalid path (directory as file)
 	tmpDir := t.TempDir()
 	invalidPath := filepath.Join(tmpDir, "subdir")
-	
+
 	// Create a directory with the same name as the database file
 	err := os.MkdirAll(invalidPath, 0755)
 	if err != nil {
 		t.Fatalf("Failed to create directory: %v", err)
 	}
-	
+
 	// Try to create store (should fail because path is a directory)
 	_, err = NewStore(invalidPath)
 	if err == nil {
@@ -1599,22 +1599,22 @@ func TestStore_CorruptedDatabase_InvalidPath(t *testing.T) {
 func TestStore_CorruptedDatabase_HealthCheck(t *testing.T) {
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "test.db")
-	
+
 	// Create a valid store
 	store, err := NewStore(dbPath)
 	if err != nil {
 		t.Fatalf("Failed to create store: %v", err)
 	}
-	
+
 	// Close the store
 	store.Close()
-	
+
 	// Corrupt the database file by writing invalid data
 	err = os.WriteFile(dbPath, []byte("corrupted data"), 0644)
 	if err != nil {
 		t.Fatalf("Failed to corrupt database: %v", err)
 	}
-	
+
 	// Try to open the corrupted database
 	store2, err := NewStore(dbPath)
 	if err == nil {
@@ -1633,10 +1633,10 @@ func TestStore_HealthCheck_AfterClose(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create store: %v", err)
 	}
-	
+
 	// Close the store
 	store.Close()
-	
+
 	// Health check should fail after close
 	err = store.HealthCheck()
 	if err == nil {

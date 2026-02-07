@@ -53,7 +53,7 @@ func (m *Manager) Stage(files []string) error {
 	if len(files) == 0 {
 		return fmt.Errorf("no files to stage")
 	}
-	
+
 	args := append([]string{"add"}, files...)
 	cmd := exec.Command("git", args...)
 	cmd.Dir = m.repoPath
@@ -69,7 +69,7 @@ func (m *Manager) Commit(message string, metadata map[string]string) error {
 	if message == "" {
 		return fmt.Errorf("commit message cannot be empty")
 	}
-	
+
 	// Build commit message with metadata
 	fullMessage := message
 	if len(metadata) > 0 {
@@ -78,7 +78,7 @@ func (m *Manager) Commit(message string, metadata map[string]string) error {
 			fullMessage += fmt.Sprintf("%s: %s\n", key, value)
 		}
 	}
-	
+
 	cmd := exec.Command("git", "commit", "-m", fullMessage)
 	cmd.Dir = m.repoPath
 	output, err := cmd.CombinedOutput()
@@ -109,12 +109,12 @@ func (m *Manager) CreateTag(tagName string, message string) error {
 	if tagName == "" {
 		return fmt.Errorf("tag name cannot be empty")
 	}
-	
+
 	args := []string{"tag", "-a", tagName}
 	if message != "" {
 		args = append(args, "-m", message)
 	}
-	
+
 	cmd := exec.Command("git", args...)
 	cmd.Dir = m.repoPath
 	output, err := cmd.CombinedOutput()
@@ -129,7 +129,7 @@ func (m *Manager) ResetToTag(tagName string) error {
 	if tagName == "" {
 		return fmt.Errorf("tag name cannot be empty")
 	}
-	
+
 	cmd := exec.Command("git", "reset", "--hard", tagName)
 	cmd.Dir = m.repoPath
 	output, err := cmd.CombinedOutput()
@@ -165,16 +165,16 @@ func (m *Manager) DetectConflicts() (bool, []string, error) {
 	if err != nil {
 		return false, nil, err
 	}
-	
+
 	lines := strings.Split(status, "\n")
 	var conflicts []string
 	hasConflicts := false
-	
+
 	for _, line := range lines {
-		if strings.HasPrefix(line, "UU ") || strings.HasPrefix(line, "AA ") || 
-		   strings.HasPrefix(line, "DD ") || strings.HasPrefix(line, "AU ") ||
-		   strings.HasPrefix(line, "UA ") || strings.HasPrefix(line, "DU ") ||
-		   strings.HasPrefix(line, "UD ") {
+		if strings.HasPrefix(line, "UU ") || strings.HasPrefix(line, "AA ") ||
+			strings.HasPrefix(line, "DD ") || strings.HasPrefix(line, "AU ") ||
+			strings.HasPrefix(line, "UA ") || strings.HasPrefix(line, "DU ") ||
+			strings.HasPrefix(line, "UD ") {
 			hasConflicts = true
 			// Extract filename (skip status prefix)
 			if len(line) > 3 {
@@ -182,7 +182,7 @@ func (m *Manager) DetectConflicts() (bool, []string, error) {
 			}
 		}
 	}
-	
+
 	return hasConflicts, conflicts, nil
 }
 
@@ -192,10 +192,10 @@ func (m *Manager) GetChangedFiles() ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	lines := strings.Split(status, "\n")
 	var files []string
-	
+
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
 		if line == "" {
@@ -206,7 +206,7 @@ func (m *Manager) GetChangedFiles() ([]string, error) {
 			files = append(files, strings.TrimSpace(line[3:]))
 		}
 	}
-	
+
 	return files, nil
 }
 
@@ -218,7 +218,7 @@ func (m *Manager) ListTags() ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to list tags: %w\nOutput: %s", err, string(output))
 	}
-	
+
 	tags := strings.Split(strings.TrimSpace(string(output)), "\n")
 	if len(tags) == 1 && tags[0] == "" {
 		return []string{}, nil
@@ -243,11 +243,11 @@ func (m *Manager) EnsureRepository() error {
 	if err != nil {
 		return err
 	}
-	
+
 	if !isRepo {
 		return m.Initialize()
 	}
-	
+
 	return nil
 }
 

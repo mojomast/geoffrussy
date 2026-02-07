@@ -88,10 +88,10 @@ func (m *Manager) CreateAutoCheckpoint(projectID, phaseID string) (*state.Checkp
 	if err != nil {
 		return nil, fmt.Errorf("failed to get phase: %w", err)
 	}
-	
+
 	// Create checkpoint name (replace spaces with dashes for git tag)
 	name := fmt.Sprintf("phase-%d-%s", phase.Number, phase.Title)
-	
+
 	// Create metadata
 	metadata := map[string]string{
 		"type":     "auto",
@@ -99,7 +99,7 @@ func (m *Manager) CreateAutoCheckpoint(projectID, phaseID string) (*state.Checkp
 		"phase":    fmt.Sprintf("%d", phase.Number),
 		"title":    phase.Title,
 	}
-	
+
 	return m.CreateCheckpoint(projectID, name, metadata)
 }
 
@@ -109,7 +109,7 @@ func (m *Manager) ListCheckpoints(projectID string) ([]*state.Checkpoint, error)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list checkpoints: %w", err)
 	}
-	
+
 	return checkpoints, nil
 }
 
@@ -119,7 +119,7 @@ func (m *Manager) GetCheckpoint(checkpointID string) (*state.Checkpoint, error) 
 	if err != nil {
 		return nil, fmt.Errorf("failed to get checkpoint: %w", err)
 	}
-	
+
 	return checkpoint, nil
 }
 
@@ -157,11 +157,11 @@ func (m *Manager) RollbackToLatest(projectID string) error {
 	if err != nil {
 		return fmt.Errorf("failed to list checkpoints: %w", err)
 	}
-	
+
 	if len(checkpoints) == 0 {
 		return fmt.Errorf("no checkpoints found for project %s", projectID)
 	}
-	
+
 	// Find the most recent checkpoint
 	var latest *state.Checkpoint
 	for _, cp := range checkpoints {
@@ -169,7 +169,7 @@ func (m *Manager) RollbackToLatest(projectID string) error {
 			latest = cp
 		}
 	}
-	
+
 	// Rollback to the latest checkpoint
 	return m.Rollback(latest.ID)
 }
@@ -189,7 +189,7 @@ func (m *Manager) GetCheckpointHistory(projectID string) ([]*state.Checkpoint, e
 	if err != nil {
 		return nil, fmt.Errorf("failed to get checkpoint history: %w", err)
 	}
-	
+
 	return checkpoints, nil
 }
 
@@ -200,14 +200,14 @@ func (m *Manager) ValidateCheckpoint(checkpointID string) error {
 	if err != nil {
 		return fmt.Errorf("checkpoint not found: %w", err)
 	}
-	
+
 	// Check if Git tag exists
 	// Note: This would require adding a method to git.Manager to check if a tag exists
 	// For now, we'll assume the tag exists if the checkpoint exists
-	
+
 	if checkpoint.GitTag == "" {
 		return fmt.Errorf("checkpoint has no git tag")
 	}
-	
+
 	return nil
 }

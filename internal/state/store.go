@@ -215,21 +215,21 @@ func (s *Store) HealthCheck() error {
 	if err != nil {
 		return fmt.Errorf("database health check failed: %w", err)
 	}
-	
+
 	if result != 1 {
 		return fmt.Errorf("database health check returned unexpected result: %d", result)
 	}
-	
+
 	// Check schema version
 	version, err := s.migrationManager.CurrentVersion()
 	if err != nil {
 		return fmt.Errorf("failed to get schema version: %w", err)
 	}
-	
+
 	if version == 0 {
 		return fmt.Errorf("database schema not initialized")
 	}
-	
+
 	return nil
 }
 
@@ -299,7 +299,7 @@ func (s *Store) UpdateProject(project *Project) error {
 	if err != nil {
 		return fmt.Errorf("failed to update project: %w", err)
 	}
-	
+
 	rows, err := result.RowsAffected()
 	if err != nil {
 		return fmt.Errorf("failed to get rows affected: %w", err)
@@ -307,7 +307,7 @@ func (s *Store) UpdateProject(project *Project) error {
 	if rows == 0 {
 		return fmt.Errorf("project not found: %s", project.ID)
 	}
-	
+
 	return nil
 }
 
@@ -322,7 +322,7 @@ func (s *Store) UpdateProjectStage(id string, stage Stage) error {
 	if err != nil {
 		return fmt.Errorf("failed to update project stage: %w", err)
 	}
-	
+
 	rows, err := result.RowsAffected()
 	if err != nil {
 		return fmt.Errorf("failed to get rows affected: %w", err)
@@ -330,7 +330,7 @@ func (s *Store) UpdateProjectStage(id string, stage Stage) error {
 	if rows == 0 {
 		return fmt.Errorf("project not found: %s", id)
 	}
-	
+
 	return nil
 }
 
@@ -374,7 +374,7 @@ func (s *Store) SaveInterviewData(projectID string, data *InterviewData) error {
 	if err != nil {
 		return fmt.Errorf("failed to marshal interview data: %w", err)
 	}
-	
+
 	query := `
 		INSERT INTO interview_data (project_id, data, completed_at)
 		VALUES (?, ?, ?)
@@ -404,12 +404,12 @@ func (s *Store) GetInterviewData(projectID string) (*InterviewData, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get interview data: %w", err)
 	}
-	
+
 	var data InterviewData
 	if err := unmarshalJSON(jsonData, &data); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal interview data: %w", err)
 	}
-	
+
 	return &data, nil
 }
 
@@ -526,7 +526,7 @@ func (s *Store) ListPhases(projectID string) ([]*Phase, error) {
 		return nil, fmt.Errorf("failed to list phases: %w", err)
 	}
 	defer rows.Close()
-	
+
 	var phases []*Phase
 	for rows.Next() {
 		var phase Phase
@@ -546,11 +546,11 @@ func (s *Store) ListPhases(projectID string) ([]*Phase, error) {
 		}
 		phases = append(phases, &phase)
 	}
-	
+
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("error iterating phases: %w", err)
 	}
-	
+
 	return phases, nil
 }
 
@@ -559,7 +559,7 @@ func (s *Store) UpdatePhaseStatus(id string, status PhaseStatus) error {
 	now := time.Now()
 	var query string
 	var args []interface{}
-	
+
 	switch status {
 	case PhaseInProgress:
 		query = `
@@ -583,12 +583,12 @@ func (s *Store) UpdatePhaseStatus(id string, status PhaseStatus) error {
 		`
 		args = []interface{}{status, id}
 	}
-	
+
 	result, err := s.db.Exec(query, args...)
 	if err != nil {
 		return fmt.Errorf("failed to update phase status: %w", err)
 	}
-	
+
 	rows, err := result.RowsAffected()
 	if err != nil {
 		return fmt.Errorf("failed to get rows affected: %w", err)
@@ -596,7 +596,7 @@ func (s *Store) UpdatePhaseStatus(id string, status PhaseStatus) error {
 	if rows == 0 {
 		return fmt.Errorf("phase not found: %s", id)
 	}
-	
+
 	return nil
 }
 
@@ -696,7 +696,7 @@ func (s *Store) UpdateTaskStatus(id string, status TaskStatus) error {
 	now := time.Now()
 	var query string
 	var args []interface{}
-	
+
 	switch status {
 	case TaskInProgress:
 		query = `
@@ -720,12 +720,12 @@ func (s *Store) UpdateTaskStatus(id string, status TaskStatus) error {
 		`
 		args = []interface{}{status, id}
 	}
-	
+
 	result, err := s.db.Exec(query, args...)
 	if err != nil {
 		return fmt.Errorf("failed to update task status: %w", err)
 	}
-	
+
 	rows, err := result.RowsAffected()
 	if err != nil {
 		return fmt.Errorf("failed to get rows affected: %w", err)
@@ -733,7 +733,7 @@ func (s *Store) UpdateTaskStatus(id string, status TaskStatus) error {
 	if rows == 0 {
 		return fmt.Errorf("task not found: %s", id)
 	}
-	
+
 	return nil
 }
 
@@ -843,7 +843,7 @@ func (s *Store) SaveCheckpoint(checkpoint *Checkpoint) error {
 		}
 		metadataJSON = jsonData
 	}
-	
+
 	query := `
 		INSERT INTO checkpoints (id, project_id, name, git_tag, created_at, metadata)
 		VALUES (?, ?, ?, ?, ?, ?)
@@ -875,7 +875,7 @@ func (s *Store) GetCheckpoint(id string) (*Checkpoint, error) {
 	`
 	var checkpoint Checkpoint
 	var metadataJSON sql.NullString
-	
+
 	err := s.db.QueryRow(query, id).Scan(
 		&checkpoint.ID,
 		&checkpoint.ProjectID,
@@ -890,7 +890,7 @@ func (s *Store) GetCheckpoint(id string) (*Checkpoint, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get checkpoint: %w", err)
 	}
-	
+
 	// Unmarshal metadata if present
 	if metadataJSON.Valid && metadataJSON.String != "" {
 		var metadata map[string]string
@@ -899,7 +899,7 @@ func (s *Store) GetCheckpoint(id string) (*Checkpoint, error) {
 		}
 		checkpoint.Metadata = metadata
 	}
-	
+
 	return &checkpoint, nil
 }
 
@@ -916,12 +916,12 @@ func (s *Store) ListCheckpoints(projectID string) ([]*Checkpoint, error) {
 		return nil, fmt.Errorf("failed to list checkpoints: %w", err)
 	}
 	defer rows.Close()
-	
+
 	var checkpoints []*Checkpoint
 	for rows.Next() {
 		var checkpoint Checkpoint
 		var metadataJSON sql.NullString
-		
+
 		err := rows.Scan(
 			&checkpoint.ID,
 			&checkpoint.ProjectID,
@@ -933,7 +933,7 @@ func (s *Store) ListCheckpoints(projectID string) ([]*Checkpoint, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan checkpoint: %w", err)
 		}
-		
+
 		// Unmarshal metadata if present
 		if metadataJSON.Valid && metadataJSON.String != "" {
 			var metadata map[string]string
@@ -942,14 +942,14 @@ func (s *Store) ListCheckpoints(projectID string) ([]*Checkpoint, error) {
 			}
 			checkpoint.Metadata = metadata
 		}
-		
+
 		checkpoints = append(checkpoints, &checkpoint)
 	}
-	
+
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("error iterating checkpoints: %w", err)
 	}
-	
+
 	return checkpoints, nil
 }
 
@@ -961,7 +961,7 @@ func (s *Store) RecordTokenUsage(usage *TokenUsage) error {
 		INSERT INTO token_usage (project_id, phase_id, task_id, provider, model, tokens_input, tokens_output, cost, timestamp)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
-	
+
 	// Handle nullable phase_id and task_id
 	var phaseID, taskID interface{}
 	if usage.PhaseID != "" {
@@ -974,7 +974,7 @@ func (s *Store) RecordTokenUsage(usage *TokenUsage) error {
 	} else {
 		taskID = nil
 	}
-	
+
 	result, err := s.db.Exec(query,
 		usage.ProjectID,
 		phaseID,
@@ -989,14 +989,14 @@ func (s *Store) RecordTokenUsage(usage *TokenUsage) error {
 	if err != nil {
 		return fmt.Errorf("failed to record token usage: %w", err)
 	}
-	
+
 	// Get the auto-generated ID
 	id, err := result.LastInsertId()
 	if err != nil {
 		return fmt.Errorf("failed to get token usage ID: %w", err)
 	}
 	usage.ID = int(id)
-	
+
 	return nil
 }
 
@@ -1030,7 +1030,7 @@ func (s *Store) GetTokenStats(projectID string) (*TokenStats, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get token stats: %w", err)
 	}
-	
+
 	// Get by provider
 	stats.ByProvider = make(map[string]int)
 	providerQuery := `
@@ -1044,7 +1044,7 @@ func (s *Store) GetTokenStats(projectID string) (*TokenStats, error) {
 		return nil, fmt.Errorf("failed to get provider stats: %w", err)
 	}
 	defer rows.Close()
-	
+
 	for rows.Next() {
 		var provider string
 		var total int
@@ -1053,7 +1053,7 @@ func (s *Store) GetTokenStats(projectID string) (*TokenStats, error) {
 		}
 		stats.ByProvider[provider] = total
 	}
-	
+
 	// Get by phase
 	stats.ByPhase = make(map[string]int)
 	phaseQuery := `
@@ -1067,7 +1067,7 @@ func (s *Store) GetTokenStats(projectID string) (*TokenStats, error) {
 		return nil, fmt.Errorf("failed to get phase stats: %w", err)
 	}
 	defer rows.Close()
-	
+
 	for rows.Next() {
 		var phaseID string
 		var total int
@@ -1076,7 +1076,7 @@ func (s *Store) GetTokenStats(projectID string) (*TokenStats, error) {
 		}
 		stats.ByPhase[phaseID] = total
 	}
-	
+
 	stats.LastUpdated = time.Now()
 	return &stats, nil
 }
@@ -1087,12 +1087,12 @@ func (s *Store) CacheTokenStats(projectID string, stats *TokenStats) error {
 	if err != nil {
 		return fmt.Errorf("failed to marshal provider stats: %w", err)
 	}
-	
+
 	byPhaseJSON, err := marshalJSON(stats.ByPhase)
 	if err != nil {
 		return fmt.Errorf("failed to marshal phase stats: %w", err)
 	}
-	
+
 	query := `
 		INSERT OR REPLACE INTO token_stats_cache (project_id, total_input, total_output, by_provider, by_phase, last_updated)
 		VALUES (?, ?, ?, ?, ?, ?)
@@ -1108,7 +1108,7 @@ func (s *Store) CacheTokenStats(projectID string, stats *TokenStats) error {
 	if err != nil {
 		return fmt.Errorf("failed to cache token stats: %w", err)
 	}
-	
+
 	return nil
 }
 
@@ -1121,7 +1121,7 @@ func (s *Store) GetCachedTokenStats(projectID string) (*TokenStats, error) {
 	`
 	var stats TokenStats
 	var byProviderJSON, byPhaseJSON string
-	
+
 	err := s.db.QueryRow(query, projectID).Scan(
 		&stats.TotalInput,
 		&stats.TotalOutput,
@@ -1135,15 +1135,15 @@ func (s *Store) GetCachedTokenStats(projectID string) (*TokenStats, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get cached token stats: %w", err)
 	}
-	
+
 	if err := unmarshalJSON(byProviderJSON, &stats.ByProvider); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal provider stats: %w", err)
 	}
-	
+
 	if err := unmarshalJSON(byPhaseJSON, &stats.ByPhase); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal phase stats: %w", err)
 	}
-	
+
 	return &stats, nil
 }
 
@@ -1172,7 +1172,7 @@ func (s *Store) GetCostStats(projectID string) (*CostStats, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get cost stats: %w", err)
 	}
-	
+
 	// Get by provider
 	stats.ByProvider = make(map[string]float64)
 	providerQuery := `
@@ -1186,7 +1186,7 @@ func (s *Store) GetCostStats(projectID string) (*CostStats, error) {
 		return nil, fmt.Errorf("failed to get provider cost stats: %w", err)
 	}
 	defer rows.Close()
-	
+
 	for rows.Next() {
 		var provider string
 		var total float64
@@ -1195,7 +1195,7 @@ func (s *Store) GetCostStats(projectID string) (*CostStats, error) {
 		}
 		stats.ByProvider[provider] = total
 	}
-	
+
 	// Get by phase
 	stats.ByPhase = make(map[string]float64)
 	phaseQuery := `
@@ -1209,7 +1209,7 @@ func (s *Store) GetCostStats(projectID string) (*CostStats, error) {
 		return nil, fmt.Errorf("failed to get phase cost stats: %w", err)
 	}
 	defer rows.Close()
-	
+
 	for rows.Next() {
 		var phaseID string
 		var total float64
@@ -1218,7 +1218,7 @@ func (s *Store) GetCostStats(projectID string) (*CostStats, error) {
 		}
 		stats.ByPhase[phaseID] = total
 	}
-	
+
 	stats.LastUpdated = time.Now()
 	return &stats, nil
 }
@@ -1237,12 +1237,12 @@ func (s *Store) GetMostExpensiveCalls(projectID string, limit int) ([]*TokenUsag
 		return nil, fmt.Errorf("failed to get most expensive calls: %w", err)
 	}
 	defer rows.Close()
-	
+
 	var calls []*TokenUsage
 	for rows.Next() {
 		var usage TokenUsage
 		var phaseID, taskID sql.NullString
-		
+
 		err := rows.Scan(
 			&usage.ID,
 			&usage.ProjectID,
@@ -1258,17 +1258,17 @@ func (s *Store) GetMostExpensiveCalls(projectID string, limit int) ([]*TokenUsag
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan token usage: %w", err)
 		}
-		
+
 		if phaseID.Valid {
 			usage.PhaseID = phaseID.String
 		}
 		if taskID.Valid {
 			usage.TaskID = taskID.String
 		}
-		
+
 		calls = append(calls, &usage)
 	}
-	
+
 	return calls, nil
 }
 
@@ -1285,12 +1285,12 @@ func (s *Store) GetTokenUsageByTimeRange(projectID string, startTime, endTime ti
 		return nil, fmt.Errorf("failed to get token usage by time range: %w", err)
 	}
 	defer rows.Close()
-	
+
 	var usages []*TokenUsage
 	for rows.Next() {
 		var usage TokenUsage
 		var phaseID, taskID sql.NullString
-		
+
 		err := rows.Scan(
 			&usage.ID,
 			&usage.ProjectID,
@@ -1306,17 +1306,17 @@ func (s *Store) GetTokenUsageByTimeRange(projectID string, startTime, endTime ti
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan token usage: %w", err)
 		}
-		
+
 		if phaseID.Valid {
 			usage.PhaseID = phaseID.String
 		}
 		if taskID.Valid {
 			usage.TaskID = taskID.String
 		}
-		
+
 		usages = append(usages, &usage)
 	}
-	
+
 	return usages, nil
 }
 
@@ -1402,7 +1402,7 @@ func (s *Store) GetQuota(provider string) (*QuotaInfo, error) {
 	var info QuotaInfo
 	var tokensRemaining, tokensLimit sql.NullInt64
 	var costRemaining, costLimit sql.NullFloat64
-	
+
 	err := s.db.QueryRow(query, provider).Scan(
 		&info.Provider,
 		&tokensRemaining,
@@ -1418,7 +1418,7 @@ func (s *Store) GetQuota(provider string) (*QuotaInfo, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get quota: %w", err)
 	}
-	
+
 	// Convert nullable fields
 	if tokensRemaining.Valid {
 		val := int(tokensRemaining.Int64)
@@ -1434,7 +1434,7 @@ func (s *Store) GetQuota(provider string) (*QuotaInfo, error) {
 	if costLimit.Valid {
 		info.CostLimit = &costLimit.Float64
 	}
-	
+
 	return &info, nil
 }
 
@@ -1476,7 +1476,7 @@ func (s *Store) ResolveBlocker(id string, resolution string) error {
 	if err != nil {
 		return fmt.Errorf("failed to resolve blocker: %w", err)
 	}
-	
+
 	rows, err := result.RowsAffected()
 	if err != nil {
 		return fmt.Errorf("failed to get rows affected: %w", err)
@@ -1484,7 +1484,7 @@ func (s *Store) ResolveBlocker(id string, resolution string) error {
 	if rows == 0 {
 		return fmt.Errorf("blocker not found: %s", id)
 	}
-	
+
 	return nil
 }
 
@@ -1503,12 +1503,12 @@ func (s *Store) ListActiveBlockers(projectID string) ([]*Blocker, error) {
 		return nil, fmt.Errorf("failed to list active blockers: %w", err)
 	}
 	defer rows.Close()
-	
+
 	var blockers []*Blocker
 	for rows.Next() {
 		var blocker Blocker
 		var resolution sql.NullString
-		
+
 		err := rows.Scan(
 			&blocker.ID,
 			&blocker.TaskID,
@@ -1520,18 +1520,18 @@ func (s *Store) ListActiveBlockers(projectID string) ([]*Blocker, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan blocker: %w", err)
 		}
-		
+
 		if resolution.Valid {
 			blocker.Resolution = resolution.String
 		}
-		
+
 		blockers = append(blockers, &blocker)
 	}
-	
+
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("error iterating blockers: %w", err)
 	}
-	
+
 	return blockers, nil
 }
 

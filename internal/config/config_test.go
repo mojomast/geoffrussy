@@ -559,20 +559,20 @@ func (v *MockValidator) ValidateAPIKey(provider, key string) error {
 
 func TestSetAPIKeyWithValidation(t *testing.T) {
 	m := NewManager()
-	
+
 	// Test without validator (should succeed)
 	err := m.SetAPIKey("openai", "test-key")
 	if err != nil {
 		t.Fatalf("SetAPIKey without validator failed: %v", err)
 	}
-	
+
 	// Test with successful validator
 	m.SetValidator(&MockValidator{shouldFail: false})
 	err = m.SetAPIKey("openai", "valid-key")
 	if err != nil {
 		t.Fatalf("SetAPIKey with valid key failed: %v", err)
 	}
-	
+
 	// Test with failing validator
 	m.SetValidator(&MockValidator{shouldFail: true})
 	err = m.SetAPIKey("openai", "invalid-key")
@@ -583,20 +583,20 @@ func TestSetAPIKeyWithValidation(t *testing.T) {
 
 func TestValidateAPIKey(t *testing.T) {
 	m := NewManager()
-	
+
 	// Test without validator
 	err := m.ValidateAPIKey("openai", "test-key")
 	if err == nil {
 		t.Error("Expected error when no validator is configured")
 	}
-	
+
 	// Test with validator
 	m.SetValidator(&MockValidator{shouldFail: false})
 	err = m.ValidateAPIKey("openai", "valid-key")
 	if err != nil {
 		t.Fatalf("ValidateAPIKey failed: %v", err)
 	}
-	
+
 	// Test with failing validator
 	m.SetValidator(&MockValidator{shouldFail: true})
 	err = m.ValidateAPIKey("openai", "invalid-key")

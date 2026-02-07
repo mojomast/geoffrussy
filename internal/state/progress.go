@@ -25,8 +25,8 @@ type ProgressStats struct {
 	CompletionPercentage float64
 
 	// Time tracking
-	StartedAt         time.Time
-	ElapsedTime       time.Duration
+	StartedAt          time.Time
+	ElapsedTime        time.Duration
 	EstimatedRemaining time.Duration
 
 	// Current state

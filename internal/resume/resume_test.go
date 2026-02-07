@@ -323,43 +323,43 @@ func TestDetermineNextAction(t *testing.T) {
 
 	// Test cases
 	testCases := []struct {
-		name          string
-		stage         state.Stage
+		name           string
+		stage          state.Stage
 		expectedPhrase string
 	}{
 		{
-			name:          "Init stage",
-			stage:         state.StageInit,
+			name:           "Init stage",
+			stage:          state.StageInit,
 			expectedPhrase: "geoffrussy init",
 		},
 		{
-			name:          "Interview stage",
-			stage:         state.StageInterview,
+			name:           "Interview stage",
+			stage:          state.StageInterview,
 			expectedPhrase: "geoffrussy interview",
 		},
 		{
-			name:          "Design stage",
-			stage:         state.StageDesign,
+			name:           "Design stage",
+			stage:          state.StageDesign,
 			expectedPhrase: "geoffrussy design",
 		},
 		{
-			name:          "Plan stage",
-			stage:         state.StagePlan,
+			name:           "Plan stage",
+			stage:          state.StagePlan,
 			expectedPhrase: "geoffrussy plan",
 		},
 		{
-			name:          "Review stage",
-			stage:         state.StageReview,
+			name:           "Review stage",
+			stage:          state.StageReview,
 			expectedPhrase: "geoffrussy review",
 		},
 		{
-			name:          "Develop stage",
-			stage:         state.StageDevelop,
+			name:           "Develop stage",
+			stage:          state.StageDevelop,
 			expectedPhrase: "geoffrussy develop",
 		},
 		{
-			name:          "Complete stage",
-			stage:         state.StageComplete,
+			name:           "Complete stage",
+			stage:          state.StageComplete,
 			expectedPhrase: "complete",
 		},
 	}

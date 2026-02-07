@@ -503,7 +503,7 @@ func convertDevPlanToState(g *devplan.Generator, phase *devplan.Phase, projectID
 		Status:    state.PhaseStatus(phase.Status),
 		CreatedAt: phase.CreatedAt,
 	}
-	
+
 	var stateTasks []*state.Task
 	for _, t := range phase.Tasks {
 		// If ID is empty, generate one?
@@ -525,7 +525,6 @@ func convertDevPlanToState(g *devplan.Generator, phase *devplan.Phase, projectID
 		}
 		stateTasks = append(stateTasks, stateTask)
 	}
-	
+
 	return statePhase, stateTasks, nil
 }
-

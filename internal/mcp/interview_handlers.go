@@ -27,7 +27,7 @@ func NewInterviewHandlers(configManager *config.Manager) *InterviewHandlers {
 // RegisterHandlers registers interview tools with the registry
 func (h *InterviewHandlers) RegisterHandlers(registry *ToolRegistry) error {
 
-tools := []struct {
+	tools := []struct {
 		tool    Tool
 		handler ToolHandler
 	}{
@@ -161,20 +161,20 @@ func (h *InterviewHandlers) handleSubmitInterviewAnswer(ctx context.Context, arg
 	defer store.Close()
 
 	projectID := getProjectID(projectPath)
-	
-	// We need the provider to generate follow-ups or analysis if needed, 
+
+	// We need the provider to generate follow-ups or analysis if needed,
 	// but strictly for recording answer, we might get away without it if not needed?
 	// The engine usually needs it for follow-ups.
 	// Let's try to init it using default config.
 	prov, modelName, _ := h.initProvider("interview", "")
-	
+
 	engine := interview.NewEngine(store, prov, modelName)
 	session, err := engine.LoadSession(projectID)
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("Failed to load interview session: %v", err)), nil
 	}
 
-	// Validate question ID matches current session state? 
+	// Validate question ID matches current session state?
 	// The prompt says "Validate answer is for current question".
 	// Ideally we check if questionID matches what we expect, but user might be answering out of order if supported?
 	// For now, let's just record it.
@@ -232,18 +232,18 @@ func (h *InterviewHandlers) initProvider(stage, overrideModel string) (provider.
 
 func (h *InterviewHandlers) handleInterviewComplete(engine *interview.Engine, session *interview.InterviewSession) (*CallToolResult, error) {
 	complete, _ := engine.ValidateCompleteness(session)
-	
+
 	summary := "✅ Interview Complete!\n\nAll phases completed. Requirements have been saved.\n\nNext step: Run generate_design to create system architecture."
 	if !complete {
 		summary = "⚠️ Interview ended but some required questions are missing."
 	}
 
 	return &CallToolResult{
-		Content: []Content{TextContent(summary)},
-		IsError: false,
-		// In a real implementation we would put metadata here if the struct supported it
-	},
-	nil
+			Content: []Content{TextContent(summary)},
+			IsError: false,
+			// In a real implementation we would put metadata here if the struct supported it
+		},
+		nil
 }
 
 func (h *InterviewHandlers) formatQuestionResponse(session *interview.InterviewSession, question *interview.Question, prefix ...string) (*CallToolResult, error) {
@@ -258,10 +258,10 @@ func (h *InterviewHandlers) formatQuestionResponse(session *interview.InterviewS
 	text += "Provide your answer using the submit_interview_answer tool."
 
 	return &CallToolResult{
-		Content: []Content{TextContent(text)},
-		IsError: false,
-	},
-	nil
+			Content: []Content{TextContent(text)},
+			IsError: false,
+		},
+		nil
 }
 
 func formatPhaseName(phase interview.Phase) string {
@@ -338,11 +338,21 @@ func getProviderAndModel(cfgMgr *config.Manager, stage, overrideModel string) (s
 
 func guessProviderFromModel(model string) string {
 	lowerModel := strings.ToLower(model)
-	if strings.Contains(lowerModel, "gpt") { return "openai" }
-	if strings.Contains(lowerModel, "claude") { return "anthropic" }
-	if strings.Contains(lowerModel, "moonshot") || strings.Contains(lowerModel, "kimi") { return "kimi" }
-	if strings.Contains(lowerModel, "glm") || strings.Contains(lowerModel, "zai") { return "zai" }
-	if strings.Contains(lowerModel, "opencode") { return "opencode" }
+	if strings.Contains(lowerModel, "gpt") {
+		return "openai"
+	}
+	if strings.Contains(lowerModel, "claude") {
+		return "anthropic"
+	}
+	if strings.Contains(lowerModel, "moonshot") || strings.Contains(lowerModel, "kimi") {
+		return "kimi"
+	}
+	if strings.Contains(lowerModel, "glm") || strings.Contains(lowerModel, "zai") {
+		return "zai"
+	}
+	if strings.Contains(lowerModel, "opencode") {
+		return "opencode"
+	}
 	return ""
 }
 

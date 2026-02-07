@@ -164,7 +164,7 @@ func (m *Manager) SaveDetour(detour *Detour) error {
 	// 1. Serialize the detour
 	// 2. Store it in the database
 	// 3. Track it in the detours directory structure
-	
+
 	return nil
 }
 
@@ -175,7 +175,7 @@ func (m *Manager) TrackDetourInDirectory(detour *Detour, detourDir string) error
 	// 2. Create a markdown file for this detour
 	// 3. Include detour metadata, tasks, and status
 	// 4. Commit to Git
-	
+
 	return nil
 }
 
@@ -185,7 +185,7 @@ func (m *Manager) GetDetourDependencies(detour *Detour) ([]string, error) {
 	// 1. Analyze task dependencies
 	// 2. Find tasks that depend on detour tasks
 	// 3. Return the list of dependent task IDs
-	
+
 	return []string{}, nil
 }
 
@@ -196,7 +196,7 @@ func (m *Manager) UpdateTaskDependencies(detour *Detour, affectedTaskIDs []strin
 	// 2. Update their dependencies to include detour tasks
 	// 3. Persist the changes
 	// 4. Validate dependency graph remains acyclic
-	
+
 	return nil
 }
 
@@ -208,20 +208,20 @@ func (m *Manager) ExportDetourMarkdown(detour *Detour) (string, error) {
 	md += fmt.Sprintf("**Original Task:** %s\n", detour.TaskID)
 	md += fmt.Sprintf("**Status:** %s\n", detour.Status)
 	md += fmt.Sprintf("**Created:** %s\n\n", detour.CreatedAt.Format("2006-01-02 15:04:05"))
-	
+
 	if detour.CompletedAt != nil {
 		md += fmt.Sprintf("**Completed:** %s\n\n", detour.CompletedAt.Format("2006-01-02 15:04:05"))
 	}
-	
+
 	md += fmt.Sprintf("## Description\n\n%s\n\n", detour.Description)
 	md += fmt.Sprintf("## Reason\n\n%s\n\n", detour.Reason)
-	
+
 	if len(detour.NewTasks) > 0 {
 		md += "## New Tasks\n\n"
 		for i, task := range detour.NewTasks {
 			md += fmt.Sprintf("### %d. %s\n\n", i+1, task.Description)
 			md += fmt.Sprintf("**Status:** %s\n\n", task.Status)
-			
+
 			if len(task.AcceptanceCriteria) > 0 {
 				md += "**Acceptance Criteria:**\n"
 				for _, criterion := range task.AcceptanceCriteria {
@@ -231,7 +231,7 @@ func (m *Manager) ExportDetourMarkdown(detour *Detour) (string, error) {
 			}
 		}
 	}
-	
+
 	return md, nil
 }
 

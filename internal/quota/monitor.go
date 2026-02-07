@@ -22,15 +22,15 @@ func NewMonitor(store *state.Store) *Monitor {
 
 // ProviderStatus represents the status of a provider's rate limits and quotas
 type ProviderStatus struct {
-	Provider           string
-	RateLimitInfo      *state.RateLimitInfo
-	QuotaInfo          *state.QuotaInfo
-	RateLimitWarning   *Warning
-	QuotaWarning       *Warning
-	IsHealthy          bool
-	ShouldDelay        bool
-	RecommendedDelay   time.Duration
-	LastChecked        time.Time
+	Provider         string
+	RateLimitInfo    *state.RateLimitInfo
+	QuotaInfo        *state.QuotaInfo
+	RateLimitWarning *Warning
+	QuotaWarning     *Warning
+	IsHealthy        bool
+	ShouldDelay      bool
+	RecommendedDelay time.Duration
+	LastChecked      time.Time
 }
 
 // Warning represents a warning about approaching limits

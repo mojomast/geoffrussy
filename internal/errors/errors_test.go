@@ -8,51 +8,51 @@ import (
 
 func TestCategorize(t *testing.T) {
 	testCases := []struct {
-		name             string
-		err              error
-		expectedCategory ErrorCategory
+		name              string
+		err               error
+		expectedCategory  ErrorCategory
 		expectedRetryable bool
 	}{
 		{
-			name:             "Rate limit error",
-			err:              errors.New("rate limit exceeded"),
-			expectedCategory: APIError,
+			name:              "Rate limit error",
+			err:               errors.New("rate limit exceeded"),
+			expectedCategory:  APIError,
 			expectedRetryable: true,
 		},
 		{
-			name:             "API key error",
-			err:              errors.New("invalid API key"),
-			expectedCategory: APIError,
+			name:              "API key error",
+			err:               errors.New("invalid API key"),
+			expectedCategory:  APIError,
 			expectedRetryable: false,
 		},
 		{
-			name:             "Network timeout",
-			err:              errors.New("connection timeout"),
-			expectedCategory: NetworkError,
+			name:              "Network timeout",
+			err:               errors.New("connection timeout"),
+			expectedCategory:  NetworkError,
 			expectedRetryable: true,
 		},
 		{
-			name:             "Git merge conflict",
-			err:              errors.New("merge conflict detected"),
-			expectedCategory: GitError,
+			name:              "Git merge conflict",
+			err:               errors.New("merge conflict detected"),
+			expectedCategory:  GitError,
 			expectedRetryable: false,
 		},
 		{
-			name:             "Invalid input",
-			err:              errors.New("invalid argument provided"),
-			expectedCategory: UserError,
+			name:              "Invalid input",
+			err:               errors.New("invalid argument provided"),
+			expectedCategory:  UserError,
 			expectedRetryable: false,
 		},
 		{
-			name:             "Permission denied",
-			err:              errors.New("permission denied"),
-			expectedCategory: SystemError,
+			name:              "Permission denied",
+			err:               errors.New("permission denied"),
+			expectedCategory:  SystemError,
 			expectedRetryable: false,
 		},
 		{
-			name:             "Generic error",
-			err:              errors.New("something went wrong"),
-			expectedCategory: SystemError,
+			name:              "Generic error",
+			err:               errors.New("something went wrong"),
+			expectedCategory:  SystemError,
 			expectedRetryable: false,
 		},
 	}
