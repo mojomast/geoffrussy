@@ -3,13 +3,9 @@ package mcp
 import (
 	"context"
 	"fmt"
-	"path/filepath"
-	"strings"
 
 	"github.com/mojomast/geoffrussy/internal/config"
 	"github.com/mojomast/geoffrussy/internal/interview"
-	"github.com/mojomast/geoffrussy/internal/provider"
-	"github.com/mojomast/geoffrussy/internal/state"
 )
 
 // InterviewHandlers contains handlers for interview-related tools
@@ -95,8 +91,7 @@ func (h *InterviewHandlers) handleRunInterview(ctx context.Context, args map[str
 
 	projectID := getProjectID(projectPath)
 
-	// Initialize provider
-	prov, modelName, err := h.initProvider("interview", model)
+	prov, modelName, err := initProviderForStage(h.configManager, "interview", model)
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("Failed to initialize provider: %v", err)), nil
 	}
@@ -162,22 +157,13 @@ func (h *InterviewHandlers) handleSubmitInterviewAnswer(ctx context.Context, arg
 
 	projectID := getProjectID(projectPath)
 
-	// We need the provider to generate follow-ups or analysis if needed,
-	// but strictly for recording answer, we might get away without it if not needed?
-	// The engine usually needs it for follow-ups.
-	// Let's try to init it using default config.
-	prov, modelName, _ := h.initProvider("interview", "")
+	prov, modelName, _ := initProviderForStage(h.configManager, "interview", "")
 
 	engine := interview.NewEngine(store, prov, modelName)
 	session, err := engine.LoadSession(projectID)
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("Failed to load interview session: %v", err)), nil
 	}
-
-	// Validate question ID matches current session state?
-	// The prompt says "Validate answer is for current question".
-	// Ideally we check if questionID matches what we expect, but user might be answering out of order if supported?
-	// For now, let's just record it.
 
 	if err := engine.RecordAnswer(session, questionID, answer); err != nil {
 		return ErrorResult(fmt.Sprintf("Failed to record answer: %v", err)), nil
@@ -199,37 +185,6 @@ func (h *InterviewHandlers) handleSubmitInterviewAnswer(ctx context.Context, arg
 
 	return h.formatQuestionResponse(session, nextQuestion, fmt.Sprintf("✅ Answer recorded for %s", questionID))
 }
-
-// Helpers
-
-func (h *InterviewHandlers) initProvider(stage, overrideModel string) (provider.Provider, string, error) {
-	providerName, modelName, err := getProviderAndModel(h.configManager, stage, overrideModel)
-	if err != nil {
-		return nil, "", err
-	}
-
-	p, err := provider.CreateProvider(providerName)
-	if err != nil {
-		return nil, "", err
-	}
-
-	if providerName == "ollama" {
-		if err := p.Authenticate(""); err != nil {
-			return nil, "", err
-		}
-	} else {
-		apiKey, err := h.configManager.GetAPIKey(providerName)
-		if err != nil {
-			return nil, "", err
-		}
-		if err := p.Authenticate(apiKey); err != nil {
-			return nil, "", err
-		}
-	}
-
-	return p, modelName, nil
-}
-
 func (h *InterviewHandlers) handleInterviewComplete(engine *interview.Engine, session *interview.InterviewSession) (*CallToolResult, error) {
 	complete, _ := engine.ValidateCompleteness(session)
 
@@ -239,11 +194,9 @@ func (h *InterviewHandlers) handleInterviewComplete(engine *interview.Engine, se
 	}
 
 	return &CallToolResult{
-			Content: []Content{TextContent(summary)},
-			IsError: false,
-			// In a real implementation we would put metadata here if the struct supported it
-		},
-		nil
+		Content: []Content{TextContent(summary)},
+		IsError: false,
+	}, nil
 }
 
 func (h *InterviewHandlers) formatQuestionResponse(session *interview.InterviewSession, question *interview.Question, prefix ...string) (*CallToolResult, error) {
@@ -258,10 +211,9 @@ func (h *InterviewHandlers) formatQuestionResponse(session *interview.InterviewS
 	text += "Provide your answer using the submit_interview_answer tool."
 
 	return &CallToolResult{
-			Content: []Content{TextContent(text)},
-			IsError: false,
-		},
-		nil
+		Content: []Content{TextContent(text)},
+		IsError: false,
+	}, nil
 }
 
 func formatPhaseName(phase interview.Phase) string {
@@ -279,84 +231,4 @@ func formatPhaseName(phase interview.Phase) string {
 	default:
 		return string(phase)
 	}
-}
-
-// Re-implementing helper from internal/cli/utils.go as private method since we can't import main
-func getProviderAndModel(cfgMgr *config.Manager, stage, overrideModel string) (string, string, error) {
-	cfg := cfgMgr.GetConfig()
-
-	modelName := overrideModel
-	if modelName == "" {
-		var err error
-		modelName, err = cfgMgr.GetDefaultModel(stage)
-		if err != nil || modelName == "" {
-			// Fallback logic
-			for provider := range cfg.APIKeys {
-				if defaultModel, ok := cfg.DefaultModels[provider]; ok && defaultModel != "" {
-					return provider, defaultModel, nil
-				}
-				if _, ok := cfg.APIKeys[provider]; ok {
-					if provider == "requesty" {
-						return provider, "openai/gpt-4", nil
-					}
-					return provider, "gpt-3.5-turbo", nil
-				}
-			}
-			return "", "", fmt.Errorf("no API keys configured")
-		}
-	}
-
-	providerName := ""
-	if strings.Contains(modelName, "/") {
-		if _, ok := cfg.APIKeys["requesty"]; ok {
-			providerName = "requesty"
-		} else {
-			providerName = guessProviderFromModel(modelName)
-		}
-	} else {
-		providerName = guessProviderFromModel(modelName)
-		if providerName == "" {
-			for p := range cfg.APIKeys {
-				if _, ok := cfg.APIKeys[p]; ok {
-					providerName = p
-					break
-				}
-			}
-		}
-	}
-
-	if providerName == "" {
-		// Just try the first available key
-		for p := range cfg.APIKeys {
-			return p, modelName, nil
-		}
-		return "", "", fmt.Errorf("no provider configured for model: %s", modelName)
-	}
-
-	return providerName, modelName, nil
-}
-
-func guessProviderFromModel(model string) string {
-	lowerModel := strings.ToLower(model)
-	if strings.Contains(lowerModel, "gpt") {
-		return "openai"
-	}
-	if strings.Contains(lowerModel, "claude") {
-		return "anthropic"
-	}
-	if strings.Contains(lowerModel, "moonshot") || strings.Contains(lowerModel, "kimi") {
-		return "kimi"
-	}
-	if strings.Contains(lowerModel, "glm") || strings.Contains(lowerModel, "zai") {
-		return "zai"
-	}
-	if strings.Contains(lowerModel, "opencode") {
-		return "opencode"
-	}
-	return ""
-}
-
-func openStateStore(projectPath string) (*state.Store, error) {
-	dbPath := filepath.Join(projectPath, ".geoffrussy", "state.db")
-	return state.NewStore(dbPath)
 }

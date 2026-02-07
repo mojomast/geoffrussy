@@ -11,7 +11,6 @@ import (
 	"github.com/mojomast/geoffrussy/internal/config"
 	"github.com/mojomast/geoffrussy/internal/design"
 	"github.com/mojomast/geoffrussy/internal/devplan"
-	"github.com/mojomast/geoffrussy/internal/provider"
 	"github.com/mojomast/geoffrussy/internal/state"
 )
 
@@ -82,12 +81,12 @@ func (h *PlanHandlers) handleCreateDevPlan(ctx context.Context, args map[string]
 	// Load architecture from disk (same path used by CLI design flow).
 	var designArch design.Architecture
 	archPath := filepath.Join(projectPath, ".geoffrussy", "architecture.json")
-	archContent, err := openFile(archPath)
+	archContent, err := os.ReadFile(archPath)
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("Architecture file not found at %s. Please run generate_design first.", archPath)), nil
 	}
 
-	if err := unmarshalJSON(string(archContent), &designArch); err != nil {
+	if err := json.Unmarshal(archContent, &designArch); err != nil {
 		return ErrorResult(fmt.Sprintf("Failed to parse architecture file: %v", err)), nil
 	}
 
@@ -97,7 +96,7 @@ func (h *PlanHandlers) handleCreateDevPlan(ctx context.Context, args map[string]
 		return ErrorResult(fmt.Sprintf("Failed to get interview data: %v", err)), nil
 	}
 
-	prov, modelName, err := h.initProvider("plan", model)
+	prov, modelName, err := initProviderForStage(h.configManager, "plan", model)
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("Failed to initialize provider: %v", err)), nil
 	}
@@ -183,43 +182,4 @@ func (h *PlanHandlers) handleCreateDevPlan(ctx context.Context, args map[string]
 		len(phases), totalTasks, avgTasks)
 
 	return SuccessResult(summary), nil
-}
-
-// Helpers
-
-func (h *PlanHandlers) initProvider(stage, overrideModel string) (provider.Provider, string, error) {
-	// Duplicated again... ideally refactor later
-	providerName, modelName, err := getProviderAndModel(h.configManager, stage, overrideModel)
-	if err != nil {
-		return nil, "", err
-	}
-
-	p, err := provider.CreateProvider(providerName)
-	if err != nil {
-		return nil, "", err
-	}
-
-	if providerName == "ollama" {
-		if err := p.Authenticate(""); err != nil {
-			return nil, "", err
-		}
-	} else {
-		apiKey, err := h.configManager.GetAPIKey(providerName)
-		if err != nil {
-			return nil, "", err
-		}
-		if err := p.Authenticate(apiKey); err != nil {
-			return nil, "", err
-		}
-	}
-
-	return p, modelName, nil
-}
-
-func openFile(path string) ([]byte, error) {
-	return os.ReadFile(path)
-}
-
-func unmarshalJSON(data string, v interface{}) error {
-	return json.Unmarshal([]byte(data), v)
 }

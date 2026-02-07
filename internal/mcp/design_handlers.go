@@ -8,7 +8,6 @@ import (
 
 	"github.com/mojomast/geoffrussy/internal/config"
 	"github.com/mojomast/geoffrussy/internal/design"
-	"github.com/mojomast/geoffrussy/internal/provider"
 )
 
 // DesignHandlers contains handlers for design-related tools
@@ -107,7 +106,7 @@ func (h *DesignHandlers) handleGenerateDesign(ctx context.Context, args map[stri
 		return ErrorResult(fmt.Sprintf("Architecture already exists at %s. Use regenerate=true or regenerate_design to overwrite.", archPath)), nil
 	}
 
-	prov, modelName, err := h.initProvider("design", model)
+	prov, modelName, err := initProviderForStage(h.configManager, "design", model)
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("Failed to initialize provider: %v", err)), nil
 	}
@@ -125,11 +124,7 @@ func (h *DesignHandlers) handleGenerateDesign(ctx context.Context, args map[stri
 		return ErrorResult(fmt.Sprintf("Failed to export architecture: %v", err)), nil
 	}
 
-	if err := os.MkdirAll(filepath.Dir(archPath), 0o755); err != nil {
-		return ErrorResult(fmt.Sprintf("Failed to create architecture directory: %v", err)), nil
-	}
-
-	if err := os.WriteFile(archPath, []byte(jsonStr), 0o644); err != nil {
+	if err := writeArchitectureJSON(archPath, jsonStr); err != nil {
 		return ErrorResult(fmt.Sprintf("Failed to save architecture file: %v", err)), nil
 	}
 
@@ -179,7 +174,7 @@ func (h *DesignHandlers) handleRegenerateDesign(ctx context.Context, args map[st
 		interviewData.ProblemStatement += "\n\nAdditional Guidance: " + guidance
 	}
 
-	prov, modelName, err := h.initProvider("design", "")
+	prov, modelName, err := initProviderForStage(h.configManager, "design", "")
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("Failed to initialize provider: %v", err)), nil
 	}
@@ -196,46 +191,17 @@ func (h *DesignHandlers) handleRegenerateDesign(ctx context.Context, args map[st
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("Failed to export: %v", err)), nil
 	}
-	if err := os.MkdirAll(filepath.Dir(archPath), 0o755); err != nil {
-		return ErrorResult(fmt.Sprintf("Failed to create architecture directory: %v", err)), nil
-	}
-	if err := os.WriteFile(archPath, []byte(jsonStr), 0o644); err != nil {
+	if err := writeArchitectureJSON(archPath, jsonStr); err != nil {
 		return ErrorResult(fmt.Sprintf("Failed to save: %v", err)), nil
 	}
 
 	return SuccessResult("🏗️ Architecture Regenerated with guidance."), nil
 }
 
-// Helpers
-
-func (h *DesignHandlers) initProvider(stage, overrideModel string) (provider.Provider, string, error) {
-	// Re-use logic or duplicate
-	// Since I can't easily share the private helper from interview_handlers, I'll duplicate the logic for now
-	// or better, make a shared internal utility. But for this task, duplication is safer than refactoring widely.
-
-	providerName, modelName, err := getProviderAndModel(h.configManager, stage, overrideModel)
-	if err != nil {
-		return nil, "", err
+func writeArchitectureJSON(path, content string) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
 	}
 
-	p, err := provider.CreateProvider(providerName)
-	if err != nil {
-		return nil, "", err
-	}
-
-	if providerName == "ollama" {
-		if err := p.Authenticate(""); err != nil {
-			return nil, "", err
-		}
-	} else {
-		apiKey, err := h.configManager.GetAPIKey(providerName)
-		if err != nil {
-			return nil, "", err
-		}
-		if err := p.Authenticate(apiKey); err != nil {
-			return nil, "", err
-		}
-	}
-
-	return p, modelName, nil
+	return os.WriteFile(path, []byte(content), 0o644)
 }

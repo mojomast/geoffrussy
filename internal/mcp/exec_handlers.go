@@ -10,7 +10,7 @@ import (
 
 	"github.com/mojomast/geoffrussy/internal/config"
 	"github.com/mojomast/geoffrussy/internal/executor"
-	"github.com/mojomast/geoffrussy/internal/provider"
+	"github.com/mojomast/geoffrussy/internal/state"
 )
 
 // ExecHandlers contains handlers for execution-related tools
@@ -133,7 +133,7 @@ func (h *ExecHandlers) handleExecutePhase(ctx context.Context, args map[string]i
 	}
 	defer store.Close()
 
-	prov, modelName, err := h.initProvider("develop", model)
+	prov, modelName, err := initProviderForStage(h.configManager, "develop", model)
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("Failed to initialize provider: %v", err)), nil
 	}
@@ -141,50 +141,13 @@ func (h *ExecHandlers) handleExecutePhase(ctx context.Context, args map[string]i
 	exec := executor.NewExecutor(store, prov, modelName)
 	defer exec.Close()
 
-	// Start consuming updates
-	logMap := make(map[string]*strings.Builder)
-	tasksSucceeded := 0
-	tasksFailed := 0
-	phaseSummary := strings.Builder{}
+	logDir, err := ensureLogDir(projectPath)
+	if err != nil {
+		return ErrorResult(fmt.Sprintf("Failed to create log directory: %v", err)), nil
+	}
 
-	// Create log directory
-	logDir := filepath.Join(projectPath, ".geoffrussy", "logs")
-	os.MkdirAll(logDir, 0755)
-
-	done := make(chan bool)
-	go func() {
-		for update := range exec.StreamOutput() {
-			// Write to in-memory log for summary
-			// And append to per-task log files
-			if update.TaskID != "" {
-				if _, ok := logMap[update.TaskID]; !ok {
-					logMap[update.TaskID] = &strings.Builder{}
-				}
-				logMap[update.TaskID].WriteString(fmt.Sprintf("[%s] %s\n", update.Type, update.Content))
-
-				// Write to file
-				logFile := filepath.Join(logDir, fmt.Sprintf("%s.log", update.TaskID))
-				f, err := os.OpenFile(logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-				if err == nil {
-					f.WriteString(fmt.Sprintf("[%s] %s %s\n", time.Now().Format(time.RFC3339), update.Type, update.Content))
-					f.Close()
-				}
-			}
-
-			if update.Type == executor.TaskCompleted {
-				tasksSucceeded++
-				if update.TaskID != "" {
-					phaseSummary.WriteString(fmt.Sprintf("  ✅ Task %s: Completed\n", update.TaskID))
-				}
-			} else if update.Type == executor.TaskError {
-				tasksFailed++
-				if update.TaskID != "" {
-					phaseSummary.WriteString(fmt.Sprintf("  ❌ Task %s: Failed - %v\n", update.TaskID, update.Error))
-				}
-			}
-		}
-		done <- true
-	}()
+	collector := newExecutionCollector(logDir)
+	done := collector.start(exec)
 
 	startTime := time.Now()
 	// Execute Phase
@@ -196,9 +159,6 @@ func (h *ExecHandlers) handleExecutePhase(ctx context.Context, args map[string]i
 	}
 
 	// Wait for updates to process
-	// We need to close executor to close channel?
-	// Executor.Close() cancels context, but doesn't close channel immediately?
-	// Executor.Close() closes channel.
 	exec.Close()
 	<-done
 
@@ -206,11 +166,11 @@ func (h *ExecHandlers) handleExecutePhase(ctx context.Context, args map[string]i
 
 	// Construct result
 	resultText := fmt.Sprintf("✅ Phase execution completed (Duration: %s)\n\nTasks Summary:\n%s\nFiles Created: (check logs)\nTotal Cost: (check stats)",
-		duration.Round(time.Second), phaseSummary.String())
+		duration.Round(time.Second), collector.phaseSummary.String())
 
 	if execErr != nil {
 		resultText = fmt.Sprintf("⚠️ Phase execution failed (Duration: %s)\nError: %v\n\nTasks Summary:\n%s",
-			duration.Round(time.Second), execErr, phaseSummary.String())
+			duration.Round(time.Second), execErr, collector.phaseSummary.String())
 		// Don't return error result, return tool result with error details
 	}
 
@@ -236,7 +196,7 @@ func (h *ExecHandlers) handleExecuteTask(ctx context.Context, args map[string]in
 	}
 	defer store.Close()
 
-	prov, modelName, err := h.initProvider("develop", model)
+	prov, modelName, err := initProviderForStage(h.configManager, "develop", model)
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("Failed to initialize provider: %v", err)), nil
 	}
@@ -244,39 +204,31 @@ func (h *ExecHandlers) handleExecuteTask(ctx context.Context, args map[string]in
 	exec := executor.NewExecutor(store, prov, modelName)
 	// Don't close exec immediately, we need channel
 
-	logDir := filepath.Join(projectPath, ".geoffrussy", "logs")
-	os.MkdirAll(logDir, 0755)
+	logDir, err := ensureLogDir(projectPath)
+	if err != nil {
+		exec.Close()
+		return ErrorResult(fmt.Sprintf("Failed to create log directory: %v", err)), nil
+	}
 	logFile := filepath.Join(logDir, fmt.Sprintf("%s.log", taskID))
 
 	// Truncate log file for new run
-	os.WriteFile(logFile, []byte{}, 0644)
+	if err := os.WriteFile(logFile, []byte{}, 0o644); err != nil {
+		exec.Close()
+		return ErrorResult(fmt.Sprintf("Failed to initialize log file: %v", err)), nil
+	}
 
-	outputBuilder := strings.Builder{}
-	done := make(chan bool)
-
-	go func() {
-		for update := range exec.StreamOutput() {
-			line := fmt.Sprintf("[%s] %s\n", update.Type, update.Content)
-			outputBuilder.WriteString(line)
-
-			f, err := os.OpenFile(logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-			if err == nil {
-				f.WriteString(fmt.Sprintf("[%s] %s", time.Now().Format(time.RFC3339), line))
-				f.Close()
-			}
-		}
-		done <- true
-	}()
+	collector := newExecutionCollector(logDir)
+	done := collector.start(exec)
 
 	err = exec.ExecuteTask(taskID)
 	exec.Close()
 	<-done
 
 	if err != nil {
-		return ErrorResult(fmt.Sprintf("Task execution failed: %v\nOutput:\n%s", err, outputBuilder.String())), nil
+		return ErrorResult(fmt.Sprintf("Task execution failed: %v\nOutput:\n%s", err, collector.output.String())), nil
 	}
 
-	return SuccessResult(fmt.Sprintf("✅ Task %s completed successfully.\n\nOutput:\n%s", taskID, outputBuilder.String())), nil
+	return SuccessResult(fmt.Sprintf("✅ Task %s completed successfully.\n\nOutput:\n%s", taskID, collector.output.String())), nil
 }
 
 func (h *ExecHandlers) handleGetTaskOutput(ctx context.Context, args map[string]interface{}) (*CallToolResult, error) {
@@ -333,46 +285,27 @@ func (h *ExecHandlers) handleHandleBlocker(ctx context.Context, args map[string]
 	}
 	defer store.Close()
 
-	// We need executor to modify state?
-	// Executor has ResolveBlocker, SkipTask.
-	// But those methods are on Executor struct.
-	// We can use a dummy provider for executor as we might not need LLM for simple actions
-	// unless 'analyze' or 'modify' needs it.
-
-	prov, modelName, _ := h.initProvider("develop", "")
-	// If provider init fails (no key), we might still proceed if action is 'skip' or 'retry' if we don't need provider?
-	// But NewExecutor requires provider.
-	// Let's assume we can get one.
-
-	exec := executor.NewExecutor(store, prov, modelName)
-	defer exec.Close()
-
 	switch action {
 	case "retry":
-		// Retry calls ExecuteTask
-		// But this tool should just probably resolve it so next run picks it up?
-		// Or actually run it?
-		// "Attempt to resolve a blocker"
-		// If we retry, we are running it.
-		// Let's retry it.
-		// Reuse handleExecuteTask logic?
 		return h.handleExecuteTask(ctx, map[string]interface{}{
 			"projectPath": projectPath,
 			"taskId":      taskID,
 		})
 
 	case "skip":
+		exec, err := h.newExecutorForAction(store)
+		if err != nil {
+			return ErrorResult(fmt.Sprintf("Failed to initialize executor: %v", err)), nil
+		}
+		defer exec.Close()
+
 		if err := exec.SkipTask(taskID); err != nil {
 			return ErrorResult(fmt.Sprintf("Failed to skip task: %v", err)), nil
 		}
-		// Also resolve blocker if exists
-		// Executor.SkipTask doesn't auto-resolve blocker record.
-		// We should try to resolve it.
 		_ = exec.ResolveBlocker(taskID, "Skipped by user")
 		return SuccessResult(fmt.Sprintf("Task %s skipped.", taskID)), nil
 
 	case "modify":
-		// User provided new instructions?
 		modification, _ := ValidateAndGetString(args, "modification", false)
 		if modification == "" {
 			return ErrorResult("Modification description required for 'modify' action"), nil
@@ -388,16 +321,27 @@ func (h *ExecHandlers) handleHandleBlocker(ctx context.Context, args map[string]
 			return ErrorResult(fmt.Sprintf("Failed to update task: %v", err)), nil
 		}
 
-		// Resolve blocker
+		exec, err := h.newExecutorForAction(store)
+		if err != nil {
+			return ErrorResult(fmt.Sprintf("Failed to initialize executor: %v", err)), nil
+		}
+		defer exec.Close()
+
 		_ = exec.ResolveBlocker(taskID, "Task modified")
 
 		return SuccessResult(fmt.Sprintf("Task %s modified. You can now retry it.", taskID)), nil
 
 	case "analyze":
-		// Needs LLM to analyze error log and suggest fix
-		// Read logs
+		prov, modelName, err := initProviderForStage(h.configManager, "develop", "")
+		if err != nil {
+			return ErrorResult(fmt.Sprintf("Failed to initialize provider: %v", err)), nil
+		}
+
 		logFile := filepath.Join(projectPath, ".geoffrussy", "logs", fmt.Sprintf("%s.log", taskID))
-		logs, _ := os.ReadFile(logFile)
+		logs, err := os.ReadFile(logFile)
+		if err != nil {
+			logs = []byte("(no log file found)")
+		}
 
 		prompt := fmt.Sprintf("Analyze the failure for task %s.\nLogs:\n%s", taskID, string(logs))
 		resp, err := prov.Call(modelName, prompt)
@@ -412,33 +356,70 @@ func (h *ExecHandlers) handleHandleBlocker(ctx context.Context, args map[string]
 	}
 }
 
-// Helpers
+type executionCollector struct {
+	logDir       string
+	output       strings.Builder
+	phaseSummary strings.Builder
+}
 
-func (h *ExecHandlers) initProvider(stage, overrideModel string) (provider.Provider, string, error) {
-	// Duplicated again...
-	providerName, modelName, err := getProviderAndModel(h.configManager, stage, overrideModel)
+func newExecutionCollector(logDir string) *executionCollector {
+	return &executionCollector{logDir: logDir}
+}
+
+func (c *executionCollector) start(exec *executor.Executor) chan bool {
+	done := make(chan bool)
+
+	go func() {
+		defer func() { done <- true }()
+		for update := range exec.StreamOutput() {
+			line := fmt.Sprintf("[%s] %s\n", update.Type, update.Content)
+			c.output.WriteString(line)
+
+			if update.TaskID != "" {
+				_ = appendTaskLog(c.logDir, update.TaskID, fmt.Sprintf("[%s] %s %s\n", time.Now().Format(time.RFC3339), update.Type, update.Content))
+			}
+
+			switch update.Type {
+			case executor.TaskCompleted:
+				if update.TaskID != "" {
+					c.phaseSummary.WriteString(fmt.Sprintf("  ✅ Task %s: Completed\n", update.TaskID))
+				}
+			case executor.TaskError:
+				if update.TaskID != "" {
+					c.phaseSummary.WriteString(fmt.Sprintf("  ❌ Task %s: Failed - %v\n", update.TaskID, update.Error))
+				}
+			}
+		}
+	}()
+
+	return done
+}
+
+func ensureLogDir(projectPath string) (string, error) {
+	logDir := filepath.Join(projectPath, ".geoffrussy", "logs")
+	if err := os.MkdirAll(logDir, 0o755); err != nil {
+		return "", err
+	}
+	return logDir, nil
+}
+
+func appendTaskLog(logDir, taskID, line string) error {
+	logFile := filepath.Join(logDir, fmt.Sprintf("%s.log", taskID))
+	f, err := os.OpenFile(logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 	if err != nil {
-		return nil, "", err
+		return err
 	}
+	defer f.Close()
 
-	p, err := provider.CreateProvider(providerName)
+	_, err = f.WriteString(line)
+	return err
+}
+
+func (h *ExecHandlers) newExecutorForAction(store *state.Store) (*executor.Executor, error) {
+	prov, modelName, err := initProviderForStage(h.configManager, "develop", "")
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
 
-	if providerName == "ollama" {
-		if err := p.Authenticate(""); err != nil {
-			return nil, "", err
-		}
-	} else {
-		apiKey, err := h.configManager.GetAPIKey(providerName)
-		if err != nil {
-			return nil, "", err
-		}
-		if err := p.Authenticate(apiKey); err != nil {
-			return nil, "", err
-		}
-	}
-
-	return p, modelName, nil
+	return executor.NewExecutor(store, prov, modelName), nil
 }

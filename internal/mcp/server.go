@@ -41,19 +41,7 @@ type ServerConfig struct {
 func NewServer(config ServerConfig) *Server {
 	ctx, cancel := context.WithCancel(context.Background())
 
-	// Default to os stdin/stdout/stderr if not provided
-	stdin := config.Stdin
-	if stdin == nil {
-		stdin = os.Stdin
-	}
-	stdout := config.Stdout
-	if stdout == nil {
-		stdout = os.Stdout
-	}
-	stderr := config.Stderr
-	if stderr == nil {
-		stderr = os.Stderr
-	}
+	stdin, stdout, stderr := resolveIO(config)
 
 	server := &Server{
 		info: Implementation{
@@ -81,6 +69,25 @@ func NewServer(config ServerConfig) *Server {
 	}
 
 	return server
+}
+
+func resolveIO(config ServerConfig) (io.Reader, io.Writer, io.Writer) {
+	stdin := config.Stdin
+	if stdin == nil {
+		stdin = os.Stdin
+	}
+
+	stdout := config.Stdout
+	if stdout == nil {
+		stdout = os.Stdout
+	}
+
+	stderr := config.Stderr
+	if stderr == nil {
+		stderr = os.Stderr
+	}
+
+	return stdin, stdout, stderr
 }
 
 // logDebug logs debug messages to stderr if debug mode is enabled
@@ -143,12 +150,14 @@ func (s *Server) handleMessage(data []byte) error {
 		return s.sendError(req.ID, InvalidRequest, "Invalid Request", fmt.Errorf("unsupported JSON-RPC version: %s", req.JSONRPC))
 	}
 
-	// Handle the method
+	return s.dispatchMethod(req)
+}
+
+func (s *Server) dispatchMethod(req JSONRPCRequest) error {
 	switch req.Method {
 	case "initialize":
 		return s.handleInitialize(req)
 	case "initialized":
-		// Notification, no response needed
 		s.logDebug("Received initialized notification")
 		return nil
 	case "tools/list":
@@ -200,11 +209,12 @@ func (s *Server) handleToolsList(req JSONRPCRequest) error {
 
 // handleToolsCall handles tools/call requests
 func (s *Server) handleToolsCall(req JSONRPCRequest) error {
-	s.logDebug("Tool call: name=%s, args=%+v", req.Params)
 	var params CallToolParams
 	if err := json.Unmarshal(req.Params, &params); err != nil {
 		return s.sendError(req.ID, InvalidParams, "Invalid params", err)
 	}
+
+	s.logDebug("Tool call: name=%s, args=%+v", params.Name, params.Arguments)
 
 	s.logDebug("Executing tool: %s", params.Name)
 	result, err := s.toolRegistry.CallTool(s.ctx, params.Name, params.Arguments)
