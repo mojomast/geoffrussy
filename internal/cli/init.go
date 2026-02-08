@@ -17,14 +17,14 @@ import (
 
 var initCmd = &cobra.Command{
 	Use:   "init",
-	Short: "Initialize Geoffrey in the current project",
-	Long: `Initialize Geoffrey in the current project by creating configuration
+	Short: "Initialize Geoffrussy in the current project",
+	Long: `Initialize Geoffrussy in the current project by creating configuration
 directory structure and prompting for API keys.`,
 	RunE: runInit,
 }
 
 func runInit(cmd *cobra.Command, args []string) error {
-	fmt.Println("🚀 Initializing Geoffrey...")
+	fmt.Println("🚀 Initializing Geoffrussy...")
 
 	// Get current directory
 	cwd, err := os.Getwd()
@@ -131,7 +131,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 		fmt.Println("✓ Git repository already initialized")
 	}
 
-	fmt.Println("\n✨ Geoffrey initialized successfully!")
+	fmt.Println("\n✨ Geoffrussy initialized successfully!")
 	fmt.Println("\nNext steps:")
 	fmt.Println("  1. Run 'geoffrussy interview' to start the project interview")
 	fmt.Println("  2. Run 'geoffrussy design' to generate architecture")

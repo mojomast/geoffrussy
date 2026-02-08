@@ -11,24 +11,21 @@ import (
 
 // ReviewModel represents the TUI model for phase review
 type ReviewModel struct {
-	report           *reviewer.ReviewReport
-	selectedPhase    int
-	selectedIssue    int
-	improvements     []reviewer.Improvement
-	selectedImproves []int
-	mode             string // "review" or "improvements"
-	err              error
-	quitting         bool
+	report        *reviewer.ReviewReport
+	selectedPhase int
+	selectedIssue int
+	mode          string // "review" or "improvements"
+	err           error
+	quitting      bool
 }
 
 // NewReviewModel creates a new review TUI model
 func NewReviewModel(report *reviewer.ReviewReport) ReviewModel {
 	return ReviewModel{
-		report:           report,
-		selectedPhase:    0,
-		selectedIssue:    0,
-		selectedImproves: []int{},
-		mode:             "review",
+		report:        report,
+		selectedPhase: 0,
+		selectedIssue: 0,
+		mode:          "review",
 	}
 }
 
@@ -63,8 +60,11 @@ func (m ReviewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.selectedPhase++
 				}
 			} else {
-				if m.selectedIssue < len(m.improvements)-1 {
-					m.selectedIssue++
+				if m.selectedPhase < len(m.report.PhaseReviews) {
+					issues := m.report.PhaseReviews[m.selectedPhase].Issues
+					if m.selectedIssue < len(issues)-1 {
+						m.selectedIssue++
+					}
 				}
 			}
 
@@ -74,27 +74,8 @@ func (m ReviewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.mode = "improvements"
 				m.selectedIssue = 0
 			} else {
-				// Apply selected improvement
-				m.quitting = true
-				return m, tea.Quit
-			}
-
-		case "space":
-			if m.mode == "improvements" {
-				// Toggle improvement selection
-				found := false
-				for i, idx := range m.selectedImproves {
-					if idx == m.selectedIssue {
-						// Remove from selection
-						m.selectedImproves = append(m.selectedImproves[:i], m.selectedImproves[i+1:]...)
-						found = true
-						break
-					}
-				}
-				if !found {
-					// Add to selection
-					m.selectedImproves = append(m.selectedImproves, m.selectedIssue)
-				}
+				// Return to phase list
+				m.mode = "review"
 			}
 
 		case "esc":
@@ -106,14 +87,6 @@ func (m ReviewModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tea.Quit
 			}
 
-		case "a":
-			if m.mode == "improvements" {
-				// Select all improvements
-				m.selectedImproves = []int{}
-				for i := range m.improvements {
-					m.selectedImproves = append(m.selectedImproves, i)
-				}
-			}
 		}
 	}
 
@@ -245,20 +218,6 @@ func (m ReviewModel) renderImprovementsMode() string {
 			cursor = "▶ "
 		}
 
-		// Check if selected
-		selected := false
-		for _, idx := range m.selectedImproves {
-			if idx == i {
-				selected = true
-				break
-			}
-		}
-
-		checkbox := "[ ]"
-		if selected {
-			checkbox = "[✓]"
-		}
-
 		severityColor := "241"
 		switch issue.Severity {
 		case reviewer.SeverityCritical:
@@ -272,8 +231,8 @@ func (m ReviewModel) renderImprovementsMode() string {
 		severityStyle := lipgloss.NewStyle().
 			Foreground(lipgloss.Color(severityColor))
 
-		line := fmt.Sprintf("%s%s %s %s: %s",
-			cursor, checkbox,
+		line := fmt.Sprintf("%s%s %s: %s",
+			cursor,
 			severityStyle.Render(string(issue.Severity)),
 			issue.Type, issue.Description)
 
@@ -303,12 +262,7 @@ func (m ReviewModel) renderImprovementsMode() string {
 	helpStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("241"))
 
-	b.WriteString(helpStyle.Render("↑/↓: Navigate | Space: Toggle | A: Select All | Enter: Apply | Esc: Back"))
+	b.WriteString(helpStyle.Render("↑/↓: Navigate | Enter/Esc: Back"))
 
 	return b.String()
-}
-
-// GetSelectedImprovements returns the indices of selected improvements
-func (m ReviewModel) GetSelectedImprovements() []int {
-	return m.selectedImproves
 }

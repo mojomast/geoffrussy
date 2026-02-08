@@ -63,7 +63,7 @@ func runInterview(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("project not found. Please run 'geoffrussy init' first: %w", err)
 	}
 
-	providerName, modelName, err := getProviderAndModel(cfgMgr, "interview", interviewModel)
+	providerName, modelName, err := getProviderAndModel(cfgMgr, "interview.run", interviewModel)
 	if err != nil {
 		fmt.Println("\n⚠️  Could not automatically select provider and model")
 		fmt.Println("   Available options:")
@@ -86,6 +86,7 @@ func runInterview(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to get provider: %w", err)
 	}
+	printProviderUsageSnapshot(providerName, prov)
 
 	engine := interview.NewEngine(store, prov, modelName)
 
@@ -114,6 +115,13 @@ func runInterview(cmd *cobra.Command, args []string) error {
 		}
 
 		if question == nil {
+			if err := engine.SaveSession(session); err != nil {
+				return fmt.Errorf("failed to save completed session: %w", err)
+			}
+			if err := store.UpdateProjectStage(projectID, state.StageDesign); err != nil {
+				return fmt.Errorf("failed to update project stage: %w", err)
+			}
+
 			complete, missing := engine.ValidateCompleteness(session)
 			if complete {
 				fmt.Println("════════════════════════════════════════════════════════")

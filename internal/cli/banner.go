@@ -1,6 +1,6 @@
 package cli
 
-// Banner returns the Geoffrey ASCII art banner
+// Banner returns the Geoffrussy ASCII art banner
 func Banner() string {
 	return `
  /$$$$$$                       /$$$$$$   /$$$$$$                                                

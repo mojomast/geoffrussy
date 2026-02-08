@@ -6,17 +6,20 @@ import (
 	"path/filepath"
 	"strings"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/mojomast/geoffrussy/internal/config"
 	"github.com/mojomast/geoffrussy/internal/devplan"
 	"github.com/mojomast/geoffrussy/internal/provider"
 	"github.com/mojomast/geoffrussy/internal/reviewer"
 	"github.com/mojomast/geoffrussy/internal/state"
+	"github.com/mojomast/geoffrussy/internal/tui"
 	"github.com/spf13/cobra"
 )
 
 var (
 	reviewModel string
 	reviewApply bool
+	reviewTUI   bool
 )
 
 var reviewCmd = &cobra.Command{
@@ -31,6 +34,7 @@ var reviewCmd = &cobra.Command{
 func init() {
 	reviewCmd.Flags().StringVar(&reviewModel, "model", "", "Model to use for review")
 	reviewCmd.Flags().BoolVar(&reviewApply, "apply", false, "Apply improvements automatically")
+	reviewCmd.Flags().BoolVar(&reviewTUI, "tui", true, "Display review results in interactive TUI")
 }
 
 func runReview(cmd *cobra.Command, args []string) error {
@@ -60,6 +64,9 @@ func runReview(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("project not found: %w. Please run 'geoffrussy init' first", err)
 	}
+	if err := store.UpdateProjectStage(projectID, state.StageReview); err != nil {
+		return fmt.Errorf("failed to update project stage: %w", err)
+	}
 
 	statePhases, err := store.ListPhases(projectID)
 	if err != nil {
@@ -78,7 +85,7 @@ func runReview(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to convert phases: %w", err)
 	}
 
-	providerName, modelName, err := getProviderAndModel(cfgMgr, "review", reviewModel)
+	providerName, modelName, err := getProviderAndModel(cfgMgr, "review.phase", reviewModel)
 	if err != nil {
 		return fmt.Errorf("failed to get provider and model: %w", err)
 	}
@@ -92,6 +99,7 @@ func runReview(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to get provider: %w", err)
 	}
+	printProviderUsageSnapshot(providerName, prov)
 
 	rev := reviewer.NewReviewer(prov, modelName)
 	report, err := rev.ReviewAllPhases(devplanPhases)
@@ -104,6 +112,16 @@ func runReview(cmd *cobra.Command, args []string) error {
 	fmt.Printf("\n**Generated:** %s\n", report.Timestamp.Format("2006-01-02 15:04:05"))
 	fmt.Printf("**Total Phases:** %d\n", report.TotalPhases)
 	fmt.Printf("**Issues Found:** %d\n\n", report.IssuesFound)
+
+	if reviewTUI && !reviewApply {
+		model := tui.NewReviewModel(report)
+		program := tea.NewProgram(model, tea.WithAltScreen())
+		if _, err := program.Run(); err != nil {
+			return fmt.Errorf("failed to run review TUI: %w", err)
+		}
+		fmt.Println("\n✨ Review complete!")
+		return nil
+	}
 
 	fmt.Println("## Summary")
 	fmt.Println(report.Summary)

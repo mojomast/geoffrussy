@@ -6,9 +6,11 @@ import (
 	"path/filepath"
 	"strings"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/mojomast/geoffrussy/internal/blocker"
 	"github.com/mojomast/geoffrussy/internal/state"
 	"github.com/mojomast/geoffrussy/internal/token"
+	"github.com/mojomast/geoffrussy/internal/tui"
 	"github.com/spf13/cobra"
 )
 
@@ -16,6 +18,7 @@ var (
 	statusPhaseFilter  []int
 	statusStatusFilter []string
 	statusVerbose      bool
+	statusTUI          bool
 )
 
 var statusCmd = &cobra.Command{
@@ -30,6 +33,7 @@ func init() {
 	statusCmd.Flags().IntSliceVar(&statusPhaseFilter, "phase", []int{}, "Filter by phase numbers (comma-separated)")
 	statusCmd.Flags().StringSliceVar(&statusStatusFilter, "status", []string{}, "Filter by status (not_started, in_progress, completed, blocked)")
 	statusCmd.Flags().BoolVarP(&statusVerbose, "verbose", "v", false, "Show detailed information")
+	statusCmd.Flags().BoolVar(&statusTUI, "tui", true, "Display status in interactive TUI")
 }
 
 func runStatus(cmd *cobra.Command, args []string) error {
@@ -58,6 +62,42 @@ func runStatus(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
+	progress, err := store.CalculateProgress(projectID)
+	if err != nil {
+		return fmt.Errorf("failed to calculate progress: %w", err)
+	}
+
+	blockerDetector := blocker.NewDetector(store, nil)
+	blockers, _ := blockerDetector.ListActiveBlockers(projectID)
+
+	tokenCounter := token.NewCounter(store)
+	tokenStats, _ := tokenCounter.GetTotalTokens(projectID)
+
+	costEstimator := token.NewCostEstimator(store)
+	totalCost, _ := costEstimator.GetTotalCost(projectID)
+
+	if statusTUI {
+		model := tui.NewStatusModel()
+		model.SetProjectInfo(project.Name, string(project.CurrentStage), project.CurrentPhase)
+		model.SetPhaseProgress(progress.TotalPhases, progress.CompletedPhases, progress.InProgressPhases, progress.TotalPhases-progress.CompletedPhases-progress.InProgressPhases)
+
+		blockerLines := make([]string, 0, len(blockers))
+		for _, b := range blockers {
+			blockerLines = append(blockerLines, fmt.Sprintf("Task %s: %s", b.TaskID, b.Description))
+		}
+		model.SetBlockers(blockerLines)
+
+		if tokenStats != nil {
+			model.SetTokenUsage(tokenStats.TotalInput+tokenStats.TotalOutput, totalCost)
+		} else {
+			model.SetTokenUsage(0, totalCost)
+		}
+
+		program := tea.NewProgram(model, tea.WithAltScreen())
+		_, err := program.Run()
+		return err
+	}
+
 	// Display header
 	fmt.Println("📊 Project Status")
 	fmt.Println("============================================================")
@@ -69,12 +109,6 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	fmt.Printf("📅 Started: %s\n", project.CreatedAt.Format("2006-01-02 15:04:05"))
 	fmt.Printf("🏗️  Current Stage: %s\n", formatStage(project.CurrentStage))
 	fmt.Println()
-
-	// Calculate and display progress
-	progress, err := store.CalculateProgress(projectID)
-	if err != nil {
-		return fmt.Errorf("failed to calculate progress: %w", err)
-	}
 
 	displayProgressSummary(progress)
 
@@ -103,9 +137,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	}
 
 	// Display active blockers
-	blockerDetector := blocker.NewDetector(store, nil)
-	blockers, err := blockerDetector.ListActiveBlockers(projectID)
-	if err == nil && len(blockers) > 0 {
+	if len(blockers) > 0 {
 		fmt.Println("\n🚫 Active Blockers")
 		fmt.Println("============================================================")
 		for _, b := range blockers {
@@ -134,11 +166,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 			}
 		}
 
-		costEstimator := token.NewCostEstimator(store)
-		totalCost, err := costEstimator.GetTotalCost(projectID)
-		if err == nil {
-			fmt.Printf("\n  Total Cost: $%.2f\n", totalCost)
-		}
+		fmt.Printf("\n  Total Cost: $%.2f\n", totalCost)
 	}
 
 	fmt.Println()

@@ -1,4 +1,4 @@
-# Manual Testing Checklist - Geoffrey AI Coding Agent
+# Manual Testing Checklist - Geoffrussy AI Coding Agent
 
 **Version**: 0.1.0  
 **Date**: January 29, 2026  
@@ -361,7 +361,7 @@ geoffrussy interview
 
 #### Test 2.3.1: Detect Conflicts
 ```
-# Create conflicting changes outside Geoffrey
+# Create conflicting changes outside Geoffrussy
 geoffrussy design
 ```
 **Expected**:
@@ -374,7 +374,7 @@ geoffrussy design
 **Expected**:
 - [ ] Clear instructions provided
 - [ ] Can resolve manually
-- [ ] Geoffrey can continue after resolution
+- [ ] Geoffrussy can continue after resolution
 
 #### Test 2.3.3: Uncommitted Changes
 **Expected**:

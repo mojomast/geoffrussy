@@ -1,8 +1,8 @@
-# Geoffrey - Handoff Guide
+# Geoffrussy - Handoff Guide
 
 ## Overview
 
-Geoffrey is an AI-powered software development orchestration tool that helps you:
+Geoffrussy is an AI-powered software development orchestration tool that helps you:
 1. Interview project requirements
 2. Generate architecture designs
 3. Create development plans
@@ -196,7 +196,7 @@ When running `geoffrussy develop`, you'll see:
 
 ```
 ┌────────────────────────────────────────────────────────────┐
-│  🚀 Geoffrey Execution Monitor                  │
+│  🚀 Geoffrussy Execution Monitor                  │
 │                                                    │
 │  Phase: Phase 2 - Core API                     │
 │  Task: Implement API server skeleton                │
@@ -256,12 +256,12 @@ If the TUI doesn't show progress:
 
 ## Best Practices
 
-1. **Start from interview** - Let Geoffrey understand your requirements first
+1. **Start from interview** - Let Geoffrussy understand your requirements first
 2. **Review architecture** - Check generated architecture matches your vision
 3. **Adjust plan** - Modify phases before development if needed
 4. **Use specific models** - Different tasks may need different models
 5. **Monitor execution** - Watch TUI for progress and catch errors early
-6. **Review generated code** - Geoffrey writes files, but review quality
+6. **Review generated code** - Geoffrussy writes files, but review quality
 
 ## Model Recommendations
 

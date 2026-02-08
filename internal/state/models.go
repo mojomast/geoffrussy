@@ -36,7 +36,7 @@ const (
 	TaskSkipped    TaskStatus = "skipped"
 )
 
-// Project represents a Geoffrey project
+// Project represents a Geoffrussy project
 type Project struct {
 	ID           string
 	Name         string

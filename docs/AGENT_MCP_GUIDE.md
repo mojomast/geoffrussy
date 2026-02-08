@@ -1,6 +1,6 @@
-# Geoffrey MCP Server - Agent Guide
+# Geoffrussy MCP Server - Agent Guide
 
-This guide is written for AI agents to help them effectively use Geoffrey's MCP server to manage software development projects.
+This guide is written for AI agents to help them effectively use Geoffrussy's MCP server to manage software development projects.
 
 ## Quick Reference
 

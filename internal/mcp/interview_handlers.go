@@ -6,6 +6,7 @@ import (
 
 	"github.com/mojomast/geoffrussy/internal/config"
 	"github.com/mojomast/geoffrussy/internal/interview"
+	"github.com/mojomast/geoffrussy/internal/state"
 )
 
 // InterviewHandlers contains handlers for interview-related tools
@@ -91,7 +92,7 @@ func (h *InterviewHandlers) handleRunInterview(ctx context.Context, args map[str
 
 	projectID := getProjectID(projectPath)
 
-	prov, modelName, err := initProviderForStage(h.configManager, "interview", model)
+	prov, modelName, err := initProviderForStage(h.configManager, "interview.run", model)
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("Failed to initialize provider: %v", err)), nil
 	}
@@ -127,7 +128,7 @@ func (h *InterviewHandlers) handleRunInterview(ctx context.Context, args map[str
 	}
 
 	if question == nil {
-		return h.handleInterviewComplete(engine, session)
+		return h.completeInterview(projectID, store, engine, session)
 	}
 
 	return h.formatQuestionResponse(session, question)
@@ -157,7 +158,7 @@ func (h *InterviewHandlers) handleSubmitInterviewAnswer(ctx context.Context, arg
 
 	projectID := getProjectID(projectPath)
 
-	prov, modelName, _ := initProviderForStage(h.configManager, "interview", "")
+	prov, modelName, _ := initProviderForStage(h.configManager, "interview.followup", "")
 
 	engine := interview.NewEngine(store, prov, modelName)
 	session, err := engine.LoadSession(projectID)
@@ -180,11 +181,24 @@ func (h *InterviewHandlers) handleSubmitInterviewAnswer(ctx context.Context, arg
 	}
 
 	if nextQuestion == nil {
-		return h.handleInterviewComplete(engine, session)
+		return h.completeInterview(projectID, store, engine, session)
 	}
 
 	return h.formatQuestionResponse(session, nextQuestion, fmt.Sprintf("✅ Answer recorded for %s", questionID))
 }
+
+func (h *InterviewHandlers) completeInterview(projectID string, store *state.Store, engine *interview.Engine, session *interview.InterviewSession) (*CallToolResult, error) {
+	if err := engine.SaveSession(session); err != nil {
+		return ErrorResult(fmt.Sprintf("Failed to save completed session: %v", err)), nil
+	}
+
+	if err := store.UpdateProjectStage(projectID, state.StageDesign); err != nil {
+		return ErrorResult(fmt.Sprintf("Failed to update project stage: %v", err)), nil
+	}
+
+	return h.handleInterviewComplete(engine, session)
+}
+
 func (h *InterviewHandlers) handleInterviewComplete(engine *interview.Engine, session *interview.InterviewSession) (*CallToolResult, error) {
 	complete, _ := engine.ValidateCompleteness(session)
 

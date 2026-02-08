@@ -46,11 +46,12 @@ func formatTimeSince(t time.Time) string {
 
 func getProviderAndModel(cfgMgr *config.Manager, stage, overrideModel string) (string, string, error) {
 	cfg := cfgMgr.GetConfig()
+	stage = normalizeModelStage(stage)
 
 	modelName := overrideModel
 	if modelName == "" {
 		var err error
-		modelName, err = cfgMgr.GetDefaultModel(stage)
+		modelName, err = cfgMgr.ResolveDefaultModel(stage)
 		if err != nil || modelName == "" {
 			for provider := range cfg.APIKeys {
 				if defaultModel, ok := cfg.DefaultModels[provider]; ok && defaultModel != "" {
@@ -71,6 +72,8 @@ func getProviderAndModel(cfgMgr *config.Manager, stage, overrideModel string) (s
 	if strings.Contains(modelName, "/") {
 		if _, ok := cfg.APIKeys["requesty"]; ok {
 			providerName = "requesty"
+		} else if _, ok := cfg.APIKeys["openrouter"]; ok {
+			providerName = "openrouter"
 		} else {
 			providerName = guessProviderFromModel(modelName)
 		}
@@ -100,11 +103,45 @@ func getProviderAndModel(cfgMgr *config.Manager, stage, overrideModel string) (s
 	return providerName, modelName, nil
 }
 
+func normalizeModelStage(stage string) string {
+	if stage == "plan" || stage == "plan.generate" {
+		return "devplan.generate"
+	}
+	return stage
+}
+
+func printProviderUsageSnapshot(providerName string, p provider.Provider) {
+	rateInfo, rateErr := p.GetRateLimitInfo()
+	quotaInfo, quotaErr := p.GetQuotaInfo()
+
+	if rateInfo == nil && quotaInfo == nil {
+		return
+	}
+
+	fmt.Printf("📊 Provider Usage Snapshot (%s)\n", providerName)
+	if rateErr == nil && rateInfo != nil && rateInfo.RequestsLimit > 0 {
+		fmt.Printf("   Rate Limit: %d / %d remaining\n", rateInfo.RequestsRemaining, rateInfo.RequestsLimit)
+	}
+
+	if quotaErr == nil && quotaInfo != nil {
+		if quotaInfo.TokensLimit > 0 {
+			fmt.Printf("   Token Quota: %d / %d remaining\n", quotaInfo.TokensRemaining, quotaInfo.TokensLimit)
+		}
+		if quotaInfo.CostLimit > 0 {
+			fmt.Printf("   Cost Quota: $%.2f / $%.2f remaining\n", quotaInfo.CostRemaining, quotaInfo.CostLimit)
+		}
+	}
+}
+
 func guessProviderFromModel(model string) string {
 	lowerModel := strings.ToLower(model)
 
 	if strings.Contains(lowerModel, "gpt") {
 		return "openai"
+	}
+
+	if strings.Contains(lowerModel, "codex") {
+		return "openai-codex"
 	}
 
 	if strings.Contains(lowerModel, "claude") {
@@ -121,6 +158,30 @@ func guessProviderFromModel(model string) string {
 
 	if strings.Contains(lowerModel, "opencode") {
 		return "opencode"
+	}
+
+	if strings.Contains(lowerModel, "llama") || strings.Contains(lowerModel, "mixtral") {
+		return "groq"
+	}
+
+	if strings.Contains(lowerModel, "mistral") || strings.Contains(lowerModel, "pixtral") {
+		return "mistral"
+	}
+
+	if strings.Contains(lowerModel, "sonar") || strings.Contains(lowerModel, "perplexity") {
+		return "perplexity"
+	}
+
+	if strings.Contains(lowerModel, "fireworks") {
+		return "fireworks"
+	}
+
+	if strings.Contains(lowerModel, "deepinfra") {
+		return "deepinfra"
+	}
+
+	if strings.Contains(lowerModel, "qwen") || strings.Contains(lowerModel, "deepseek") {
+		return "together"
 	}
 
 	return ""

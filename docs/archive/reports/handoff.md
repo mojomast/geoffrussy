@@ -3,7 +3,7 @@ Handoff — Next Steps
 ## Recent Completed Work (2026-01-29)
 
 ### UI and User Experience Enhancements
-- ✅ **ASCII Art Banner**: Added Geoffrey ASCII art that displays on all commands
+- ✅ **ASCII Art Banner**: Added Geoffrussy ASCII art that displays on all commands
 - ✅ **Enhanced Execution Monitor**: Improved TUI with:
   - Project progress (tasks/phases completed, completion %)
   - Real-time token usage tracking (input/output tokens)
@@ -41,7 +41,7 @@ Handoff — Next Steps
 ## Current Status
 
 ### Working CLI Commands
-- ✅ `init` - Initialize Geoffrey in current project
+- ✅ `init` - Initialize Geoffrussy in current project
 - ✅ `interview` - Start or resume project interview
 - ✅ `design` - Generate or refine architecture
 - ✅ `plan` - Generate or manipulate DevPlan

@@ -11,7 +11,7 @@
 ### Application Features
 - **IRC Client**: Basic IRC protocol implementation (connect to server, join channels, send/receive messages)
 - **LLM Integration**: Connect to an LLM API (configurable provider like OpenAI, Anthropic, etc.)
-- **Agent Mode**: LLM acts as an agent that can use geoffrussy MCP tools to interact with Geoffrey project
+- **Agent Mode**: LLM acts as an agent that can use geoffrussy MCP tools to interact with Geoffrussy project
 - **Simple UI**: Command-line interface for chatting with an IRC channel
 
 ### Mandatory MCP Usage
@@ -116,7 +116,7 @@
      └────────┘ └─────┬────┘
                       │
                  ┌────┴────┐
-                 │Geoffrey │
+                 │Geoffrussy │
                  │   MCP   │
                  │ Server  │
                  └─────────┘
@@ -156,14 +156,14 @@
 ```python
 # MCP calls required:
 1. tools/call create_checkpoint - checkpoint: "agent-mode-start"
-2. Implement tool calling with Geoffrey MCP
+2. Implement tool calling with Geoffrussy MCP
 3. Test agent mode
 4. tools/call create_checkpoint - checkpoint: "agent-mode-complete"
 ```
 
 **Key Functions:**
 - `AgentChat(userMessage)` - Process message as agent
-- `GetToolDefinitions()` - Fetch Geoffrey tools via MCP
+- `GetToolDefinitions()` - Fetch Geoffrussy tools via MCP
 - `CallTool(toolName, arguments)` - Execute MCP tool
 - `FormatToolCall(tool, result)` - Format tool response for user
 
@@ -238,7 +238,7 @@ When agent mode is enabled:
 
 1. **Receive IRC message** from user
 2. **Send to LLM** with:
-   - System prompt: "You are an agent with access to Geoffrey MCP tools. Use tools to help users interact with the Geoffrey project."
+   - System prompt: "You are an agent with access to Geoffrussy MCP tools. Use tools to help users interact with the Geoffrussy project."
    - Available tools: Fetch via `tools/list` from geoffrussy MCP
    - User message: The IRC message
 3. **LLM decides** whether to call a tool
@@ -256,8 +256,8 @@ Agent:
 1. LLM recognizes need for project information
 2. LLM calls get_status tool via MCP
 3. MCP returns: "Stage: design, Progress: 25%"
-4. LLM responds: "The Geoffrey project is currently in design stage with 25% progress."
-5. Agent sends to IRC: "The Geoffrey project is currently in design stage with 25% progress."
+4. LLM responds: "The Geoffrussy project is currently in design stage with 25% progress."
+5. Agent sends to IRC: "The Geoffrussy project is currently in design stage with 25% progress."
 ```
 
 ---
@@ -271,8 +271,8 @@ Create a `.irc-llm-agent.json` configuration file:
   "irc": {
     "server": "irc.libera.chat",
     "port": 6667,
-    "nickname": "GeoffreyBot",
-    "channels": ["#geoffrey-dev"]
+    "nickname": "GeoffrussyBot",
+    "channels": ["#geoffrussy-dev"]
   },
   "llm": {
     "provider": "openai",
@@ -305,7 +305,7 @@ irc-llm-agent/
 ├── agent/
 │   └── agent.go          # Agent mode implementation
 └── mcp/
-    └── client.go          # Geoffrey MCP client
+    └── client.go          # Geoffrussy MCP client
 ```
 
 ---
@@ -314,7 +314,7 @@ irc-llm-agent/
 
 ✅ IRC client can connect and join channels
 ✅ LLM integration works with at least one provider (OpenAI or Anthropic)
-✅ Agent mode successfully uses Geoffrey MCP tools
+✅ Agent mode successfully uses Geoffrussy MCP tools
 ✅ Agent can call get_status, get_stats, list_phases, create_checkpoint
 ✅ Checkpoints created at each major milestone
 ✅ All operations tracked via MCP tools
@@ -335,7 +335,7 @@ irc-llm-agent/
 
 ## Getting Started
 
-1. **Start Geoffrey MCP server** in a separate terminal:
+1. **Start Geoffrussy MCP server** in a separate terminal:
    ```bash
    geoffrussy mcp-server --project-path /path/to/project
    ```
@@ -356,7 +356,7 @@ irc-llm-agent/
    - Join a test channel
    - Enable agent mode
    - Send "What's the project status?"
-   - Verify agent responds with Geoffrey MCP data
+   - Verify agent responds with Geoffrussy MCP data
 
 ---
 
@@ -370,4 +370,4 @@ irc-llm-agent/
 
 ---
 
-**Good luck! The IRC client will serve as a demonstration of how to build applications that use Geoffrey MCP for agent capabilities.**
+**Good luck! The IRC client will serve as a demonstration of how to build applications that use Geoffrussy MCP for agent capabilities.**

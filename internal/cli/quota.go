@@ -2,10 +2,12 @@ package cli
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/mojomast/geoffrussy/internal/config"
+	"github.com/mojomast/geoffrussy/internal/provider"
 	"github.com/mojomast/geoffrussy/internal/quota"
 	"github.com/mojomast/geoffrussy/internal/state"
 	"github.com/spf13/cobra"
@@ -37,9 +39,12 @@ func runQuota(cmd *cobra.Command, args []string) error {
 	}
 	cfg := cfgMgr.GetConfig()
 
-	// Initialize state store
-	configDir := filepath.Dir(cfg.ConfigPath)
-	dbPath := filepath.Join(configDir, "geoffrussy.db")
+	// Initialize state store (project local)
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("failed to get current directory: %w", err)
+	}
+	dbPath := filepath.Join(cwd, ".geoffrussy", "state.db")
 	store, err := state.NewStore(dbPath)
 	if err != nil {
 		return fmt.Errorf("failed to initialize state store: %w", err)
@@ -63,8 +68,27 @@ func runQuota(cmd *cobra.Command, args []string) error {
 	fmt.Println()
 
 	if quotaRefresh {
-		fmt.Println("⚠️  Refresh flag specified, but provider instances not available.")
-		fmt.Println("   Showing cached data instead.")
+		fmt.Println("🔄 Refreshing provider quota/rate data...")
+		for _, providerName := range providers {
+			bridge := provider.NewBridge()
+			if err := setupProvider(bridge, cfgMgr, providerName); err != nil {
+				fmt.Printf("   ⚠️  %s: %v\n", providerName, err)
+				continue
+			}
+
+			prov, err := bridge.GetProvider(providerName)
+			if err != nil {
+				fmt.Printf("   ⚠️  %s: %v\n", providerName, err)
+				continue
+			}
+
+			if _, err := monitor.RefreshProviderStatus(providerName, prov); err != nil {
+				fmt.Printf("   ⚠️  %s refresh failed: %v\n", providerName, err)
+				continue
+			}
+
+			fmt.Printf("   ✅ %s refreshed\n", providerName)
+		}
 		fmt.Println()
 	}
 
@@ -97,8 +121,16 @@ func runQuota(cmd *cobra.Command, args []string) error {
 
 // getConfiguredProviders returns list of providers with API keys
 func getConfiguredProviders(cfg *config.Config) []string {
-	var providers []string
+	providerSet := make(map[string]bool)
 	for provider := range cfg.APIKeys {
+		providerSet[provider] = true
+	}
+	for provider := range cfg.APIKeySources {
+		providerSet[provider] = true
+	}
+
+	providers := make([]string, 0, len(providerSet))
+	for provider := range providerSet {
 		providers = append(providers, provider)
 	}
 	return providers

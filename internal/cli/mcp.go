@@ -19,7 +19,7 @@ var (
 var mcpCmd = &cobra.Command{
 	Use:   "mcp-server",
 	Short: "Start MCP server for AI agent integration",
-	Long: `Start a Model Context Protocol (MCP) server that exposes Geoffrey's
+	Long: `Start a Model Context Protocol (MCP) server that exposes Geoffrussy's
 capabilities as tools and resources for AI agents to autonomously build software.
 
 The MCP server runs over stdio transport and follows the JSON-RPC 2.0 protocol.
@@ -28,7 +28,7 @@ It can be connected to by any MCP-compatible client such as Claude for Desktop.
 Example configuration for Claude for Desktop (claude_desktop_config.json):
 {
   "mcpServers": {
-    "geoffrey": {
+    "geoffrussy": {
       "command": "geoffrussy",
       "args": ["mcp-server", "--project-path", "/path/to/project"]
     }
@@ -71,7 +71,7 @@ func runMCPServer(cmd *cobra.Command, args []string) error {
 
 	// Create MCP server
 	server := mcp.NewServer(mcp.ServerConfig{
-		Name:    "geoffrey",
+		Name:    "geoffrussy",
 		Version: version,
 		Store:   store,
 		Stdin:   os.Stdin,
@@ -117,7 +117,7 @@ func runMCPServer(cmd *cobra.Command, args []string) error {
 	}
 
 	// Log startup to stderr (not stdout which is used for JSON-RPC)
-	fmt.Fprintf(os.Stderr, "Geoffrey MCP Server v%s starting...\n", version)
+	fmt.Fprintf(os.Stderr, "Geoffrussy MCP Server v%s starting...\n", version)
 	fmt.Fprintf(os.Stderr, "Project path: %s\n", projectPath)
 	fmt.Fprintf(os.Stderr, "Listening for MCP requests on stdin/stdout\n")
 

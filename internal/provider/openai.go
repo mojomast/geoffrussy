@@ -21,8 +21,17 @@ type OpenAIProvider struct {
 
 // NewOpenAIProvider creates a new OpenAI provider
 func NewOpenAIProvider() *OpenAIProvider {
+	return NewOpenAIProviderWithName("openai")
+}
+
+// NewOpenAIProviderWithName creates a new OpenAI-compatible provider with a custom name.
+func NewOpenAIProviderWithName(name string) *OpenAIProvider {
+	if name == "" {
+		name = "openai"
+	}
+
 	return &OpenAIProvider{
-		BaseProvider: NewBaseProvider("openai"),
+		BaseProvider: NewBaseProvider(name),
 		baseURL:      "https://api.openai.com/v1",
 		httpClient: &http.Client{
 			Timeout: 60 * time.Second,
@@ -136,8 +145,9 @@ func (o *OpenAIProvider) ListModels() ([]Model, error) {
 
 	models := make([]Model, 0, len(modelsResp.Data))
 	for _, m := range modelsResp.Data {
-		// Only include chat models
-		if strings.Contains(m.ID, "gpt") {
+		isOpenAIFamily := o.Name() == "openai" || o.Name() == "openai-codex"
+		includeModel := !isOpenAIFamily || strings.Contains(m.ID, "gpt") || strings.Contains(m.ID, "codex") || strings.HasPrefix(m.ID, "o")
+		if includeModel {
 			model := Model{
 				Provider:    o.Name(),
 				Name:        m.ID,

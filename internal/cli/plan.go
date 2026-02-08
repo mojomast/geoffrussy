@@ -100,11 +100,12 @@ func handlePlanGeneration(store *state.Store, cfgMgr *config.Manager, projectID 
 	}
 
 	// Setup provider
-	prov, modelName, err := setupPlanProvider(cfgMgr, planModel)
+	prov, modelName, providerName, err := setupPlanProvider(cfgMgr, planModel)
 	if err != nil {
 		return err
 	}
 	fmt.Printf("   Using model: %s\n", modelName)
+	printProviderUsageSnapshot(providerName, prov)
 
 	generator := devplan.NewGenerator(prov, modelName)
 
@@ -141,6 +142,16 @@ func handlePlanGeneration(store *state.Store, cfgMgr *config.Manager, projectID 
 	// Update project stage
 	if err := store.UpdateProjectStage(projectID, state.StagePlan); err != nil {
 		return fmt.Errorf("failed to update project stage: %w", err)
+	}
+
+	if len(phases) > 0 {
+		project, err := store.GetProject(projectID)
+		if err == nil {
+			project.CurrentPhase = phases[0].ID
+			if updateErr := store.UpdateProject(project); updateErr != nil {
+				return fmt.Errorf("failed to update current phase: %w", updateErr)
+			}
+		}
 	}
 
 	fmt.Println("✅ Plan generated and saved successfully!")
@@ -386,23 +397,23 @@ func saveAllPhases(store *state.Store, generator *devplan.Generator, phases []de
 
 // Helpers
 
-func setupPlanProvider(cfgMgr *config.Manager, model string) (provider.Provider, string, error) {
-	providerName, modelName, err := getProviderAndModel(cfgMgr, "plan", model)
+func setupPlanProvider(cfgMgr *config.Manager, model string) (provider.Provider, string, string, error) {
+	providerName, modelName, err := getProviderAndModel(cfgMgr, "devplan.generate", model)
 	if err != nil {
-		return nil, "", err
+		return nil, "", "", err
 	}
 
 	bridge := provider.NewBridge()
 	if err := setupProvider(bridge, cfgMgr, providerName); err != nil {
-		return nil, "", err
+		return nil, "", "", err
 	}
 
 	prov, err := bridge.GetProvider(providerName)
 	if err != nil {
-		return nil, "", err
+		return nil, "", "", err
 	}
 
-	return prov, modelName, nil
+	return prov, modelName, providerName, nil
 }
 
 // convertStatePhasesToDevplan converts state phases to devplan phases

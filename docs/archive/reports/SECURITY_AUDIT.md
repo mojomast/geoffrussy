@@ -1,4 +1,4 @@
-# Security Audit Report - Geoffrey AI Coding Agent
+# Security Audit Report - Geoffrussy AI Coding Agent
 
 **Audit Date**: January 29, 2026  
 **Version**: 0.1.0  
@@ -7,7 +7,7 @@
 
 ## Executive Summary
 
-A comprehensive security audit was conducted on the Geoffrey AI Coding Agent covering API key storage, error message handling, and personally identifiable information (PII) in logs. The application demonstrates strong security practices with no critical vulnerabilities identified.
+A comprehensive security audit was conducted on the Geoffrussy AI Coding Agent covering API key storage, error message handling, and personally identifiable information (PII) in logs. The application demonstrates strong security practices with no critical vulnerabilities identified.
 
 ## Audit Scope
 
@@ -232,7 +232,7 @@ func (b *BaseProvider) Authenticate(apiKey string) error {
 
 ## Conclusion
 
-The Geoffrey AI Coding Agent demonstrates **strong security practices** across all audited areas:
+The Geoffrussy AI Coding Agent demonstrates **strong security practices** across all audited areas:
 
 - ✅ **API Keys**: Securely stored with restrictive permissions
 - ✅ **Error Messages**: Safe and helpful without exposing secrets

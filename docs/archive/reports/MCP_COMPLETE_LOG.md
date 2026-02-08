@@ -40,7 +40,7 @@ STEP 1: Initialize MCP Connection
       "tools": {}
     },
     "serverInfo": {
-      "name": "geoffrey",
+      "name": "geoffrussy",
       "version": "0.1.0"
     }
   }

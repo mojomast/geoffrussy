@@ -13,7 +13,7 @@ import (
 	"github.com/mojomast/geoffrussy/internal/token"
 )
 
-// ResourceHandlers contains all MCP resource handlers for Geoffrey
+// ResourceHandlers contains all MCP resource handlers for Geoffrussy
 type ResourceHandlers struct {
 	configManager *config.Manager
 	projectRoot   string
@@ -27,7 +27,7 @@ func NewResourceHandlers(configManager *config.Manager, projectRoot string) *Res
 	}
 }
 
-// RegisterAllResources registers all Geoffrey resources with the registry
+// RegisterAllResources registers all Geoffrussy resources with the registry
 func (h *ResourceHandlers) RegisterAllResources(registry *ResourceRegistry) error {
 	resources := []struct {
 		resource Resource

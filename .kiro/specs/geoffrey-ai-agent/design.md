@@ -62,7 +62,7 @@ Geoffrussy follows a layered architecture with clear separation of concerns:
 
 ### 1. CLI Component (Cobra)
 
-**Responsibility**: Provide command-line interface for all Geoffrey operations
+**Responsibility**: Provide command-line interface for all Geoffrussy operations
 
 **Commands**:
 - `geoffrussy init` - Initialize project configuration
@@ -629,7 +629,7 @@ type StateStore interface {
 **Configuration Sources** (in precedence order):
 1. Command-line flags
 2. Environment variables
-3. Config file (~/.geoffrey/config.yaml)
+3. Config file (~/.geoffrussy/config.yaml)
 
 **Interface**:
 ```go
@@ -738,7 +738,7 @@ type LiveMonitor interface {
 ### Core Domain Models
 
 ```go
-// Project represents a Geoffrey project
+// Project represents a Geoffrussy project
 type Project struct {
     ID           string
     Name         string

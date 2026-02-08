@@ -255,7 +255,12 @@ func (te *TaskExecutor) buildExecutionPrompt(
 	promptBuilder.WriteString("1. Analyze the task and architecture context\n")
 	promptBuilder.WriteString("2. Generate working code that implements the task\n")
 	promptBuilder.WriteString("3. Ensure code follows best practices for the language/framework\n")
-	promptBuilder.WriteString("4. Return your response as JSON with the following structure:\n\n")
+	promptBuilder.WriteString("4. Return your response as JSON with the following structure\n")
+	promptBuilder.WriteString("5. Include only files that should be created/updated for this task\n")
+	promptBuilder.WriteString("6. Use repository-relative file paths only\n")
+	promptBuilder.WriteString("7. Avoid placeholders like TODO/TBD unless explicitly required\n")
+	promptBuilder.WriteString("8. Include validation commands in tests/commands where relevant\n")
+	promptBuilder.WriteString("9. Response must be valid JSON only (no markdown, no commentary)\n\n")
 
 	promptBuilder.WriteString(`{
   "explanation": "Brief explanation of your approach",

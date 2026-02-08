@@ -83,13 +83,26 @@ func (b *Bridge) ListModels() ([]Model, error) {
 			continue // Skip unauthenticated providers
 		}
 
-		models, err := provider.ListModels()
-		if err != nil {
-			// Log error but continue with other providers
+		providerModels := make([]Model, 0)
+		if discovered, err := provider.DiscoverModels(); err == nil {
+			providerModels = append(providerModels, discovered...)
+		}
+
+		if listed, err := provider.ListModels(); err == nil {
+			providerModels = append(providerModels, listed...)
+		}
+
+		if len(providerModels) == 0 {
 			continue
 		}
 
-		allModels = append(allModels, models...)
+		modelMap := make(map[string]Model)
+		for _, m := range providerModels {
+			modelMap[m.Name] = m
+		}
+		for _, m := range modelMap {
+			allModels = append(allModels, m)
+		}
 	}
 
 	return allModels, nil

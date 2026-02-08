@@ -76,7 +76,12 @@ func runDesign(cmd *cobra.Command, args []string) error {
 	}
 
 	// 4. Setup Provider
-	providerName, modelName, err := getProviderAndModel(cfgMgr, "design", designModel)
+	stageKey := "design.generate"
+	if designRefine != "" {
+		stageKey = "design.refine"
+	}
+
+	providerName, modelName, err := getProviderAndModel(cfgMgr, stageKey, designModel)
 	if err != nil {
 		fmt.Println("\n⚠️  Could not automatically select provider and model")
 		fmt.Println("   Available options:")
@@ -99,6 +104,7 @@ func runDesign(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to get provider: %w", err)
 	}
+	printProviderUsageSnapshot(providerName, prov)
 
 	// 5. Initialize Generator
 	generator := design.NewGenerator(prov, modelName)

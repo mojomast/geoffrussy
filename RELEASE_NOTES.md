@@ -1,12 +1,12 @@
-# Geoffrey AI Coding Agent - Release Notes
+# Geoffrussy AI Coding Agent - Release Notes
 
 ## Version 0.1.1 - Banner and Monitor Improvements (2026-01-29)
 
 ### Features Added
 
 #### 🎨 ASCII Art Banner
-- **Global Banner Display**: ASCII art banner now appears on all Geoffrey commands
-- **Monitor Banner**: Execution monitor displays Geoffrey ASCII art instead of plain text header
+- **Global Banner Display**: ASCII art banner now appears on all Geoffrussy commands
+- **Monitor Banner**: Execution monitor displays Geoffrussy ASCII art instead of plain text header
 - **Brand Consistency**: Unified branding across CLI and monitor interfaces
 
 #### 📈 Enhanced Execution Monitor
@@ -43,7 +43,7 @@
 
 ### Overview
 
-Geoffrey is a next-generation AI-powered development orchestration platform that reimagines human-AI collaboration on software projects. This initial release provides a complete implementation of the core pipeline: Interview → Architecture Design → DevPlan Generation → Phase Review → Development Execution.
+Geoffrussy is a next-generation AI-powered development orchestration platform that reimagines human-AI collaboration on software projects. This initial release provides a complete implementation of the core pipeline: Interview → Architecture Design → DevPlan Generation → Phase Review → Development Execution.
 
 ### Features
 
@@ -198,7 +198,7 @@ Requirements:
 ### Quick Start
 
 ```bash
-# Initialize Geoffrey
+# Initialize Geoffrussy
 cd your-project
 geoffrussy init
 
@@ -223,7 +223,7 @@ geoffrussy status
 
 ### Configuration
 
-Geoffrey supports configuration via:
+Geoffrussy supports configuration via:
 1. Command-line flags (highest precedence)
 2. Environment variables
 3. Config file (`~/.geoffrussy/config.yaml`)
@@ -257,7 +257,7 @@ verbose_logging: false
 
 | Command | Description |
 |---------|-------------|
-| `init` | Initialize Geoffrey in current project |
+| `init` | Initialize Geoffrussy in current project |
 | `interview` | Start or resume project interview |
 | `design` | Generate or refine architecture |
 | `plan` | Generate or manipulate DevPlan |
@@ -274,7 +274,7 @@ verbose_logging: false
 
 ### Architecture
 
-Geoffrey is built with:
+Geoffrussy is built with:
 - **CLI Framework**: [Cobra](https://github.com/spf13/cobra) for command-line interface
 - **Terminal UI**: [Bubbletea](https://github.com/charmbracelet/bubbletea) for interactive interface
 - **State Persistence**: SQLite with WAL mode for concurrent access

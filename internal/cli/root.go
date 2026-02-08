@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 
 	"github.com/mojomast/geoffrussy/internal/checkpoint"
-	"github.com/mojomast/geoffrussy/internal/config"
 	"github.com/mojomast/geoffrussy/internal/git"
 	"github.com/mojomast/geoffrussy/internal/resume"
 	"github.com/mojomast/geoffrussy/internal/state"
@@ -29,10 +28,10 @@ func Execute(ver string) error {
 func init() {
 	rootCmd = &cobra.Command{
 		Use:   "geoffrussy",
-		Short: "Geoffrey - AI-powered development orchestration platform",
+		Short: "Geoffrussy - AI-powered development orchestration platform",
 		Long: Banner() + `
 
-Geoffrey is a next-generation AI-powered development orchestration platform
+Geoffrussy is a next-generation AI-powered development orchestration platform
 that reimagines human-AI collaboration on software projects.
 
 The system prioritizes deep project understanding through a multi-stage iterative
@@ -84,21 +83,13 @@ var versionCmd = &cobra.Command{
 	Use:   "version",
 	Short: "Print the version number",
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Printf("Geoffrey version %s\n", version)
+		fmt.Printf("Geoffrussy version %s\n", version)
 	},
 }
 
 // runRootWithResumeCheck runs when geoffrussy is invoked without a subcommand
 // It checks for incomplete work and offers to resume
 func runRootWithResumeCheck(cmd *cobra.Command, args []string) error {
-	// Try to load configuration
-	cfgMgr := config.NewManager()
-	if err := cfgMgr.Load(nil); err != nil {
-		// If config doesn't exist, show help instead
-		return cmd.Help()
-	}
-	cfg := cfgMgr.GetConfig()
-
 	// Determine project ID from current directory
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -106,9 +97,8 @@ func runRootWithResumeCheck(cmd *cobra.Command, args []string) error {
 	}
 	projectID := filepath.Base(cwd)
 
-	// Initialize state store (use config directory)
-	configDir := filepath.Dir(cfg.ConfigPath)
-	dbPath := filepath.Join(configDir, "geoffrussy.db")
+	// Initialize state store (project local)
+	dbPath := filepath.Join(cwd, ".geoffrussy", "state.db")
 	store, err := state.NewStore(dbPath)
 	if err != nil {
 		// If state store doesn't exist, show help
@@ -124,7 +114,7 @@ func runRootWithResumeCheck(cmd *cobra.Command, args []string) error {
 
 	// Initialize managers
 	gitMgr := git.NewManager(".")
-	checkpointMgr := checkpoint.NewManager(store, gitMgr, configDir)
+	checkpointMgr := checkpoint.NewManager(store, gitMgr, filepath.Dir(dbPath))
 	resumeMgr := resume.NewManager(store, checkpointMgr)
 
 	// Check for incomplete work

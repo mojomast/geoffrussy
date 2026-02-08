@@ -133,7 +133,7 @@ func (h *ExecHandlers) handleExecutePhase(ctx context.Context, args map[string]i
 	}
 	defer store.Close()
 
-	prov, modelName, err := initProviderForStage(h.configManager, "develop", model)
+	prov, modelName, err := initProviderForStage(h.configManager, "develop.execute", model)
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("Failed to initialize provider: %v", err)), nil
 	}
@@ -196,7 +196,7 @@ func (h *ExecHandlers) handleExecuteTask(ctx context.Context, args map[string]in
 	}
 	defer store.Close()
 
-	prov, modelName, err := initProviderForStage(h.configManager, "develop", model)
+	prov, modelName, err := initProviderForStage(h.configManager, "develop.execute", model)
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("Failed to initialize provider: %v", err)), nil
 	}
@@ -332,7 +332,7 @@ func (h *ExecHandlers) handleHandleBlocker(ctx context.Context, args map[string]
 		return SuccessResult(fmt.Sprintf("Task %s modified. You can now retry it.", taskID)), nil
 
 	case "analyze":
-		prov, modelName, err := initProviderForStage(h.configManager, "develop", "")
+		prov, modelName, err := initProviderForStage(h.configManager, "develop.blocker_analyze", "")
 		if err != nil {
 			return ErrorResult(fmt.Sprintf("Failed to initialize provider: %v", err)), nil
 		}
@@ -343,7 +343,7 @@ func (h *ExecHandlers) handleHandleBlocker(ctx context.Context, args map[string]
 			logs = []byte("(no log file found)")
 		}
 
-		prompt := fmt.Sprintf("Analyze the failure for task %s.\nLogs:\n%s", taskID, string(logs))
+		prompt := fmt.Sprintf("Analyze the failure for task %s.\n\nLogs:\n%s\n\nReturn exactly four sections with these headers:\n1) ROOT_CAUSE\n2) EVIDENCE\n3) FIX_PLAN\n4) VERIFY_COMMANDS\n\nKeep fixes concrete and scoped to this task. Do not include markdown code fences.", taskID, string(logs))
 		resp, err := prov.Call(modelName, prompt)
 		if err != nil {
 			return ErrorResult(fmt.Sprintf("Failed to analyze: %v", err)), nil
@@ -416,7 +416,7 @@ func appendTaskLog(logDir, taskID, line string) error {
 }
 
 func (h *ExecHandlers) newExecutorForAction(store *state.Store) (*executor.Executor, error) {
-	prov, modelName, err := initProviderForStage(h.configManager, "develop", "")
+	prov, modelName, err := initProviderForStage(h.configManager, "develop.execute", "")
 	if err != nil {
 		return nil, err
 	}

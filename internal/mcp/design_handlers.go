@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/mojomast/geoffrussy/internal/config"
 	"github.com/mojomast/geoffrussy/internal/design"
+	"github.com/mojomast/geoffrussy/internal/state"
 )
 
 // DesignHandlers contains handlers for design-related tools
@@ -106,7 +108,7 @@ func (h *DesignHandlers) handleGenerateDesign(ctx context.Context, args map[stri
 		return ErrorResult(fmt.Sprintf("Architecture already exists at %s. Use regenerate=true or regenerate_design to overwrite.", archPath)), nil
 	}
 
-	prov, modelName, err := initProviderForStage(h.configManager, "design", model)
+	prov, modelName, err := initProviderForStage(h.configManager, "design.generate", model)
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("Failed to initialize provider: %v", err)), nil
 	}
@@ -128,8 +130,23 @@ func (h *DesignHandlers) handleGenerateDesign(ctx context.Context, args map[stri
 		return ErrorResult(fmt.Sprintf("Failed to save architecture file: %v", err)), nil
 	}
 
+	mdContent, err := generator.ExportMarkdown(arch)
+	if err != nil {
+		return ErrorResult(fmt.Sprintf("Failed to export architecture markdown: %v", err)), nil
+	}
+
+	stateArch := &state.Architecture{
+		ProjectID: projectID,
+		Content:   mdContent,
+		CreatedAt: time.Now(),
+	}
+
+	if err := store.SaveArchitecture(projectID, stateArch); err != nil {
+		return ErrorResult(fmt.Sprintf("Failed to save architecture to store: %v", err)), nil
+	}
+
 	// Update project stage
-	if err := store.UpdateProjectStage(projectID, "design_complete"); err != nil {
+	if err := store.UpdateProjectStage(projectID, state.StageDesign); err != nil {
 		return ErrorResult(fmt.Sprintf("Failed to update project stage: %v", err)), nil
 	}
 
@@ -174,7 +191,7 @@ func (h *DesignHandlers) handleRegenerateDesign(ctx context.Context, args map[st
 		interviewData.ProblemStatement += "\n\nAdditional Guidance: " + guidance
 	}
 
-	prov, modelName, err := initProviderForStage(h.configManager, "design", "")
+	prov, modelName, err := initProviderForStage(h.configManager, "design.refine", "")
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("Failed to initialize provider: %v", err)), nil
 	}
@@ -193,6 +210,25 @@ func (h *DesignHandlers) handleRegenerateDesign(ctx context.Context, args map[st
 	}
 	if err := writeArchitectureJSON(archPath, jsonStr); err != nil {
 		return ErrorResult(fmt.Sprintf("Failed to save: %v", err)), nil
+	}
+
+	mdContent, err := generator.ExportMarkdown(arch)
+	if err != nil {
+		return ErrorResult(fmt.Sprintf("Failed to export markdown: %v", err)), nil
+	}
+
+	stateArch := &state.Architecture{
+		ProjectID: projectID,
+		Content:   mdContent,
+		CreatedAt: time.Now(),
+	}
+
+	if err := store.SaveArchitecture(projectID, stateArch); err != nil {
+		return ErrorResult(fmt.Sprintf("Failed to save architecture to store: %v", err)), nil
+	}
+
+	if err := store.UpdateProjectStage(projectID, state.StageDesign); err != nil {
+		return ErrorResult(fmt.Sprintf("Failed to update project stage: %v", err)), nil
 	}
 
 	return SuccessResult("🏗️ Architecture Regenerated with guidance."), nil

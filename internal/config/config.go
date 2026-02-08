@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -12,6 +13,7 @@ import (
 // Config represents the application configuration
 type Config struct {
 	APIKeys        map[string]string `yaml:"api_keys"`
+	APIKeySources  map[string]string `yaml:"api_key_sources,omitempty"`
 	DefaultModels  map[string]string `yaml:"default_models"`
 	FavoriteModels []string          `yaml:"favorite_models"`
 	BudgetLimit    float64           `yaml:"budget_limit"`
@@ -43,6 +45,7 @@ func NewManager() *Manager {
 	return &Manager{
 		config: &Config{
 			APIKeys:        make(map[string]string),
+			APIKeySources:  make(map[string]string),
 			DefaultModels:  make(map[string]string),
 			FavoriteModels: []string{},
 		},
@@ -63,6 +66,7 @@ func (m *Manager) Load(flagConfig *Config) error {
 	// Start with default config
 	m.config = &Config{
 		APIKeys:        make(map[string]string),
+		APIKeySources:  make(map[string]string),
 		DefaultModels:  make(map[string]string),
 		BudgetLimit:    0,
 		VerboseLogging: false,
@@ -111,6 +115,16 @@ func (m *Manager) loadFromFile(path string) error {
 		for k, v := range fileConfig.APIKeys {
 			if v != "" {
 				m.config.APIKeys[k] = v
+				if _, ok := m.config.APIKeySources[k]; !ok {
+					m.config.APIKeySources[k] = "plaintext"
+				}
+			}
+		}
+	}
+	if fileConfig.APIKeySources != nil {
+		for k, v := range fileConfig.APIKeySources {
+			if v != "" {
+				m.config.APIKeySources[k] = v
 			}
 		}
 	}
@@ -155,6 +169,7 @@ func (m *Manager) loadFromEnv() {
 			provider := key[22:] // Remove "GEOFFRUSSY_API_KEY_" prefix
 			if value != "" {
 				m.config.APIKeys[provider] = value
+				m.config.APIKeySources[provider] = "env"
 			}
 		}
 
@@ -189,6 +204,7 @@ func (m *Manager) loadFromEnvForTesting(providers []string, stages []string) {
 		envKey := "GEOFFRUSSY_API_KEY_" + provider
 		if value := os.Getenv(envKey); value != "" {
 			m.config.APIKeys[provider] = value
+			m.config.APIKeySources[provider] = "env"
 		}
 	}
 
@@ -220,6 +236,7 @@ func (m *Manager) applyFlags(flagConfig *Config) {
 		for k, v := range flagConfig.APIKeys {
 			if v != "" {
 				m.config.APIKeys[k] = v
+				m.config.APIKeySources[k] = "flag"
 			}
 		}
 	}
@@ -277,6 +294,13 @@ func (m *Manager) GetConfig() *Config {
 
 // GetAPIKey returns the API key for a specific provider
 func (m *Manager) GetAPIKey(provider string) (string, error) {
+	keySource := m.config.APIKeySources[provider]
+	if keySource == "keyring" {
+		if key, err := getSecret(provider); err == nil && key != "" {
+			return key, nil
+		}
+	}
+
 	key, ok := m.config.APIKeys[provider]
 	if !ok || key == "" {
 		return "", fmt.Errorf("API key not found for provider: %s", provider)
@@ -286,22 +310,35 @@ func (m *Manager) GetAPIKey(provider string) (string, error) {
 
 // SetAPIKey sets the API key for a specific provider
 func (m *Manager) SetAPIKey(provider, key string) error {
+	_, err := m.SetAPIKeyWithStorage(provider, key)
+	return err
+}
+
+// SetAPIKeyWithStorage sets the API key and returns storage mode used.
+func (m *Manager) SetAPIKeyWithStorage(provider, key string) (string, error) {
 	if provider == "" {
-		return fmt.Errorf("provider cannot be empty")
+		return "", fmt.Errorf("provider cannot be empty")
 	}
 	if key == "" {
-		return fmt.Errorf("API key cannot be empty")
+		return "", fmt.Errorf("API key cannot be empty")
 	}
 
 	// Validate API key if validator is set
 	if m.validator != nil {
 		if err := m.validator.ValidateAPIKey(provider, key); err != nil {
-			return fmt.Errorf("API key validation failed: %w", err)
+			return "", fmt.Errorf("API key validation failed: %w", err)
 		}
 	}
 
+	if err := setSecret(provider, key); err == nil {
+		delete(m.config.APIKeys, provider)
+		m.config.APIKeySources[provider] = "keyring"
+		return "keyring", nil
+	}
+
 	m.config.APIKeys[provider] = key
-	return nil
+	m.config.APIKeySources[provider] = "plaintext"
+	return "plaintext", nil
 }
 
 // ValidateAPIKey validates an API key against a provider
@@ -322,6 +359,21 @@ func (m *Manager) GetDefaultModel(stage string) (string, error) {
 	return model, nil
 }
 
+// ResolveDefaultModel resolves the model for a stage using granular fallback.
+func (m *Manager) ResolveDefaultModel(stage string) (string, error) {
+	for _, candidate := range getStageCandidates(stage) {
+		if model, ok := m.config.DefaultModels[candidate]; ok && model != "" {
+			return model, nil
+		}
+		for configuredStage, configuredModel := range m.config.DefaultModels {
+			if strings.EqualFold(configuredStage, candidate) && configuredModel != "" {
+				return configuredModel, nil
+			}
+		}
+	}
+	return "", fmt.Errorf("default model not found for stage: %s", stage)
+}
+
 // SetDefaultModel sets the default model for a specific stage
 func (m *Manager) SetDefaultModel(stage, model string) error {
 	if stage == "" {
@@ -330,8 +382,19 @@ func (m *Manager) SetDefaultModel(stage, model string) error {
 	if model == "" {
 		return fmt.Errorf("model cannot be empty")
 	}
-	m.config.DefaultModels[stage] = model
+	m.config.DefaultModels[normalizeStage(stage)] = model
 	return nil
+}
+
+func (m *Manager) GetAPIKeySource(provider string) string {
+	source, ok := m.config.APIKeySources[provider]
+	if !ok || source == "" {
+		if _, hasPlain := m.config.APIKeys[provider]; hasPlain {
+			return "plaintext"
+		}
+		return "unknown"
+	}
+	return source
 }
 
 // AddFavoriteModel adds a model to the favorites list

@@ -1,6 +1,6 @@
-# Contributing to Geoffrey
+# Contributing to Geoffrussy
 
-Thank you for your interest in contributing to Geoffrey! This document provides guidelines and instructions for contributing.
+Thank you for your interest in contributing to Geoffrussy! This document provides guidelines and instructions for contributing.
 
 ## Code of Conduct
 
@@ -183,7 +183,7 @@ Example:
 Implements the Interview Engine component with five-phase question flow.
 
 ## Motivation
-Requirement 2.1-2.5 specify that Geoffrey should conduct a five-phase
+Requirement 2.1-2.5 specify that Geoffrussy should conduct a five-phase
 interview to gather project requirements.
 
 ## Changes
@@ -385,7 +385,7 @@ Update relevant documentation in `docs/` when:
 ### Bug Reports
 
 Include:
-- Geoffrey version (`geoffrussy version`)
+- Geoffrussy version (`geoffrussy version`)
 - Operating system and version
 - Go version (if building from source)
 - Steps to reproduce
@@ -409,4 +409,4 @@ Include:
 
 ## License
 
-By contributing to Geoffrey, you agree that your contributions will be licensed under the MIT License.
+By contributing to Geoffrussy, you agree that your contributions will be licensed under the MIT License.

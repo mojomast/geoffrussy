@@ -66,7 +66,7 @@ func runDevelop(cmd *cobra.Command, args []string) error {
 	}
 
 	// 3. Initialize Provider
-	providerName, modelName, err := getProviderAndModel(cfgMgr, "develop", developModel)
+	providerName, modelName, err := getProviderAndModel(cfgMgr, "develop.execute", developModel)
 	if err != nil {
 		return fmt.Errorf("failed to get provider and model: %w", err)
 	}
@@ -80,6 +80,7 @@ func runDevelop(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to get provider: %w", err)
 	}
+	printProviderUsageSnapshot(providerName, prov)
 
 	fmt.Printf("📦 Using Provider: %s\n", providerName)
 	fmt.Printf("🤖 Using Model: %s\n", modelName)
@@ -121,6 +122,13 @@ func runDevelop(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to get phase %s: %w", phaseID, err)
 	}
+
+	project.CurrentStage = state.StageDevelop
+	project.CurrentPhase = phaseID
+	if err := store.UpdateProject(project); err != nil {
+		return fmt.Errorf("failed to update project stage/phase: %w", err)
+	}
+
 	fmt.Printf("📋 Executing Phase: %s (%s)\n", phase.Title, phase.ID)
 
 	// 6. Initialize Executor and Monitor
@@ -145,6 +153,13 @@ func runDevelop(cmd *cobra.Command, args []string) error {
 	// 8. Run Monitor (Blocking)
 	if err := mon.Run(); err != nil {
 		return fmt.Errorf("monitor error: %w", err)
+	}
+
+	progress, err := store.CalculateProgress(projectID)
+	if err == nil && progress.TotalTasks > 0 && progress.CompletedTasks == progress.TotalTasks && progress.BlockedTasks == 0 {
+		if err := store.UpdateProjectStage(projectID, state.StageComplete); err == nil {
+			fmt.Println("🎉 All tasks completed. Project stage advanced to complete.")
+		}
 	}
 
 	return nil

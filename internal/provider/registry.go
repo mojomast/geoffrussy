@@ -10,14 +10,22 @@ type ProviderFactory func() Provider
 
 // Registry maintains a list of available providers
 var Registry = map[string]ProviderFactory{
-	"anthropic": func() Provider { return NewAnthropicProvider() },
-	"firmware":  func() Provider { return NewFirmwareProvider() },
-	"kimi":      func() Provider { return NewKimiProvider() },
-	"ollama":    func() Provider { return NewOllamaProvider("") }, // Default URL
-	"openai":    func() Provider { return NewOpenAIProvider() },
-	"opencode":  func() Provider { return NewOpenCodeProvider() },
-	"requesty":  func() Provider { return NewRequestyProvider() },
-	"zai":       func() Provider { return NewZAIProvider() },
+	"anthropic":    func() Provider { return NewAnthropicProvider() },
+	"deepinfra":    func() Provider { return NewDeepInfraProvider() },
+	"firmware":     func() Provider { return NewFirmwareProvider() },
+	"fireworks":    func() Provider { return NewFireworksProvider() },
+	"groq":         func() Provider { return NewGroqProvider() },
+	"kimi":         func() Provider { return NewKimiProvider() },
+	"mistral":      func() Provider { return NewMistralProvider() },
+	"ollama":       func() Provider { return NewOllamaProvider("") }, // Default URL
+	"openai":       func() Provider { return NewOpenAIProvider() },
+	"openai-codex": func() Provider { return NewOpenAIProviderWithName("openai-codex") },
+	"openrouter":   func() Provider { return NewOpenRouterProvider() },
+	"opencode":     func() Provider { return NewOpenCodeProvider() },
+	"perplexity":   func() Provider { return NewPerplexityProvider() },
+	"requesty":     func() Provider { return NewRequestyProvider() },
+	"together":     func() Provider { return NewTogetherProvider() },
+	"zai":          func() Provider { return NewZAIProvider() },
 }
 
 // GetProviderNames returns a list of all registered provider names sorted alphabetically

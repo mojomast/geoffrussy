@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/bubbles/help"
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -33,6 +35,93 @@ type Monitor struct {
 	tokensOut    int
 	requests     int
 	err          error
+	keys         monitorKeyMap
+	help         help.Model
+	showHelp     bool
+	followOutput bool
+	paused       bool
+	done         bool
+}
+
+type monitorDoneMsg struct{}
+
+type monitorKeyMap struct {
+	Quit     key.Binding
+	Pause    key.Binding
+	Resume   key.Binding
+	Skip     key.Binding
+	Follow   key.Binding
+	Help     key.Binding
+	Up       key.Binding
+	Down     key.Binding
+	PageUp   key.Binding
+	PageDown key.Binding
+	Top      key.Binding
+	Bottom   key.Binding
+}
+
+func defaultMonitorKeyMap() monitorKeyMap {
+	return monitorKeyMap{
+		Quit: key.NewBinding(
+			key.WithKeys("q", "ctrl+c"),
+			key.WithHelp("q", "quit"),
+		),
+		Pause: key.NewBinding(
+			key.WithKeys("p"),
+			key.WithHelp("p", "pause"),
+		),
+		Resume: key.NewBinding(
+			key.WithKeys("r"),
+			key.WithHelp("r", "resume"),
+		),
+		Skip: key.NewBinding(
+			key.WithKeys("s"),
+			key.WithHelp("s", "skip task"),
+		),
+		Follow: key.NewBinding(
+			key.WithKeys("f"),
+			key.WithHelp("f", "toggle follow"),
+		),
+		Help: key.NewBinding(
+			key.WithKeys("?"),
+			key.WithHelp("?", "toggle help"),
+		),
+		Up: key.NewBinding(
+			key.WithKeys("up", "k"),
+			key.WithHelp("↑/k", "scroll up"),
+		),
+		Down: key.NewBinding(
+			key.WithKeys("down", "j"),
+			key.WithHelp("↓/j", "scroll down"),
+		),
+		PageUp: key.NewBinding(
+			key.WithKeys("pgup", "b"),
+			key.WithHelp("pgup", "page up"),
+		),
+		PageDown: key.NewBinding(
+			key.WithKeys("pgdown", "space"),
+			key.WithHelp("pgdn", "page down"),
+		),
+		Top: key.NewBinding(
+			key.WithKeys("home", "g"),
+			key.WithHelp("home/g", "top"),
+		),
+		Bottom: key.NewBinding(
+			key.WithKeys("end", "G"),
+			key.WithHelp("end/G", "bottom"),
+		),
+	}
+}
+
+func (k monitorKeyMap) ShortHelp() []key.Binding {
+	return []key.Binding{k.Pause, k.Resume, k.Skip, k.Follow, k.Help, k.Quit}
+}
+
+func (k monitorKeyMap) FullHelp() [][]key.Binding {
+	return [][]key.Binding{
+		{k.Pause, k.Resume, k.Skip, k.Follow, k.Help, k.Quit},
+		{k.Up, k.Down, k.PageUp, k.PageDown, k.Top, k.Bottom},
+	}
 }
 
 // NewMonitor creates a new live monitor
@@ -44,14 +133,18 @@ func NewMonitor(executor *Executor, projectID string) *Monitor {
 		Padding(1, 0, 1, 1)
 
 	prog := progress.New(progress.WithDefaultGradient())
+	helpModel := help.New()
 
 	return &Monitor{
-		executor:  executor,
-		projectID: projectID,
-		viewport:  vp,
-		progress:  prog,
-		updates:   []TaskUpdate{},
-		startTime: time.Now(),
+		executor:     executor,
+		projectID:    projectID,
+		viewport:     vp,
+		progress:     prog,
+		updates:      []TaskUpdate{},
+		startTime:    time.Now(),
+		keys:         defaultMonitorKeyMap(),
+		help:         helpModel,
+		followOutput: true,
 	}
 }
 
@@ -83,37 +176,79 @@ func (m *Monitor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		switch msg.String() {
-		case "ctrl+c", "q":
+		switch {
+		case key.Matches(msg, m.keys.Quit):
 			m.executor.Close()
 			return m, tea.Quit
 
-		case "p":
+		case key.Matches(msg, m.keys.Pause):
 			if err := m.executor.PauseExecution(); err != nil {
 				m.err = err
 			}
+			m.paused = true
 			return m, nil
 
-		case "r":
+		case key.Matches(msg, m.keys.Resume):
 			if err := m.executor.ResumeExecution(); err != nil {
 				m.err = err
 			}
+			m.paused = false
 			return m, nil
 
-		case "s":
+		case key.Matches(msg, m.keys.Skip):
 			if m.currentTask != "" {
 				if err := m.executor.SkipTask(m.currentTask); err != nil {
 					m.err = err
 				}
 			}
 			return m, nil
+
+		case key.Matches(msg, m.keys.Follow):
+			m.followOutput = !m.followOutput
+			if m.followOutput {
+				m.viewport.GotoBottom()
+			}
+			return m, nil
+
+		case key.Matches(msg, m.keys.Help):
+			m.showHelp = !m.showHelp
+			return m, nil
+
+		case key.Matches(msg, m.keys.Up):
+			m.followOutput = false
+			m.viewport.LineUp(1)
+			return m, nil
+
+		case key.Matches(msg, m.keys.Down):
+			m.followOutput = false
+			m.viewport.LineDown(1)
+			return m, nil
+
+		case key.Matches(msg, m.keys.PageUp):
+			m.followOutput = false
+			m.viewport.HalfViewUp()
+			return m, nil
+
+		case key.Matches(msg, m.keys.PageDown):
+			m.followOutput = false
+			m.viewport.HalfViewDown()
+			return m, nil
+
+		case key.Matches(msg, m.keys.Top):
+			m.followOutput = false
+			m.viewport.GotoTop()
+			return m, nil
+
+		case key.Matches(msg, m.keys.Bottom):
+			m.followOutput = false
+			m.viewport.GotoBottom()
+			return m, nil
 		}
 
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		m.viewport.Width = msg.Width - 4
-		m.viewport.Height = msg.Height - 25
+		m.recalculateLayout()
 
 	case monitorMsg:
 		update := TaskUpdate(msg)
@@ -125,6 +260,13 @@ func (m *Monitor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if update.PhaseID != "" {
 			m.currentPhase = update.PhaseID
+		}
+
+		if update.Type == TaskPaused {
+			m.paused = true
+		}
+		if update.Type == TaskResumed {
+			m.paused = false
 		}
 
 		// Update viewport content
@@ -140,7 +282,15 @@ func (m *Monitor) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tickMsg:
 		m.refreshStats()
+		if m.totalTasks > 0 && m.tasksDone >= m.totalTasks {
+			m.done = true
+		}
 		cmds = append(cmds, tickCmd())
+
+	case monitorDoneMsg:
+		m.done = true
+		m.updateViewport()
+		return m, nil
 	}
 
 	// Update viewport
@@ -159,43 +309,33 @@ func (m *Monitor) View() string {
 
 	var b strings.Builder
 
-	// Header - Banner
-	bannerStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("205")).
-		MarginBottom(1)
-
-	b.WriteString(bannerStyle.Render(`
- /$$$$$$                       /$$$$$$   /$$$$$$
- /$$__  $$                     /$$__  $$ /$$__  $$
-| $$  \__/  /$$$$$$   /$$$$$$ | $$  \__/| $$  \__//$$$$$$  /$$   /$$  /$$$$$$$ /$$$$$$$ /$$   /$$
-| $$ /$$$$ /$$__  $$ /$$__  $$| $$$$    | $$$$   /$$__  $$| $$  | $$ /$$_____//$$_____/| $$  | $$
-| $$|_  $$| $$$$$$$$| $$  \ $$| $$_/    | $$_/  | $$  \__/| $$  | $$|  $$$$$$|  $$$$$$ | $$  | $$
-| $$  \ $$| $$_____/| $$  | $$| $$      | $$    | $$      | $$  | $$ \____  $$\____  $$| $$  | $$
-|  $$$$$$/|  $$$$$$$|  $$$$$$/| $$      | $$    | $$      |  $$$$$$/ /$$$$$$$//$$$$$$$/|  $$$$$$$
- \______/  \_______/ \______/ |__/      |__/    |__/       \______/ |_______/|_______/  \____  $$
-                                                                                        /$$  | $$
-                                                                                       |  $$$$$$/
-                                                                                        \______/
-`))
-
+	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
+	b.WriteString(headerStyle.Render("Geoffrussy Live Execution"))
 	b.WriteString("\n")
 
-	// Stats row
-	statsStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
+	statusStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
+	statusParts := []string{}
 	if m.totalTasks > 0 {
-		completionStr := fmt.Sprintf("%.0f%%", m.completion)
-		phaseStr := fmt.Sprintf("%d/%d", m.phasesDone, m.totalPhases)
-		taskStr := fmt.Sprintf("%d/%d", m.tasksDone, m.totalTasks)
-		stats := fmt.Sprintf("%s tasks • %s phases • %s done", taskStr, phaseStr, completionStr)
-		b.WriteString(statsStyle.Render(stats))
+		statusParts = append(statusParts, fmt.Sprintf("tasks %d/%d", m.tasksDone, m.totalTasks))
+		statusParts = append(statusParts, fmt.Sprintf("phases %d/%d", m.phasesDone, m.totalPhases))
+		statusParts = append(statusParts, fmt.Sprintf("%.0f%%", m.completion))
 	}
 
-	// Token stats
 	if m.tokensIn > 0 || m.tokensOut > 0 {
-		tokenStr := fmt.Sprintf("  |  🔤 In: %d  Out: %d", m.tokensIn, m.tokensOut)
-		b.WriteString(statsStyle.Render(tokenStr))
+		statusParts = append(statusParts, fmt.Sprintf("in %d / out %d", m.tokensIn, m.tokensOut))
 	}
-	b.WriteString("\n")
+	if m.paused {
+		statusParts = append(statusParts, "paused")
+	}
+	if m.done {
+		statusParts = append(statusParts, "done")
+	}
+	if len(statusParts) > 0 {
+		b.WriteString(statusStyle.Render(strings.Join(statusParts, " • ")))
+		b.WriteString("\n")
+	}
+	b.WriteString(statusStyle.Render(fmt.Sprintf("elapsed %s • follow %t", formatDuration(time.Since(m.startTime)), m.followOutput)))
+	b.WriteString("\n\n")
 
 	// Current phase and task
 	if m.currentPhase != "" {
@@ -212,12 +352,6 @@ func (m *Monitor) View() string {
 		b.WriteString(taskStyle.Render(fmt.Sprintf("Task: %s", m.currentTask)))
 		b.WriteString("\n")
 	}
-
-	// Elapsed time
-	elapsed := time.Since(m.startTime)
-	timeStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("226"))
-	b.WriteString(timeStyle.Render(fmt.Sprintf("Elapsed: %s", formatDuration(elapsed))))
 	b.WriteString("\n\n")
 
 	// Progress bar
@@ -227,14 +361,18 @@ func (m *Monitor) View() string {
 		b.WriteString("\n\n")
 	}
 
-	// Output viewport - this is where task updates appear
+	outputTitle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("141")).Render("Execution Log")
+	b.WriteString(outputTitle)
+	b.WriteString("\n")
 	b.WriteString(m.viewport.View())
 	b.WriteString("\n\n")
 
-	// Help
-	helpStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("241"))
-	b.WriteString(helpStyle.Render("P: Pause | R: Resume | S: Skip | Q: Quit"))
+	if m.showHelp {
+		b.WriteString(m.help.View(m.keys))
+	} else {
+		helpStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
+		b.WriteString(helpStyle.Render("press ? for keymap"))
+	}
 
 	return b.String()
 }
@@ -242,10 +380,11 @@ func (m *Monitor) View() string {
 // waitForUpdate waits for the next task update
 func (m *Monitor) waitForUpdate() tea.Cmd {
 	return func() tea.Msg {
-		select {
-		case update := <-m.executor.StreamOutput():
-			return monitorMsg(update)
+		update, ok := <-m.executor.StreamOutput()
+		if !ok {
+			return monitorDoneMsg{}
 		}
+		return monitorMsg(update)
 	}
 }
 
@@ -266,7 +405,27 @@ func (m *Monitor) updateViewport() {
 
 	content := strings.Join(lines, "\n")
 	m.viewport.SetContent(content)
-	m.viewport.GotoBottom()
+	if m.followOutput {
+		m.viewport.GotoBottom()
+	}
+}
+
+func (m *Monitor) recalculateLayout() {
+	if m.width <= 0 || m.height <= 0 {
+		return
+	}
+
+	vpWidth := m.width - 4
+	if vpWidth < 40 {
+		vpWidth = 40
+	}
+	vpHeight := m.height - 16
+	if vpHeight < 8 {
+		vpHeight = 8
+	}
+
+	m.viewport.Width = vpWidth
+	m.viewport.Height = vpHeight
 }
 
 // formatUpdate formats a task update for display

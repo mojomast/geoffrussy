@@ -113,6 +113,13 @@ func (g *Generator) GeneratePhases(architecture *design.Architecture, interviewD
 func (g *Generator) buildPhasesPrompt(architecture *design.Architecture, interviewData *state.InterviewData) string {
 	prompt := `You are an expert software project planner. Based on the following architecture and requirements, generate 7-10 executable development phases.
 
+CRITICAL OUTPUT RULES:
+- Return ONLY a valid JSON array.
+- Do NOT include markdown code fences.
+- Do NOT include commentary or prose before/after JSON.
+- Each phase must include 3-5 tasks and concrete acceptance criteria.
+- Keep dependency IDs consistent and acyclic.
+
 PROJECT: ` + interviewData.ProjectName + `
 PROBLEM: ` + interviewData.ProblemStatement + `
 
@@ -125,9 +132,6 @@ Think step-by-step:
 3. Break down the work into 7-10 distinct phases.
 4. Ensure each phase results in verifiable working code.
 5. Identify clear success criteria for each phase.
-
-First, use a <scratchpad> block to plan your approach, listing the proposed phases and checking dependencies.
-Then, output the final phases as a strict JSON array.
 
 Each phase should:
 1. Build on previous phases
@@ -149,11 +153,6 @@ Follow this standard order:
 - Phase 9: Deployment & Hardening
 
 Output your response in the following format:
-
-<scratchpad>
-Your thinking here...
-</scratchpad>
-
 [
   {
     "number": 0,
@@ -172,7 +171,7 @@ Your thinking here...
   }
 ]
 
-Generate the response now:`
+Generate the JSON now:`
 
 	return prompt
 }

@@ -207,7 +207,7 @@ Geoffrussy is a next-generation AI-powered development orchestration platform th
 
 ### Requirement 9: Task Execution with Live Monitoring
 
-**User Story:** As a developer, I want to see real-time progress during task execution, so that I understand what Geoffrey is doing and can intervene if needed.
+**User Story:** As a developer, I want to see real-time progress during task execution, so that I understand what Geoffrussy is doing and can intervene if needed.
 
 #### Acceptance Criteria
 
@@ -298,7 +298,7 @@ Geoffrussy is a next-generation AI-powered development orchestration platform th
 
 ### Requirement 15: CLI Interface
 
-**User Story:** As a developer, I want a clean command-line interface, so that I can easily interact with Geoffrey using familiar patterns.
+**User Story:** As a developer, I want a clean command-line interface, so that I can easily interact with Geoffrussy using familiar patterns.
 
 #### Acceptance Criteria
 
@@ -314,7 +314,7 @@ Geoffrussy is a next-generation AI-powered development orchestration platform th
 
 ### Requirement 16: Terminal UI
 
-**User Story:** As a developer, I want an interactive terminal interface, so that I can navigate and control Geoffrey efficiently.
+**User Story:** As a developer, I want an interactive terminal interface, so that I can navigate and control Geoffrussy efficiently.
 
 #### Acceptance Criteria
 
@@ -372,7 +372,7 @@ Geoffrussy is a next-generation AI-powered development orchestration platform th
 
 ### Requirement 20: Error Handling and Recovery
 
-**User Story:** As a developer, I want robust error handling, so that Geoffrey can recover gracefully from failures.
+**User Story:** As a developer, I want robust error handling, so that Geoffrussy can recover gracefully from failures.
 
 #### Acceptance Criteria
 

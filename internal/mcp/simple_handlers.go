@@ -12,7 +12,7 @@ import (
 	"github.com/mojomast/geoffrussy/internal/token"
 )
 
-// SimpleToolHandlers contains basic MCP tool handlers for Geoffrey
+// SimpleToolHandlers contains basic MCP tool handlers for Geoffrussy
 // This is a simplified version that doesn't require full CLI integration
 type SimpleToolHandlers struct {
 	configManager *config.Manager
@@ -27,7 +27,7 @@ func NewSimpleToolHandlers(configManager *config.Manager, projectRoot string) *S
 	}
 }
 
-// RegisterBasicTools registers basic Geoffrey tools with the registry
+// RegisterBasicTools registers basic Geoffrussy tools with the registry
 func (h *SimpleToolHandlers) RegisterBasicTools(registry *ToolRegistry) error {
 	tools := []struct {
 		tool    Tool

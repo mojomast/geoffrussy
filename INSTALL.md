@@ -1,6 +1,6 @@
-# Installing Geoffrey Globally
+# Installing Geoffrussy Globally
 
-Geoffrey can be installed globally so you can use it from any project directory.
+Geoffrussy can be installed globally so you can use it from any project directory.
 
 ## Method 1: Automated Install (Recommended)
 
@@ -99,7 +99,7 @@ source ~/.bashrc   # or ~/.zshrc, etc.
 
 ## Verifying Installation
 
-Check if Geoffrey is in your PATH:
+Check if Geoffrussy is in your PATH:
 ```bash
 which geoffrussy
 ```
@@ -159,7 +159,7 @@ sudo make install-system
 
 ### Wrong Architecture
 
-Geoffrey builds for your current OS/architecture. If you need cross-platform:
+Geoffrussy builds for your current OS/architecture. If you need cross-platform:
 ```bash
 make build-all
 ```

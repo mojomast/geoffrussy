@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/mojomast/geoffrussy/internal/config"
 	"github.com/mojomast/geoffrussy/internal/git"
 	"github.com/mojomast/geoffrussy/internal/navigation"
 	"github.com/mojomast/geoffrussy/internal/state"
@@ -41,26 +40,18 @@ func init() {
 }
 
 func runNavigate(cmd *cobra.Command, args []string) error {
-	// Load configuration
-	cfgMgr := config.NewManager()
-	if err := cfgMgr.Load(nil); err != nil {
-		return fmt.Errorf("failed to load configuration: %w", err)
-	}
-	cfg := cfgMgr.GetConfig()
-
 	// Determine project ID
 	projectID := navigateProjectID
+	cwd, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("failed to get current directory: %w", err)
+	}
 	if projectID == "" {
-		cwd, err := os.Getwd()
-		if err != nil {
-			return fmt.Errorf("failed to get current directory: %w", err)
-		}
 		projectID = filepath.Base(cwd)
 	}
 
-	// Initialize state store
-	configDir := filepath.Dir(cfg.ConfigPath)
-	dbPath := filepath.Join(configDir, "geoffrussy.db")
+	// Initialize state store (project local)
+	dbPath := filepath.Join(cwd, ".geoffrussy", "state.db")
 	store, err := state.NewStore(dbPath)
 	if err != nil {
 		return fmt.Errorf("failed to initialize state store: %w", err)

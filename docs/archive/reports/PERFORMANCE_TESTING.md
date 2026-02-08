@@ -1,4 +1,4 @@
-# Performance Testing Plan - Geoffrey AI Coding Agent
+# Performance Testing Plan - Geoffrussy AI Coding Agent
 
 **Version**: 0.1.0  
 **Date**: January 29, 2026  

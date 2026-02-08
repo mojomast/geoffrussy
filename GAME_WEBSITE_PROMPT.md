@@ -348,7 +348,7 @@ game-website/
 ## Example MCP Workflow
 
 ```bash
-# Start Geoffrey MCP server in background
+# Start Geoffrussy MCP server in background
 geoffrussy mcp-server --project-path /path/to/project &
 
 # Create checkpoint before starting
@@ -418,7 +418,7 @@ HIGH_SCORE_KEY_PREFIX=game_arena_
 
 ## Getting Started
 
-1. **Start Geoffrey MCP server** in a separate terminal:
+1. **Start Geoffrussy MCP server** in a separate terminal:
    ```bash
    geoffrussy mcp-server --project-path /path/to/project
    ```
@@ -470,4 +470,4 @@ For each game, implement:
 
 ---
 
-**Good luck! The game website will demonstrate building a complete game platform using Geoffrey MCP for agent capabilities.**
+**Good luck! The game website will demonstrate building a complete game platform using Geoffrussy MCP for agent capabilities.**

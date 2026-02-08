@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 
 	"github.com/mojomast/geoffrussy/internal/config"
@@ -14,11 +15,12 @@ import (
 var configListProviders bool
 var configSetKey bool
 var configSetModel bool
+var configProviderHelp string
 
 var configCmd = &cobra.Command{
 	Use:   "config",
-	Short: "Manage Geoffrey configuration",
-	Long: `Manage Geoffrey configuration including API keys, provider selection,
+	Short: "Manage Geoffrussy configuration",
+	Long: `Manage Geoffrussy configuration including API keys, provider selection,
  and default models for each pipeline stage.`,
 	RunE: runConfig,
 }
@@ -27,6 +29,7 @@ func init() {
 	configCmd.Flags().BoolVar(&configListProviders, "list-providers", false, "List available providers and their models")
 	configCmd.Flags().BoolVar(&configSetKey, "set-key", false, "Set API key interactively")
 	configCmd.Flags().BoolVar(&configSetModel, "set-model", false, "Set default model for a stage")
+	configCmd.Flags().StringVar(&configProviderHelp, "provider-help", "", "Show setup instructions for a provider")
 }
 
 func runConfig(cmd *cobra.Command, args []string) error {
@@ -48,6 +51,10 @@ func runConfig(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("failed to load configuration: %w", err)
 		}
 		return setDefaultModelInteractive(cfgMgr)
+	}
+
+	if strings.TrimSpace(configProviderHelp) != "" {
+		return showProviderHelp(configProviderHelp)
 	}
 
 	return showConfigMenu()
@@ -132,11 +139,27 @@ func displayCurrentConfig(cfg *config.Config) {
 	fmt.Println("─────────────────────────────────────────────────────")
 	fmt.Println("\n🔑 API Keys:")
 	if len(cfg.APIKeys) == 0 {
-		fmt.Println("   None configured")
+		if len(cfg.APIKeySources) == 0 {
+			fmt.Println("   None configured")
+		} else {
+			for provider, source := range cfg.APIKeySources {
+				fmt.Printf("   %s: (%s)\n", provider, source)
+			}
+		}
 	} else {
 		for provider := range cfg.APIKeys {
 			masked := maskAPIKey(cfg.APIKeys[provider])
-			fmt.Printf("   %s: %s\n", provider, masked)
+			source := cfg.APIKeySources[provider]
+			if source == "" {
+				source = "unknown"
+			}
+			fmt.Printf("   %s: %s (%s)\n", provider, masked, source)
+		}
+		for provider, source := range cfg.APIKeySources {
+			if _, ok := cfg.APIKeys[provider]; ok {
+				continue
+			}
+			fmt.Printf("   %s: (stored in %s)\n", provider, source)
 		}
 	}
 
@@ -180,62 +203,43 @@ func listProvidersAndModels() error {
 
 	for _, name := range providerNames {
 		fmt.Printf("\n📦 %s\n", strings.Title(name))
+		if tip, ok := providerOnboardingTips[name]; ok {
+			fmt.Printf("   Setup: %s\n", tip.KeyFormat)
+			if tip.DocsURL != "" {
+				fmt.Printf("   Docs: %s\n", tip.DocsURL)
+			}
+		}
 
-		// Create provider
-		p, err := provider.CreateProvider(name)
+		snapshot, err := loadProviderSnapshot(cfgMgr, cfg, name)
 		if err != nil {
-			fmt.Printf("   Error: %v\n", err)
+			fmt.Printf("   ⚠️  %v\n", err)
 			continue
 		}
 
-		// Check authentication
-		isAuthenticated := false
-		var authErr error
-
-		if name == "ollama" {
-			// Ollama doesn't need API key
-			if err := p.Authenticate(""); err == nil {
-				isAuthenticated = true
-			} else {
-				authErr = err
+		if snapshot.rate != nil && snapshot.rate.RequestsLimit > 0 {
+			fmt.Printf("   Rate Limit: %d/%d remaining\n", snapshot.rate.RequestsRemaining, snapshot.rate.RequestsLimit)
+		}
+		if snapshot.quota != nil {
+			if snapshot.quota.TokensLimit > 0 {
+				fmt.Printf("   Token Quota: %d/%d remaining\n", snapshot.quota.TokensRemaining, snapshot.quota.TokensLimit)
 			}
-		} else {
-			if key, ok := cfg.APIKeys[name]; ok && key != "" {
-				if err := p.Authenticate(key); err == nil {
-					isAuthenticated = true
-				} else {
-					authErr = err
-				}
+			if snapshot.quota.CostLimit > 0 {
+				fmt.Printf("   Cost Quota: $%.2f/$%.2f remaining\n", snapshot.quota.CostRemaining, snapshot.quota.CostLimit)
 			}
 		}
 
-		if !isAuthenticated {
-			if name == "ollama" {
-				if authErr != nil {
-					fmt.Printf("   ⚠️  Connection failed: %v\n", authErr)
-				} else {
-					fmt.Println("   ⚠️  Not connected (is Ollama running?)")
-				}
-			} else {
-				if authErr != nil {
-					fmt.Printf("   ⚠️  Authentication failed: %v\n", authErr)
-				} else {
-					fmt.Println("   ⚠️  Not configured (set API key to see models)")
-				}
-			}
-			continue
-		}
-
-		// List models
-		models, err := p.ListModels()
-		if err != nil {
-			fmt.Printf("   Error listing models: %v\n", err)
+		if len(snapshot.models) == 0 {
+			fmt.Println("   ⚠️  No models reported by provider")
 			continue
 		}
 
 		fmt.Println("   Models:")
-		for _, model := range models {
-			fmt.Printf("      • %s\n", model.Name)
+		for _, model := range snapshot.models {
+			price := ""
+			if model.PriceInput > 0 || model.PriceOutput > 0 {
+				price = fmt.Sprintf(" [$%.4f in / $%.4f out per 1K]", model.PriceInput, model.PriceOutput)
+			}
+			fmt.Printf("      • %s%s\n", model.Name, price)
 		}
 	}
 
@@ -272,6 +276,16 @@ func setAPIKeyInteractive(cfgMgr *config.Manager) error {
 	}
 
 	selectedName := providerNames[index-1]
+	if tip, ok := providerOnboardingTips[selectedName]; ok {
+		fmt.Printf("\n%s Setup\n", tip.Title)
+		fmt.Printf("  Key format: %s\n", tip.KeyFormat)
+		if tip.Notes != "" {
+			fmt.Printf("  Notes: %s\n", tip.Notes)
+		}
+		if tip.DocsURL != "" {
+			fmt.Printf("  Docs: %s\n", tip.DocsURL)
+		}
+	}
 
 	fmt.Printf("\nEnter API Key for %s (or press Enter to skip): ", strings.Title(selectedName))
 	apiKey, _ := reader.ReadString('\n')
@@ -282,7 +296,8 @@ func setAPIKeyInteractive(cfgMgr *config.Manager) error {
 		return nil
 	}
 
-	if err := cfgMgr.SetAPIKey(selectedName, apiKey); err != nil {
+	storage, err := cfgMgr.SetAPIKeyWithStorage(selectedName, apiKey)
+	if err != nil {
 		return fmt.Errorf("failed to set API key: %w", err)
 	}
 
@@ -290,7 +305,11 @@ func setAPIKeyInteractive(cfgMgr *config.Manager) error {
 		return fmt.Errorf("failed to save configuration: %w", err)
 	}
 
-	fmt.Println("✅ API key configured!")
+	if storage == "keyring" {
+		fmt.Println("✅ API key configured (stored in OS keyring)")
+	} else {
+		fmt.Println("✅ API key configured (stored in config file; keyring unavailable)")
+	}
 	return nil
 }
 
@@ -300,7 +319,7 @@ func setDefaultModelInteractive(cfgMgr *config.Manager) error {
 	fmt.Println("╚════════════════════════════════════════════════════════════╝")
 	fmt.Println()
 
-	stages := []string{"interview", "design", "devplan", "review", "develop"}
+	stages := config.KnownStageKeys()
 
 	reader := bufio.NewReader(os.Stdin)
 
@@ -331,21 +350,26 @@ func setDefaultModelInteractive(cfgMgr *config.Manager) error {
 		}
 	}
 
-	fmt.Println("\nFetching available models...")
+	fmt.Println("\nFetching available models from provider APIs...")
 
-	bridge := provider.NewBridge()
-	providerNames := provider.GetProviderNames()
-
-	for _, name := range providerNames {
-		if err := setupProvider(bridge, cfgMgr, name); err != nil {
-			continue
-		}
-	}
-
-	allModels, err := bridge.ListModels()
+	allModels, snapshots, err := loadAllProviderModels(cfgMgr, cfg)
 	if err != nil || len(allModels) == 0 {
 		fmt.Println("⚠️  No models found. Configure providers first.")
 		return nil
+	}
+
+	if len(snapshots) > 0 {
+		fmt.Println("\nProvider Usage Status:")
+		for providerName, snap := range snapshots {
+			line := fmt.Sprintf("   - %s", providerName)
+			if snap.rate != nil && snap.rate.RequestsLimit > 0 {
+				line += fmt.Sprintf(" | rate %d/%d", snap.rate.RequestsRemaining, snap.rate.RequestsLimit)
+			}
+			if snap.quota != nil && snap.quota.TokensLimit > 0 {
+				line += fmt.Sprintf(" | tokens %d/%d", snap.quota.TokensRemaining, snap.quota.TokensLimit)
+			}
+			fmt.Println(line)
+		}
 	}
 
 	// Separate favorites
@@ -443,17 +467,8 @@ func manageFavoritesInteractive(cfgMgr *config.Manager) error {
 
 func addFavoriteInteractive(cfgMgr *config.Manager) error {
 	fmt.Println("\nFetching available models...")
-
-	bridge := provider.NewBridge()
-	providerNames := provider.GetProviderNames()
-
-	for _, name := range providerNames {
-		if err := setupProvider(bridge, cfgMgr, name); err != nil {
-			continue
-		}
-	}
-
-	allModels, err := bridge.ListModels()
+	cfg := cfgMgr.GetConfig()
+	allModels, _, err := loadAllProviderModels(cfgMgr, cfg)
 	if err != nil || len(allModels) == 0 {
 		return fmt.Errorf("no models found. Configure providers first")
 	}
@@ -553,4 +568,210 @@ func setBudgetLimitInteractive(cfgMgr *config.Manager) error {
 		fmt.Println("✅ Budget limit removed (unlimited)")
 	}
 	return nil
+}
+
+func showProviderHelp(providerName string) error {
+	name := strings.ToLower(strings.TrimSpace(providerName))
+	tip, ok := providerOnboardingTips[name]
+	if !ok {
+		return fmt.Errorf("unknown provider '%s'. Run 'geoffrussy config --list-providers' to see supported providers", providerName)
+	}
+
+	fmt.Printf("\n%s Setup\n", tip.Title)
+	fmt.Println("─────────────────────────────────────────────────────")
+	fmt.Printf("Provider:   %s\n", name)
+	fmt.Printf("Key format: %s\n", tip.KeyFormat)
+	if tip.Notes != "" {
+		fmt.Printf("Notes:      %s\n", tip.Notes)
+	}
+	if tip.DocsURL != "" {
+		fmt.Printf("Docs:       %s\n", tip.DocsURL)
+	}
+
+	fmt.Println("\nQuick commands:")
+	fmt.Printf("  geoffrussy config --set-key\n")
+	fmt.Printf("  geoffrussy config --set-model\n")
+
+	return nil
+}
+
+type providerSnapshot struct {
+	name   string
+	models []provider.Model
+	rate   *provider.RateLimitInfo
+	quota  *provider.QuotaInfo
+}
+
+type onboardingTip struct {
+	Title     string
+	KeyFormat string
+	Notes     string
+	DocsURL   string
+}
+
+var providerOnboardingTips = map[string]onboardingTip{
+	"openai": {
+		Title:     "OpenAI",
+		KeyFormat: "starts with sk-...",
+		DocsURL:   "https://platform.openai.com/api-keys",
+	},
+	"openai-codex": {
+		Title:     "OpenAI Codex Business",
+		KeyFormat: "OpenAI org credential/token",
+		Notes:     "Complete business web login flow first, then paste a usable API credential.",
+		DocsURL:   "https://platform.openai.com/docs",
+	},
+	"anthropic": {
+		Title:     "Anthropic",
+		KeyFormat: "starts with sk-ant-...",
+		DocsURL:   "https://console.anthropic.com/settings/keys",
+	},
+	"openrouter": {
+		Title:     "OpenRouter",
+		KeyFormat: "starts with sk-or-...",
+		DocsURL:   "https://openrouter.ai/keys",
+	},
+	"groq": {
+		Title:     "Groq",
+		KeyFormat: "Groq API key",
+		DocsURL:   "https://console.groq.com/keys",
+	},
+	"together": {
+		Title:     "Together",
+		KeyFormat: "Together API key",
+		DocsURL:   "https://api.together.xyz/settings/api-keys",
+	},
+	"deepinfra": {
+		Title:     "DeepInfra",
+		KeyFormat: "DeepInfra API token",
+		DocsURL:   "https://deepinfra.com/dash/api_keys",
+	},
+	"fireworks": {
+		Title:     "Fireworks",
+		KeyFormat: "Fireworks API key",
+		DocsURL:   "https://fireworks.ai/account/api-keys",
+	},
+	"perplexity": {
+		Title:     "Perplexity",
+		KeyFormat: "Perplexity API key",
+		DocsURL:   "https://docs.perplexity.ai",
+	},
+	"mistral": {
+		Title:     "Mistral",
+		KeyFormat: "Mistral API key",
+		DocsURL:   "https://console.mistral.ai/api-keys",
+	},
+	"requesty": {
+		Title:     "Requesty",
+		KeyFormat: "Requesty API key",
+		DocsURL:   "https://router.requesty.ai",
+	},
+	"kimi": {
+		Title:     "Kimi (Moonshot)",
+		KeyFormat: "Moonshot API key",
+		DocsURL:   "https://platform.moonshot.cn",
+	},
+	"zai": {
+		Title:     "Z.ai",
+		KeyFormat: "Z.ai API key",
+		DocsURL:   "https://platform.z.ai",
+	},
+	"firmware": {
+		Title:     "Firmware",
+		KeyFormat: "Firmware API key",
+	},
+	"opencode": {
+		Title:     "OpenCode",
+		KeyFormat: "not required in geoffrussy",
+		Notes:     "Authenticate in OpenCode CLI separately; geoffrussy uses local opencode binary.",
+	},
+	"ollama": {
+		Title:     "Ollama",
+		KeyFormat: "not required",
+		Notes:     "Ensure Ollama is running locally at http://localhost:11434.",
+		DocsURL:   "https://ollama.com",
+	},
+}
+
+func loadProviderSnapshot(cfgMgr *config.Manager, cfg *config.Config, name string) (*providerSnapshot, error) {
+	p, err := provider.CreateProvider(name)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize provider: %w", err)
+	}
+
+	if name == "ollama" {
+		if err := p.Authenticate(""); err != nil {
+			return nil, fmt.Errorf("connection failed: %w", err)
+		}
+	} else {
+		key, err := cfgMgr.GetAPIKey(name)
+		if err != nil || key == "" {
+			if _, exists := cfg.APIKeySources[name]; !exists {
+				return nil, fmt.Errorf("not configured")
+			}
+			return nil, fmt.Errorf("credential configured but unavailable: %v", err)
+		}
+		if err := p.Authenticate(key); err != nil {
+			return nil, fmt.Errorf("authentication failed: %w", err)
+		}
+	}
+
+	models := make([]provider.Model, 0)
+	if discovered, err := p.DiscoverModels(); err == nil {
+		models = append(models, discovered...)
+	}
+	if listed, err := p.ListModels(); err == nil {
+		models = append(models, listed...)
+	}
+
+	modelMap := make(map[string]provider.Model)
+	for _, m := range models {
+		modelMap[m.Name] = m
+	}
+
+	merged := make([]provider.Model, 0, len(modelMap))
+	for _, m := range modelMap {
+		merged = append(merged, m)
+	}
+	sort.Slice(merged, func(i, j int) bool {
+		return merged[i].Name < merged[j].Name
+	})
+
+	rateInfo, _ := p.GetRateLimitInfo()
+	quotaInfo, _ := p.GetQuotaInfo()
+
+	return &providerSnapshot{
+		name:   name,
+		models: merged,
+		rate:   rateInfo,
+		quota:  quotaInfo,
+	}, nil
+}
+
+func loadAllProviderModels(cfgMgr *config.Manager, cfg *config.Config) ([]provider.Model, map[string]*providerSnapshot, error) {
+	providerNames := provider.GetProviderNames()
+	allModels := make([]provider.Model, 0)
+	snapshots := make(map[string]*providerSnapshot)
+
+	for _, name := range providerNames {
+		snapshot, err := loadProviderSnapshot(cfgMgr, cfg, name)
+		if err != nil {
+			continue
+		}
+		snapshots[name] = snapshot
+		allModels = append(allModels, snapshot.models...)
+	}
+
+	if len(allModels) == 0 {
+		return nil, snapshots, fmt.Errorf("no models found")
+	}
+
+	sort.Slice(allModels, func(i, j int) bool {
+		if allModels[i].Provider == allModels[j].Provider {
+			return allModels[i].Name < allModels[j].Name
+		}
+		return allModels[i].Provider < allModels[j].Provider
+	})
+
+	return allModels, snapshots, nil
 }

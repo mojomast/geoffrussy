@@ -305,6 +305,11 @@ The follow-up should:
 
 If the answer is already comprehensive and clear, respond with "SKIP" to indicate no follow-up is needed.
 
+OUTPUT RULES:
+- Return exactly one sentence if asking a follow-up.
+- Return exactly "SKIP" if no follow-up is needed.
+- No prefixes, labels, bullets, or explanations.
+
 Question: %s
 Answer: %s
 
@@ -339,10 +344,15 @@ func (e *Engine) AnalyzeAnswer(question Question, answer Answer) (*AnswerAnalysi
 Question: %s
 Answer: %s
 
-Provide your analysis in the following format:
+Provide your analysis in the following format (exact labels):
 KEY_POINTS: List 2-3 key points from the answer (comma-separated)
 COMPLETENESS: Rate as "complete", "partial", or "incomplete"
 SUGGESTIONS: If incomplete, suggest what additional information would be helpful (comma-separated, or "none")
+
+OUTPUT RULES:
+- Return exactly these three labeled lines.
+- No extra sections.
+- Keep each line concise.
 
 Analysis:`, question.Text, answer.Text)
 
@@ -823,6 +833,11 @@ func (e *Engine) ProposeDefault(question Question) (string, error) {
 // ProposeDefaultWithLLM uses the LLM to propose a reasonable default
 func (e *Engine) ProposeDefaultWithLLM(question Question) (string, error) {
 	prompt := fmt.Sprintf(`You are helping a developer set up a new project. For the following question, propose a reasonable, commonly-used default answer. Keep it brief and practical.
+
+OUTPUT RULES:
+- Return one short answer only.
+- No leading labels (e.g., "Answer:").
+- No explanations unless absolutely necessary.
 
 Question: %s
 Category: %s

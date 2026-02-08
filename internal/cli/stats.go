@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"text/tabwriter"
 
-	"github.com/mojomast/geoffrussy/internal/config"
 	"github.com/mojomast/geoffrussy/internal/state"
 	"github.com/mojomast/geoffrussy/internal/token"
 	"github.com/spf13/cobra"
@@ -21,13 +20,6 @@ by provider and phase.`,
 }
 
 func runStats(cmd *cobra.Command, args []string) error {
-	// Try to load configuration
-	cfgMgr := config.NewManager()
-	if err := cfgMgr.Load(nil); err != nil {
-		return fmt.Errorf("failed to load configuration: %w", err)
-	}
-	cfg := cfgMgr.GetConfig()
-
 	// Determine project ID from current directory
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -35,9 +27,8 @@ func runStats(cmd *cobra.Command, args []string) error {
 	}
 	projectID := filepath.Base(cwd)
 
-	// Initialize state store (use config directory)
-	configDir := filepath.Dir(cfg.ConfigPath)
-	dbPath := filepath.Join(configDir, "geoffrussy.db")
+	// Initialize state store (project local)
+	dbPath := filepath.Join(cwd, ".geoffrussy", "state.db")
 	store, err := state.NewStore(dbPath)
 	if err != nil {
 		return fmt.Errorf("failed to initialize store: %w", err)

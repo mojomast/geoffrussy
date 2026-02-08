@@ -96,7 +96,7 @@ func (h *PlanHandlers) handleCreateDevPlan(ctx context.Context, args map[string]
 		return ErrorResult(fmt.Sprintf("Failed to get interview data: %v", err)), nil
 	}
 
-	prov, modelName, err := initProviderForStage(h.configManager, "plan", model)
+	prov, modelName, err := initProviderForStage(h.configManager, "devplan.generate", model)
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("Failed to initialize provider: %v", err)), nil
 	}
@@ -169,7 +169,7 @@ func (h *PlanHandlers) handleCreateDevPlan(ctx context.Context, args map[string]
 	}
 
 	// Update project stage
-	if err := store.UpdateProjectStage(projectID, "plan_complete"); err != nil {
+	if err := store.UpdateProjectStage(projectID, state.StagePlan); err != nil {
 		return ErrorResult(fmt.Sprintf("Failed to update project stage: %v", err)), nil
 	}
 

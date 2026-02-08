@@ -211,6 +211,12 @@ func (g *Generator) GenerateArchitecture(interviewData *state.InterviewData) (*A
 func (g *Generator) buildArchitecturePrompt(interviewData *state.InterviewData) string {
 	prompt := `You are an expert software architect. Based on the following project requirements, generate a comprehensive system architecture.
 
+CRITICAL OUTPUT RULES:
+- Use the section headers below EXACTLY as written (all caps).
+- Keep output in plain text/markdown only (no JSON, no code fences).
+- Include every section, even if brief.
+- Make recommendations concrete and implementation-ready.
+
 PROJECT INFORMATION:
 Problem Statement: ` + interviewData.ProblemStatement + `
 Target Users: ` + strings.Join(interviewData.TargetUsers, ", ") + `
@@ -273,7 +279,21 @@ Please provide a detailed architecture document with the following sections:
     - List key assumptions
     - List unknowns that need clarification
 
-Format your response as structured text that can be parsed. Use clear section headers and consistent formatting.`
+Format your response as structured text that can be parsed. Use clear section headers and consistent formatting.
+
+Required section headers in order:
+SYSTEM OVERVIEW
+COMPONENTS
+DATA FLOWS
+TECHNOLOGY RATIONALE
+SCALING STRATEGY
+API CONTRACT
+DATABASE SCHEMA
+SECURITY APPROACH
+OBSERVABILITY STRATEGY
+DEPLOYMENT ARCHITECTURE
+RISK ASSESSMENT
+ASSUMPTIONS AND UNKNOWNS`
 
 	return prompt
 }
@@ -431,6 +451,8 @@ REFINEMENT REQUEST:
 
 Please provide the updated content for this section, maintaining consistency with the rest of the architecture.`,
 		section, g.getSectionContent(architecture, section), refinementRequest)
+
+	prompt += "\n\nOUTPUT RULES:\n- Return only the revised section content.\n- No preamble, no explanations, no markdown code fences.\n- Keep content specific and implementation-oriented."
 
 	response, err := g.provider.Call(g.model, prompt)
 	if err != nil {
