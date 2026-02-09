@@ -85,9 +85,9 @@ CREATE TABLE IF NOT EXISTS token_usage (
 CREATE TABLE IF NOT EXISTS rate_limits (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     provider TEXT NOT NULL,
-    requests_remaining INTEGER NOT NULL,
-    requests_limit INTEGER NOT NULL,
-    reset_at TIMESTAMP NOT NULL,
+    requests_remaining INTEGER,
+    requests_limit INTEGER,
+    reset_at TIMESTAMP,
     checked_at TIMESTAMP NOT NULL
 );
 

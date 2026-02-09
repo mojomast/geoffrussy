@@ -35,6 +35,56 @@ var migrations = []Migration{
 			DROP TABLE IF EXISTS projects;
 		`,
 	},
+	{
+		Version:     2,
+		Description: "Make rate_limits fields nullable",
+		Up: `
+			-- Create a new table with nullable columns
+			CREATE TABLE IF NOT EXISTS rate_limits_new (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				provider TEXT NOT NULL,
+				requests_remaining INTEGER,
+				requests_limit INTEGER,
+				reset_at TIMESTAMP,
+				checked_at TIMESTAMP NOT NULL
+			);
+
+			-- Copy data from old table to new table
+			INSERT INTO rate_limits_new (provider, requests_remaining, requests_limit, reset_at, checked_at)
+			SELECT provider, requests_remaining, requests_limit, reset_at, checked_at 
+			FROM rate_limits;
+
+			-- Drop old table and rename new one
+			DROP TABLE rate_limits;
+			ALTER TABLE rate_limits_new RENAME TO rate_limits;
+
+			-- Recreate indexes
+			CREATE INDEX IF NOT EXISTS idx_rate_limits_provider ON rate_limits(provider);
+		`,
+		Down: `
+			-- Create a new table with NOT NULL columns
+			CREATE TABLE IF NOT EXISTS rate_limits_new (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				provider TEXT NOT NULL,
+				requests_remaining INTEGER NOT NULL,
+				requests_limit INTEGER NOT NULL,
+				reset_at TIMESTAMP NOT NULL,
+				checked_at TIMESTAMP NOT NULL
+			);
+
+			-- Copy data from old table to new table
+			INSERT INTO rate_limits_new (provider, requests_remaining, requests_limit, reset_at, checked_at)
+			SELECT provider, requests_remaining, requests_limit, reset_at, checked_at 
+			FROM rate_limits;
+
+			-- Drop old table and rename new one
+			DROP TABLE rate_limits;
+			ALTER TABLE rate_limits_new RENAME TO rate_limits;
+
+			-- Recreate indexes
+			CREATE INDEX IF NOT EXISTS idx_rate_limits_provider ON rate_limits(provider);
+		`,
+	},
 }
 
 // MigrationManager handles database migrations

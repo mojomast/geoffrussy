@@ -162,9 +162,9 @@ type TokenUsage struct {
 // RateLimitInfo contains rate limit information
 type RateLimitInfo struct {
 	Provider          string
-	RequestsRemaining int
-	RequestsLimit     int
-	ResetAt           time.Time
+	RequestsRemaining *int
+	RequestsLimit     *int
+	ResetAt           *time.Time
 	CheckedAt         time.Time
 }
 

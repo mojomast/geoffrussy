@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"net/http"
 	"os"
 	"time"
 
@@ -34,6 +35,8 @@ type Response struct {
 	Timestamp          time.Time
 	RateLimitRemaining int
 	QuotaRemaining     int
+	RateLimitInfo      *RateLimitInfo
+	QuotaInfo          *QuotaInfo
 }
 
 // RateLimitInfo contains rate limiting information from a provider
@@ -175,4 +178,181 @@ func (b *BaseProvider) GetQuotaInfo() (*QuotaInfo, error) {
 // Providers that support coding plans should override this
 func (b *BaseProvider) SupportsCodingPlan() bool {
 	return false
+}
+
+// ExtractRateLimitInfo extracts rate limit information from HTTP response headers
+func ExtractRateLimitInfo(resp *http.Response) *RateLimitInfo {
+	info := &RateLimitInfo{}
+
+	// Extract from common rate limit headers
+	if val := resp.Header.Get("X-RateLimit-Remaining"); val != "" {
+		if parsed, err := parseRateLimitHeader(val); err == nil {
+			info.RequestsRemaining = parsed
+		}
+	}
+
+	if val := resp.Header.Get("X-RateLimit-Limit"); val != "" {
+		if parsed, err := parseRateLimitHeader(val); err == nil {
+			info.RequestsLimit = parsed
+		}
+	}
+
+	if val := resp.Header.Get("X-RateLimit-Reset"); val != "" {
+		if parsed, err := parseRateLimitResetHeader(val); err == nil {
+			info.ResetAt = parsed
+		}
+	}
+
+	if val := resp.Header.Get("Retry-After"); val != "" {
+		if parsed, err := parseRetryAfterHeader(val); err == nil {
+			info.RetryAfter = parsed
+		}
+	}
+
+	// Extract from OpenAI-specific headers
+	if val := resp.Header.Get("X-RateLimit-Remaining-Requests"); val != "" {
+		if parsed, err := parseRateLimitHeader(val); err == nil {
+			info.RequestsRemaining = parsed
+		}
+	}
+
+	// Extract from Kimi-specific headers
+	if val := resp.Header.Get("X-Ratelimit-Remaining-Requests"); val != "" {
+		if parsed, err := parseRateLimitHeader(val); err == nil {
+			info.RequestsRemaining = parsed
+		}
+	}
+
+	if val := resp.Header.Get("X-Ratelimit-Limit-Requests"); val != "" {
+		if parsed, err := parseRateLimitHeader(val); err == nil {
+			info.RequestsLimit = parsed
+		}
+	}
+
+	if val := resp.Header.Get("X-Ratelimit-Reset-Requests"); val != "" {
+		if parsed, err := parseRateLimitResetHeader(val); err == nil {
+			info.ResetAt = parsed
+		}
+	}
+
+	// Extract from Anthropic-specific headers
+	if val := resp.Header.Get("anthropic-ratelimit-requests-remaining"); val != "" {
+		if parsed, err := parseRateLimitHeader(val); err == nil {
+			info.RequestsRemaining = parsed
+		}
+	}
+
+	if val := resp.Header.Get("anthropic-ratelimit-requests-limit"); val != "" {
+		if parsed, err := parseRateLimitHeader(val); err == nil {
+			info.RequestsLimit = parsed
+		}
+	}
+
+	if val := resp.Header.Get("anthropic-ratelimit-requests-reset"); val != "" {
+		if parsed, err := parseRateLimitResetHeader(val); err == nil {
+			info.ResetAt = parsed
+		}
+	}
+
+	if val := resp.Header.Get("Retry-After"); val != "" {
+		if parsed, err := parseRetryAfterHeader(val); err == nil {
+			info.RetryAfter = parsed
+		}
+	}
+
+	return info
+}
+
+// ExtractQuotaInfo extracts quota information from HTTP response headers
+func ExtractQuotaInfo(resp *http.Response) *QuotaInfo {
+	info := &QuotaInfo{}
+
+	// Extract from common quota headers
+	if val := resp.Header.Get("X-RateLimit-Remaining"); val != "" {
+		if parsed, err := parseQuotaHeader(val); err == nil {
+			info.TokensRemaining = parsed
+		}
+	}
+
+	if val := resp.Header.Get("X-RateLimit-Limit"); val != "" {
+		if parsed, err := parseQuotaHeader(val); err == nil {
+			info.TokensLimit = parsed
+		}
+	}
+
+	if val := resp.Header.Get("X-RateLimit-Reset"); val != "" {
+		if parsed, err := parseRateLimitResetHeader(val); err == nil {
+			info.ResetAt = parsed
+		}
+	}
+
+	// Extract from OpenAI-specific headers
+	if val := resp.Header.Get("X-Remaining-Tokens"); val != "" {
+		if parsed, err := parseQuotaHeader(val); err == nil {
+			info.TokensRemaining = parsed
+		}
+	}
+
+	if val := resp.Header.Get("X-RateLimit-Remaining-Tokens"); val != "" {
+		if parsed, err := parseQuotaHeader(val); err == nil {
+			info.TokensRemaining = parsed
+		}
+	}
+
+	// Extract from Kimi-specific headers
+	if val := resp.Header.Get("X-Ratelimit-Remaining-Tokens"); val != "" {
+		if parsed, err := parseQuotaHeader(val); err == nil {
+			info.TokensRemaining = parsed
+		}
+	}
+
+	if val := resp.Header.Get("X-Ratelimit-Limit-Tokens"); val != "" {
+		if parsed, err := parseQuotaHeader(val); err == nil {
+			info.TokensLimit = parsed
+		}
+	}
+
+	// Extract from Anthropic-specific headers
+	if val := resp.Header.Get("anthropic-ratelimit-tokens-remaining"); val != "" {
+		if parsed, err := parseQuotaHeader(val); err == nil {
+			info.TokensRemaining = parsed
+		}
+	}
+
+	if val := resp.Header.Get("anthropic-ratelimit-tokens-limit"); val != "" {
+		if parsed, err := parseQuotaHeader(val); err == nil {
+			info.TokensLimit = parsed
+		}
+	}
+
+	if val := resp.Header.Get("anthropic-ratelimit-tokens-reset"); val != "" {
+		if parsed, err := parseRateLimitResetHeader(val); err == nil {
+			info.ResetAt = parsed
+		}
+	}
+
+	return info
+}
+
+// Helper functions for parsing headers
+func parseRateLimitHeader(val string) (int, error) {
+	var parsed int
+	_, err := fmt.Sscanf(val, "%d", &parsed)
+	return parsed, err
+}
+
+func parseQuotaHeader(val string) (int, error) {
+	return parseRateLimitHeader(val)
+}
+
+func parseRateLimitResetHeader(val string) (time.Time, error) {
+	var unix int64
+	_, err := fmt.Sscanf(val, "%d", &unix)
+	return time.Unix(unix, 0), err
+}
+
+func parseRetryAfterHeader(val string) (time.Duration, error) {
+	var seconds int
+	_, err := fmt.Sscanf(val, "%d", &seconds)
+	return time.Duration(seconds) * time.Second, err
 }

@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -195,12 +194,8 @@ func (a *AnthropicProvider) Call(model string, prompt string) (*Response, error)
 		}
 
 		// Extract rate limit info from headers
-		rateLimitRemaining := 0
-		if val := resp.Header.Get("anthropic-ratelimit-requests-remaining"); val != "" {
-			if parsed, err := strconv.Atoi(val); err == nil {
-				rateLimitRemaining = parsed
-			}
-		}
+		rateLimitInfo := ExtractRateLimitInfo(resp)
+		rateLimitRemaining := rateLimitInfo.RequestsRemaining
 
 		duration := time.Since(startTime)
 
@@ -362,33 +357,18 @@ func (a *AnthropicProvider) GetRateLimitInfo() (*RateLimitInfo, error) {
 	}
 	defer resp.Body.Close()
 
+	// Log the headers for debugging
+	if a.GetLogger() != nil {
+		a.GetLogger().Info("Rate limit headers received",
+			"requests_remaining", resp.Header.Get("anthropic-ratelimit-requests-remaining"),
+			"requests_limit", resp.Header.Get("anthropic-ratelimit-requests-limit"),
+			"requests_reset", resp.Header.Get("anthropic-ratelimit-requests-reset"),
+			"retry_after", resp.Header.Get("retry-after"),
+		)
+	}
+
 	// Extract rate limit info from headers
-	info := &RateLimitInfo{}
-
-	if val := resp.Header.Get("anthropic-ratelimit-requests-remaining"); val != "" {
-		if parsed, err := strconv.Atoi(val); err == nil {
-			info.RequestsRemaining = parsed
-		}
-	}
-
-	if val := resp.Header.Get("anthropic-ratelimit-requests-limit"); val != "" {
-		if parsed, err := strconv.Atoi(val); err == nil {
-			info.RequestsLimit = parsed
-		}
-	}
-
-	if val := resp.Header.Get("anthropic-ratelimit-requests-reset"); val != "" {
-		if t, err := time.Parse(time.RFC3339, val); err == nil {
-			info.ResetAt = t
-		}
-	}
-
-	if val := resp.Header.Get("retry-after"); val != "" {
-		if seconds, err := strconv.Atoi(val); err == nil {
-			info.RetryAfter = time.Duration(seconds) * time.Second
-		}
-	}
-
+	info := ExtractRateLimitInfo(resp)
 	return info, nil
 }
 
@@ -431,25 +411,7 @@ func (a *AnthropicProvider) GetQuotaInfo() (*QuotaInfo, error) {
 	defer resp.Body.Close()
 
 	// Extract quota info from headers
-	info := &QuotaInfo{}
-
-	if val := resp.Header.Get("anthropic-ratelimit-tokens-remaining"); val != "" {
-		if parsed, err := strconv.Atoi(val); err == nil {
-			info.TokensRemaining = parsed
-		}
-	}
-
-	if val := resp.Header.Get("anthropic-ratelimit-tokens-limit"); val != "" {
-		if parsed, err := strconv.Atoi(val); err == nil {
-			info.TokensLimit = parsed
-		}
-	}
-
-	if val := resp.Header.Get("anthropic-ratelimit-tokens-reset"); val != "" {
-		if t, err := time.Parse(time.RFC3339, val); err == nil {
-			info.ResetAt = t
-		}
-	}
+	info := ExtractQuotaInfo(resp)
 
 	return info, nil
 }

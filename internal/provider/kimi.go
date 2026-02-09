@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -184,12 +183,8 @@ func (k *KimiProvider) Call(model string, prompt string) (*Response, error) {
 		}
 
 		// Extract rate limit info from headers
-		rateLimitRemaining := 0
-		if val := resp.Header.Get("X-Ratelimit-Remaining-Requests"); val != "" {
-			if parsed, err := strconv.Atoi(val); err == nil {
-				rateLimitRemaining = parsed
-			}
-		}
+		rateLimitInfo := ExtractRateLimitInfo(resp)
+		rateLimitRemaining := rateLimitInfo.RequestsRemaining
 
 		duration := time.Since(startTime)
 
@@ -342,32 +337,7 @@ func (k *KimiProvider) GetRateLimitInfo() (*RateLimitInfo, error) {
 	defer resp.Body.Close()
 
 	// Extract rate limit info from headers
-	info := &RateLimitInfo{}
-
-	if val := resp.Header.Get("X-Ratelimit-Remaining-Requests"); val != "" {
-		if parsed, err := strconv.Atoi(val); err == nil {
-			info.RequestsRemaining = parsed
-		}
-	}
-
-	if val := resp.Header.Get("X-Ratelimit-Limit-Requests"); val != "" {
-		if parsed, err := strconv.Atoi(val); err == nil {
-			info.RequestsLimit = parsed
-		}
-	}
-
-	if val := resp.Header.Get("X-Ratelimit-Reset-Requests"); val != "" {
-		if parsed, err := strconv.ParseInt(val, 10, 64); err == nil {
-			info.ResetAt = time.Unix(parsed, 0)
-		}
-	}
-
-	if val := resp.Header.Get("Retry-After"); val != "" {
-		if seconds, err := strconv.Atoi(val); err == nil {
-			info.RetryAfter = time.Duration(seconds) * time.Second
-		}
-	}
-
+	info := ExtractRateLimitInfo(resp)
 	return info, nil
 }
 
@@ -409,20 +379,7 @@ func (k *KimiProvider) GetQuotaInfo() (*QuotaInfo, error) {
 	defer resp.Body.Close()
 
 	// Extract quota info from headers
-	info := &QuotaInfo{}
-
-	if val := resp.Header.Get("X-Ratelimit-Remaining-Tokens"); val != "" {
-		if parsed, err := strconv.Atoi(val); err == nil {
-			info.TokensRemaining = parsed
-		}
-	}
-
-	if val := resp.Header.Get("X-Ratelimit-Limit-Tokens"); val != "" {
-		if parsed, err := strconv.Atoi(val); err == nil {
-			info.TokensLimit = parsed
-		}
-	}
-
+	info := ExtractQuotaInfo(resp)
 	return info, nil
 }
 

@@ -66,11 +66,15 @@ func (m *Monitor) CheckProvider(providerName string, prov provider.Provider) (*P
 	rateLimitInfo, err := prov.GetRateLimitInfo()
 	if err == nil && rateLimitInfo != nil {
 		// Convert provider.RateLimitInfo to state.RateLimitInfo
+		remaining := rateLimitInfo.RequestsRemaining
+		limit := rateLimitInfo.RequestsLimit
+		resetAt := rateLimitInfo.ResetAt
+
 		stateRateLimitInfo := &state.RateLimitInfo{
 			Provider:          providerName,
-			RequestsRemaining: rateLimitInfo.RequestsRemaining,
-			RequestsLimit:     rateLimitInfo.RequestsLimit,
-			ResetAt:           rateLimitInfo.ResetAt,
+			RequestsRemaining: &remaining,
+			RequestsLimit:     &limit,
+			ResetAt:           &resetAt,
 			CheckedAt:         time.Now(),
 		}
 
@@ -139,33 +143,45 @@ func (m *Monitor) CheckProvider(providerName string, prov provider.Provider) (*P
 
 // checkRateLimitWarning checks if rate limit is approaching or exceeded
 func (m *Monitor) checkRateLimitWarning(info *state.RateLimitInfo) *Warning {
-	if info.RequestsLimit == 0 {
+	if info.RequestsLimit == nil || *info.RequestsLimit == 0 {
 		return nil
 	}
 
-	used := info.RequestsLimit - info.RequestsRemaining
-	percentage := float64(used) / float64(info.RequestsLimit) * 100
-	timeToReset := time.Until(info.ResetAt)
+	requestsRemaining := info.RequestsRemaining
+	requestsLimit := info.RequestsLimit
+	resetAt := info.ResetAt
+	timeToReset := time.Duration(0)
+
+	used := *requestsLimit - *requestsRemaining
+	percentage := float64(used) / float64(*requestsLimit) * 100
 
 	var level WarningLevel
 	var message string
 
-	if info.RequestsRemaining <= 0 {
+	if requestsRemaining == nil || *requestsRemaining <= 0 {
 		level = WarningExceeded
-		message = fmt.Sprintf("Rate limit exceeded! Resets in %s", formatDuration(timeToReset))
+		if resetAt != nil {
+			timeToReset = time.Until(*resetAt)
+			message = fmt.Sprintf("Rate limit exceeded! Resets in %s", formatDuration(timeToReset))
+		} else {
+			message = "Rate limit exceeded"
+		}
 	} else if percentage >= 95 {
 		level = WarningCritical
-		message = fmt.Sprintf("Critical: Only %d requests remaining (%.1f%% used)", info.RequestsRemaining, percentage)
+		message = fmt.Sprintf("Critical: Only %d requests remaining (%.1f%% used)", *requestsRemaining, percentage)
 	} else if percentage >= 85 {
 		level = WarningWarning
-		message = fmt.Sprintf("Warning: %d requests remaining (%.1f%% used)", info.RequestsRemaining, percentage)
+		message = fmt.Sprintf("Warning: %d requests remaining (%.1f%% used)", *requestsRemaining, percentage)
 	} else if percentage >= 70 {
 		level = WarningCaution
-		message = fmt.Sprintf("Caution: %d requests remaining (%.1f%% used)", info.RequestsRemaining, percentage)
+		message = fmt.Sprintf("Caution: %d requests remaining (%.1f%% used)", *requestsRemaining, percentage)
 	} else {
 		level = WarningInfo
+		if resetAt != nil {
+			timeToReset = time.Until(*resetAt)
+		}
 		message = fmt.Sprintf("%d/%d requests remaining (%.1f%% available)",
-			info.RequestsRemaining, info.RequestsLimit, 100-percentage)
+			*requestsRemaining, *requestsLimit, 100-percentage)
 	}
 
 	return &Warning{
@@ -291,7 +307,9 @@ func (m *Monitor) GetCachedStatus(providerName string) (*ProviderStatus, error) 
 				// Determine if we should delay
 				if warning.Level == WarningExceeded || warning.Level == WarningCritical {
 					status.ShouldDelay = true
-					status.RecommendedDelay = time.Until(rateLimitInfo.ResetAt)
+					if rateLimitInfo.ResetAt != nil {
+						status.RecommendedDelay = time.Until(*rateLimitInfo.ResetAt)
+					}
 					status.IsHealthy = false
 				}
 			}

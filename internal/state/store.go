@@ -72,6 +72,54 @@ func (s *Store) open() error {
 	return nil
 }
 
+// executeWithRetry executes a transaction with exponential backoff for SQLITE_BUSY errors
+// baseDelay is the initial delay in milliseconds
+// maxRetries is the maximum number of retry attempts (0 means infinite retries)
+func executeWithRetry(db *sql.DB, baseDelay int, maxRetries int, fn func(*sql.Tx) error) error {
+	const maxDelay = 5000 // Maximum delay in milliseconds
+
+	delay := baseDelay
+	retries := 0
+
+	for {
+		tx, err := db.Begin()
+		if err != nil {
+			return fmt.Errorf("failed to begin transaction: %w", err)
+		}
+
+		err = fn(tx)
+		if err == nil {
+			if err := tx.Commit(); err != nil {
+				return fmt.Errorf("failed to commit transaction: %w", err)
+			}
+			return nil
+		}
+
+		_ = tx.Rollback()
+
+		// Check if error is SQLITE_BUSY
+		if strings.Contains(err.Error(), "database is locked") || strings.Contains(err.Error(), "database is busy") || strings.Contains(err.Error(), "database connection is busy") {
+			retries++
+			if maxRetries > 0 && retries > maxRetries {
+				return fmt.Errorf("max retries (%d) exceeded: %w", maxRetries, err)
+			}
+
+			time.Sleep(time.Duration(delay) * time.Millisecond)
+
+			// Exponential backoff: delay = baseDelay * 2^retries, but cap at maxDelay
+			delay = baseDelay * (1 << retries)
+			if delay > maxDelay {
+				delay = maxDelay
+			}
+
+			continue
+		}
+
+		// Non-retryable error
+		return err
+	}
+}
+
 // Close closes the database connection
 func (s *Store) Close() error {
 	if s.db != nil {
@@ -246,17 +294,19 @@ func (s *Store) CreateProject(project *Project) error {
 		INSERT INTO projects (id, name, created_at, current_stage, current_phase_id)
 		VALUES (?, ?, ?, ?, ?)
 	`
-	_, err := s.db.Exec(query,
-		project.ID,
-		project.Name,
-		project.CreatedAt,
-		project.CurrentStage,
-		project.CurrentPhase,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to create project: %w", err)
-	}
-	return nil
+	return executeWithRetry(s.db, 100, 3, func(tx *sql.Tx) error {
+		_, err := tx.Exec(query,
+			project.ID,
+			project.Name,
+			project.CreatedAt,
+			project.CurrentStage,
+			project.CurrentPhase,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to create project: %w", err)
+		}
+		return nil
+	})
 }
 
 // GetProject retrieves a project by ID
@@ -290,25 +340,27 @@ func (s *Store) UpdateProject(project *Project) error {
 		SET name = ?, current_stage = ?, current_phase_id = ?
 		WHERE id = ?
 	`
-	result, err := s.db.Exec(query,
-		project.Name,
-		project.CurrentStage,
-		project.CurrentPhase,
-		project.ID,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to update project: %w", err)
-	}
+	return executeWithRetry(s.db, 100, 3, func(tx *sql.Tx) error {
+		result, err := tx.Exec(query,
+			project.Name,
+			project.CurrentStage,
+			project.CurrentPhase,
+			project.ID,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to update project: %w", err)
+		}
 
-	rows, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("failed to get rows affected: %w", err)
-	}
-	if rows == 0 {
-		return fmt.Errorf("project not found: %s", project.ID)
-	}
+		rows, err := result.RowsAffected()
+		if err != nil {
+			return fmt.Errorf("failed to get rows affected: %w", err)
+		}
+		if rows == 0 {
+			return fmt.Errorf("project not found: %s", project.ID)
+		}
 
-	return nil
+		return nil
+	})
 }
 
 // UpdateProjectStage updates the current stage of a project
@@ -318,51 +370,49 @@ func (s *Store) UpdateProjectStage(id string, stage Stage) error {
 		SET current_stage = ?
 		WHERE id = ?
 	`
-	result, err := s.db.Exec(query, stage, id)
-	if err != nil {
-		return fmt.Errorf("failed to update project stage: %w", err)
-	}
+	return executeWithRetry(s.db, 100, 3, func(tx *sql.Tx) error {
+		result, err := tx.Exec(query, stage, id)
+		if err != nil {
+			return fmt.Errorf("failed to update project stage: %w", err)
+		}
 
-	rows, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("failed to get rows affected: %w", err)
-	}
-	if rows == 0 {
-		return fmt.Errorf("project not found: %s", id)
-	}
+		rows, err := result.RowsAffected()
+		if err != nil {
+			return fmt.Errorf("failed to get rows affected: %w", err)
+		}
+		if rows == 0 {
+			return fmt.Errorf("project not found: %s", id)
+		}
 
-	return nil
+		return nil
+	})
 }
 
 // ResetProjectProgress resets all phases and tasks progress for a project
 func (s *Store) ResetProjectProgress(projectID string) error {
-	tx, err := s.BeginTx()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
+	return executeWithRetry(s.db, 100, 3, func(tx *sql.Tx) error {
+		// Reset tasks
+		_, err := tx.Exec(`
+			UPDATE tasks
+			SET status = ?, started_at = NULL, completed_at = NULL
+			WHERE phase_id IN (SELECT id FROM phases WHERE project_id = ?)
+		`, TaskNotStarted, projectID)
+		if err != nil {
+			return fmt.Errorf("failed to reset tasks: %w", err)
+		}
 
-	// Reset tasks
-	_, err = tx.Exec(`
-		UPDATE tasks
-		SET status = ?, started_at = NULL, completed_at = NULL
-		WHERE phase_id IN (SELECT id FROM phases WHERE project_id = ?)
-	`, TaskNotStarted, projectID)
-	if err != nil {
-		return fmt.Errorf("failed to reset tasks: %w", err)
-	}
+		// Reset phases
+		_, err = tx.Exec(`
+			UPDATE phases
+			SET status = ?, started_at = NULL, completed_at = NULL
+			WHERE project_id = ?
+		`, PhaseNotStarted, projectID)
+		if err != nil {
+			return fmt.Errorf("failed to reset phases: %w", err)
+		}
 
-	// Reset phases
-	_, err = tx.Exec(`
-		UPDATE phases
-		SET status = ?, started_at = NULL, completed_at = NULL
-		WHERE project_id = ?
-	`, PhaseNotStarted, projectID)
-	if err != nil {
-		return fmt.Errorf("failed to reset phases: %w", err)
-	}
-
-	return tx.Commit()
+		return nil
+	})
 }
 
 // Interview data operations
@@ -382,11 +432,13 @@ func (s *Store) SaveInterviewData(projectID string, data *InterviewData) error {
 			data = excluded.data,
 			completed_at = excluded.completed_at
 	`
-	_, err = s.db.Exec(query, projectID, jsonData, data.CreatedAt)
-	if err != nil {
-		return fmt.Errorf("failed to save interview data: %w", err)
-	}
-	return nil
+	return executeWithRetry(s.db, 100, 3, func(tx *sql.Tx) error {
+		_, err := tx.Exec(query, projectID, jsonData, data.CreatedAt)
+		if err != nil {
+			return fmt.Errorf("failed to save interview data: %w", err)
+		}
+		return nil
+	})
 }
 
 // GetInterviewData retrieves interview data for a project
@@ -424,11 +476,13 @@ func (s *Store) SaveArchitecture(projectID string, arch *Architecture) error {
 			content = excluded.content,
 			created_at = excluded.created_at
 	`
-	_, err := s.db.Exec(query, projectID, arch.Content, arch.CreatedAt)
-	if err != nil {
-		return fmt.Errorf("failed to save architecture: %w", err)
-	}
-	return nil
+	return executeWithRetry(s.db, 100, 3, func(tx *sql.Tx) error {
+		_, err := tx.Exec(query, projectID, arch.Content, arch.CreatedAt)
+		if err != nil {
+			return fmt.Errorf("failed to save architecture: %w", err)
+		}
+		return nil
+	})
 }
 
 // GetArchitecture retrieves architecture for a project
@@ -468,21 +522,23 @@ func (s *Store) SavePhase(phase *Phase) error {
 			started_at = excluded.started_at,
 			completed_at = excluded.completed_at
 	`
-	_, err := s.db.Exec(query,
-		phase.ID,
-		phase.ProjectID,
-		phase.Number,
-		phase.Title,
-		phase.Content,
-		phase.Status,
-		phase.CreatedAt,
-		phase.StartedAt,
-		phase.CompletedAt,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to save phase: %w", err)
-	}
-	return nil
+	return executeWithRetry(s.db, 100, 3, func(tx *sql.Tx) error {
+		_, err := tx.Exec(query,
+			phase.ID,
+			phase.ProjectID,
+			phase.Number,
+			phase.Title,
+			phase.Content,
+			phase.Status,
+			phase.CreatedAt,
+			phase.StartedAt,
+			phase.CompletedAt,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to save phase: %w", err)
+		}
+		return nil
+	})
 }
 
 // GetPhase retrieves a phase by ID
@@ -602,38 +658,29 @@ func (s *Store) UpdatePhaseStatus(id string, status PhaseStatus) error {
 
 // DeletePhase deletes a phase and its tasks
 func (s *Store) DeletePhase(id string) error {
-	// Start transaction
-	tx, err := s.db.Begin()
-	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
-	}
-	defer tx.Rollback()
+	return executeWithRetry(s.db, 100, 3, func(tx *sql.Tx) error {
+		// Delete tasks first (manual cascade for safety)
+		_, err := tx.Exec("DELETE FROM tasks WHERE phase_id = ?", id)
+		if err != nil {
+			return fmt.Errorf("failed to delete phase tasks: %w", err)
+		}
 
-	// Delete tasks first (manual cascade for safety)
-	_, err = tx.Exec("DELETE FROM tasks WHERE phase_id = ?", id)
-	if err != nil {
-		return fmt.Errorf("failed to delete phase tasks: %w", err)
-	}
+		// Delete phase
+		result, err := tx.Exec("DELETE FROM phases WHERE id = ?", id)
+		if err != nil {
+			return fmt.Errorf("failed to delete phase: %w", err)
+		}
 
-	// Delete phase
-	result, err := tx.Exec("DELETE FROM phases WHERE id = ?", id)
-	if err != nil {
-		return fmt.Errorf("failed to delete phase: %w", err)
-	}
+		rows, err := result.RowsAffected()
+		if err != nil {
+			return fmt.Errorf("failed to get rows affected: %w", err)
+		}
+		if rows == 0 {
+			return fmt.Errorf("phase not found: %s", id)
+		}
 
-	rows, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("failed to get rows affected: %w", err)
-	}
-	if rows == 0 {
-		return fmt.Errorf("phase not found: %s", id)
-	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("failed to commit transaction: %w", err)
-	}
-
-	return nil
+		return nil
+	})
 }
 
 // Task operations
@@ -650,19 +697,21 @@ func (s *Store) SaveTask(task *Task) error {
 			started_at = excluded.started_at,
 			completed_at = excluded.completed_at
 	`
-	_, err := s.db.Exec(query,
-		task.ID,
-		task.PhaseID,
-		task.Number,
-		task.Description,
-		task.Status,
-		task.StartedAt,
-		task.CompletedAt,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to save task: %w", err)
-	}
-	return nil
+	return executeWithRetry(s.db, 100, 3, func(tx *sql.Tx) error {
+		_, err := tx.Exec(query,
+			task.ID,
+			task.PhaseID,
+			task.Number,
+			task.Description,
+			task.Status,
+			task.StartedAt,
+			task.CompletedAt,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to save task: %w", err)
+		}
+		return nil
+	})
 }
 
 // GetTask retrieves a task by ID
@@ -852,18 +901,20 @@ func (s *Store) SaveCheckpoint(checkpoint *Checkpoint) error {
 			git_tag = excluded.git_tag,
 			metadata = excluded.metadata
 	`
-	_, err := s.db.Exec(query,
-		checkpoint.ID,
-		checkpoint.ProjectID,
-		checkpoint.Name,
-		checkpoint.GitTag,
-		checkpoint.CreatedAt,
-		metadataJSON,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to save checkpoint: %w", err)
-	}
-	return nil
+	return executeWithRetry(s.db, 100, 3, func(tx *sql.Tx) error {
+		_, err := tx.Exec(query,
+			checkpoint.ID,
+			checkpoint.ProjectID,
+			checkpoint.Name,
+			checkpoint.GitTag,
+			checkpoint.CreatedAt,
+			metadataJSON,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to save checkpoint: %w", err)
+		}
+		return nil
+	})
 }
 
 // GetCheckpoint retrieves a checkpoint by ID
@@ -975,29 +1026,31 @@ func (s *Store) RecordTokenUsage(usage *TokenUsage) error {
 		taskID = nil
 	}
 
-	result, err := s.db.Exec(query,
-		usage.ProjectID,
-		phaseID,
-		taskID,
-		usage.Provider,
-		usage.Model,
-		usage.TokensInput,
-		usage.TokensOutput,
-		usage.Cost,
-		usage.Timestamp,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to record token usage: %w", err)
-	}
+	return executeWithRetry(s.db, 100, 3, func(tx *sql.Tx) error {
+		result, err := tx.Exec(query,
+			usage.ProjectID,
+			phaseID,
+			taskID,
+			usage.Provider,
+			usage.Model,
+			usage.TokensInput,
+			usage.TokensOutput,
+			usage.Cost,
+			usage.Timestamp,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to record token usage: %w", err)
+		}
 
-	// Get the auto-generated ID
-	id, err := result.LastInsertId()
-	if err != nil {
-		return fmt.Errorf("failed to get token usage ID: %w", err)
-	}
-	usage.ID = int(id)
+		// Get the auto-generated ID
+		id, err := result.LastInsertId()
+		if err != nil {
+			return fmt.Errorf("failed to get token usage ID: %w", err)
+		}
+		usage.ID = int(id)
 
-	return nil
+		return nil
+	})
 }
 
 // GetTotalCost retrieves the total cost for a project
@@ -1324,21 +1377,31 @@ func (s *Store) GetTokenUsageByTimeRange(projectID string, startTime, endTime ti
 
 // SaveRateLimit saves rate limit information
 func (s *Store) SaveRateLimit(provider string, info *RateLimitInfo) error {
+	var remaining, limit *int
+	if info.RequestsRemaining != nil {
+		remaining = info.RequestsRemaining
+	}
+	if info.RequestsLimit != nil {
+		limit = info.RequestsLimit
+	}
+
 	query := `
 		INSERT INTO rate_limits (provider, requests_remaining, requests_limit, reset_at, checked_at)
 		VALUES (?, ?, ?, ?, ?)
 	`
-	_, err := s.db.Exec(query,
-		provider,
-		info.RequestsRemaining,
-		info.RequestsLimit,
-		info.ResetAt,
-		info.CheckedAt,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to save rate limit: %w", err)
-	}
-	return nil
+	return executeWithRetry(s.db, 100, 3, func(tx *sql.Tx) error {
+		_, err := tx.Exec(query,
+			provider,
+			remaining,
+			limit,
+			info.ResetAt,
+			info.CheckedAt,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to save rate limit: %w", err)
+		}
+		return nil
+	})
 }
 
 // GetRateLimit retrieves the most recent rate limit information for a provider
@@ -1351,11 +1414,14 @@ func (s *Store) GetRateLimit(provider string) (*RateLimitInfo, error) {
 		LIMIT 1
 	`
 	var info RateLimitInfo
+	var remaining, limit *int
+	var resetAt sql.NullTime
+
 	err := s.db.QueryRow(query, provider).Scan(
 		&info.Provider,
-		&info.RequestsRemaining,
-		&info.RequestsLimit,
-		&info.ResetAt,
+		&remaining,
+		&limit,
+		&resetAt,
 		&info.CheckedAt,
 	)
 	if err == sql.ErrNoRows {
@@ -1364,6 +1430,25 @@ func (s *Store) GetRateLimit(provider string) (*RateLimitInfo, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get rate limit: %w", err)
 	}
+
+	// Convert nullable fields
+	if remaining != nil {
+		info.RequestsRemaining = remaining
+	} else {
+		info.RequestsRemaining = nil
+	}
+	if limit != nil {
+		info.RequestsLimit = limit
+	} else {
+		info.RequestsLimit = nil
+	}
+	if resetAt.Valid {
+		t := resetAt.Time
+		info.ResetAt = &t
+	} else {
+		info.ResetAt = nil
+	}
+
 	return &info, nil
 }
 
@@ -1375,19 +1460,21 @@ func (s *Store) SaveQuota(provider string, info *QuotaInfo) error {
 		INSERT INTO quotas (provider, tokens_remaining, tokens_limit, cost_remaining, cost_limit, reset_at, checked_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?)
 	`
-	_, err := s.db.Exec(query,
-		provider,
-		info.TokensRemaining,
-		info.TokensLimit,
-		info.CostRemaining,
-		info.CostLimit,
-		info.ResetAt,
-		info.CheckedAt,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to save quota: %w", err)
-	}
-	return nil
+	return executeWithRetry(s.db, 100, 3, func(tx *sql.Tx) error {
+		_, err := tx.Exec(query,
+			provider,
+			info.TokensRemaining,
+			info.TokensLimit,
+			info.CostRemaining,
+			info.CostLimit,
+			info.ResetAt,
+			info.CheckedAt,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to save quota: %w", err)
+		}
+		return nil
+	})
 }
 
 // GetQuota retrieves the most recent quota information for a provider
@@ -1450,18 +1537,20 @@ func (s *Store) SaveBlocker(blocker *Blocker) error {
 			resolution = excluded.resolution,
 			resolved_at = excluded.resolved_at
 	`
-	_, err := s.db.Exec(query,
-		blocker.ID,
-		blocker.TaskID,
-		blocker.Description,
-		blocker.Resolution,
-		blocker.CreatedAt,
-		blocker.ResolvedAt,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to save blocker: %w", err)
-	}
-	return nil
+	return executeWithRetry(s.db, 100, 3, func(tx *sql.Tx) error {
+		_, err := tx.Exec(query,
+			blocker.ID,
+			blocker.TaskID,
+			blocker.Description,
+			blocker.Resolution,
+			blocker.CreatedAt,
+			blocker.ResolvedAt,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to save blocker: %w", err)
+		}
+		return nil
+	})
 }
 
 // ResolveBlocker marks a blocker as resolved
@@ -1472,20 +1561,22 @@ func (s *Store) ResolveBlocker(id string, resolution string) error {
 		SET resolution = ?, resolved_at = ?
 		WHERE id = ?
 	`
-	result, err := s.db.Exec(query, resolution, now, id)
-	if err != nil {
-		return fmt.Errorf("failed to resolve blocker: %w", err)
-	}
+	return executeWithRetry(s.db, 100, 3, func(tx *sql.Tx) error {
+		result, err := tx.Exec(query, resolution, now, id)
+		if err != nil {
+			return fmt.Errorf("failed to resolve blocker: %w", err)
+		}
 
-	rows, err := result.RowsAffected()
-	if err != nil {
-		return fmt.Errorf("failed to get rows affected: %w", err)
-	}
-	if rows == 0 {
-		return fmt.Errorf("blocker not found: %s", id)
-	}
+		rows, err := result.RowsAffected()
+		if err != nil {
+			return fmt.Errorf("failed to get rows affected: %w", err)
+		}
+		if rows == 0 {
+			return fmt.Errorf("blocker not found: %s", id)
+		}
 
-	return nil
+		return nil
+	})
 }
 
 // ListActiveBlockers retrieves all active (unresolved) blockers for a project
@@ -1546,11 +1637,13 @@ func (s *Store) SetConfig(key string, value string) error {
 			value = excluded.value,
 			updated_at = excluded.updated_at
 	`
-	_, err := s.db.Exec(query, key, value, time.Now())
-	if err != nil {
-		return fmt.Errorf("failed to set config: %w", err)
-	}
-	return nil
+	return executeWithRetry(s.db, 100, 3, func(tx *sql.Tx) error {
+		_, err := tx.Exec(query, key, value, time.Now())
+		if err != nil {
+			return fmt.Errorf("failed to set config: %w", err)
+		}
+		return nil
+	})
 }
 
 // GetConfig retrieves a configuration value

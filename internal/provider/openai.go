@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -245,20 +244,12 @@ func (o *OpenAIProvider) Call(model string, prompt string) (*Response, error) {
 	}
 
 	// Extract rate limit info from headers
-	rateLimitRemaining := 0
-	if val := resp.Header.Get("X-RateLimit-Remaining-Requests"); val != "" {
-		if parsed, err := strconv.Atoi(val); err == nil {
-			rateLimitRemaining = parsed
-		}
-	}
+	rateLimitInfo := ExtractRateLimitInfo(resp)
+	rateLimitRemaining := rateLimitInfo.RequestsRemaining
 
-	// Extract quota info from headers (tokens remaining)
-	quotaRemaining := 0
-	if val := resp.Header.Get("X-RateLimit-Remaining-Tokens"); val != "" {
-		if parsed, err := strconv.Atoi(val); err == nil {
-			quotaRemaining = parsed
-		}
-	}
+	// Extract quota info from headers
+	quotaInfo := ExtractQuotaInfo(resp)
+	quotaRemaining := quotaInfo.TokensRemaining
 
 	var openAIResp openAIResponse
 	if err := json.NewDecoder(resp.Body).Decode(&openAIResp); err != nil {
@@ -385,6 +376,7 @@ func (o *OpenAIProvider) Stream(model string, prompt string) (<-chan string, err
 func (o *OpenAIProvider) GetRateLimitInfo() (*RateLimitInfo, error) {
 	// OpenAI rate limits are extracted from response headers
 	// This is a placeholder that would be populated from the last API call
+	// To get actual rate limit info, you would need to make a test request
 	return &RateLimitInfo{
 		RequestsRemaining: 0,
 		RequestsLimit:     0,
@@ -397,6 +389,7 @@ func (o *OpenAIProvider) GetRateLimitInfo() (*RateLimitInfo, error) {
 func (o *OpenAIProvider) GetQuotaInfo() (*QuotaInfo, error) {
 	// OpenAI quota information is extracted from response headers
 	// This is a placeholder that would be populated from the last API call
+	// To get actual quota info, you would need to make a test request
 	return &QuotaInfo{
 		TokensRemaining: 0,
 		TokensLimit:     0,

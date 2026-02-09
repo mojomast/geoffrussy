@@ -55,6 +55,7 @@ pipeline: Interview → Architecture Design → DevPlan Generation → Phase Rev
 	rootCmd.AddCommand(initCmd)
 	rootCmd.AddCommand(versionCmd)
 	rootCmd.AddCommand(configCmd)
+	rootCmd.AddCommand(validateCmd)
 	rootCmd.AddCommand(interviewCmd)
 	rootCmd.AddCommand(designCmd)
 	rootCmd.AddCommand(planCmd)
