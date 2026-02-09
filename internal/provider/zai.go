@@ -133,6 +133,7 @@ func (z *ZAIProvider) Call(model string, prompt string) (*Response, error) {
 		return nil, fmt.Errorf("provider not authenticated")
 	}
 
+	startTime := time.Now()
 	var response *Response
 	err := z.RetryWithBackoff(func() error {
 		req := zaiRequest{
@@ -190,6 +191,19 @@ func (z *ZAIProvider) Call(model string, prompt string) (*Response, error) {
 			}
 		}
 
+		duration := time.Since(startTime)
+
+		// Log successful API call with metadata
+		z.GetLogger().Info("API call completed",
+			"provider", "z.ai",
+			"model", model,
+			"tokens_input", zaiResp.Usage.PromptTokens,
+			"tokens_output", zaiResp.Usage.CompletionTokens,
+			"tokens_total", zaiResp.Usage.TotalTokens,
+			"duration_ms", duration.Milliseconds(),
+			"rate_limit_remaining", rateLimitRemaining,
+		)
+
 		response = &Response{
 			Content:            content,
 			TokensInput:        zaiResp.Usage.PromptTokens,
@@ -202,6 +216,15 @@ func (z *ZAIProvider) Call(model string, prompt string) (*Response, error) {
 
 		return nil
 	})
+
+	if err != nil {
+		z.GetLogger().Error("API call failed",
+			"provider", "z.ai",
+			"model", model,
+			"error", err.Error(),
+			"duration_ms", time.Since(startTime).Milliseconds(),
+		)
+	}
 
 	return response, err
 }

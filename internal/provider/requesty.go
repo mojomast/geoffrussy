@@ -137,6 +137,8 @@ func (r *RequestyProvider) Call(model string, prompt string) (*Response, error) 
 		return nil, fmt.Errorf("provider not authenticated")
 	}
 
+	startTime := time.Now()
+
 	reqBody := requestyRequest{
 		Model: model,
 		Messages: []requestyMessage{
@@ -176,12 +178,24 @@ func (r *RequestyProvider) Call(model string, prompt string) (*Response, error) 
 	})
 
 	if err != nil {
+		r.GetLogger().Error("API call failed",
+			"provider", r.Name(),
+			"model", model,
+			"error", err.Error(),
+			"duration_ms", time.Since(startTime).Milliseconds(),
+		)
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
+		r.GetLogger().Error("API error response",
+			"provider", r.Name(),
+			"model", model,
+			"status_code", resp.StatusCode,
+			"duration_ms", time.Since(startTime).Milliseconds(),
+		)
 		return nil, fmt.Errorf("API error %d: %s", resp.StatusCode, string(body))
 	}
 
@@ -208,6 +222,20 @@ func (r *RequestyProvider) Call(model string, prompt string) (*Response, error) 
 	if len(requestyResp.Choices) == 0 {
 		return nil, fmt.Errorf("no choices in response")
 	}
+
+	duration := time.Since(startTime)
+
+	// Log successful API call with metadata
+	r.GetLogger().Info("API call completed",
+		"provider", r.Name(),
+		"model", model,
+		"tokens_input", requestyResp.Usage.PromptTokens,
+		"tokens_output", requestyResp.Usage.CompletionTokens,
+		"tokens_total", requestyResp.Usage.TotalTokens,
+		"duration_ms", duration.Milliseconds(),
+		"rate_limit_remaining", rateLimitRemaining,
+		"quota_remaining", quotaRemaining,
+	)
 
 	return &Response{
 		Content:            requestyResp.Choices[0].Message.Content,

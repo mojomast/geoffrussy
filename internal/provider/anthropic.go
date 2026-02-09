@@ -141,6 +141,7 @@ func (a *AnthropicProvider) Call(model string, prompt string) (*Response, error)
 		return nil, fmt.Errorf("provider not authenticated")
 	}
 
+	startTime := time.Now()
 	var response *Response
 	err := a.RetryWithBackoff(func() error {
 		req := anthropicRequest{
@@ -201,6 +202,19 @@ func (a *AnthropicProvider) Call(model string, prompt string) (*Response, error)
 			}
 		}
 
+		duration := time.Since(startTime)
+
+		// Log successful API call with metadata
+		a.GetLogger().Info("API call completed",
+			"provider", "anthropic",
+			"model", model,
+			"tokens_input", anthropicResp.Usage.InputTokens,
+			"tokens_output", anthropicResp.Usage.OutputTokens,
+			"tokens_total", anthropicResp.Usage.InputTokens+anthropicResp.Usage.OutputTokens,
+			"duration_ms", duration.Milliseconds(),
+			"rate_limit_remaining", rateLimitRemaining,
+		)
+
 		response = &Response{
 			Content:            content,
 			TokensInput:        anthropicResp.Usage.InputTokens,
@@ -213,6 +227,15 @@ func (a *AnthropicProvider) Call(model string, prompt string) (*Response, error)
 
 		return nil
 	})
+
+	if err != nil {
+		a.GetLogger().Error("API call failed",
+			"provider", "anthropic",
+			"model", model,
+			"error", err.Error(),
+			"duration_ms", time.Since(startTime).Milliseconds(),
+		)
+	}
 
 	return response, err
 }

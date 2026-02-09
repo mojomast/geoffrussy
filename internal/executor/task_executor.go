@@ -4,12 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/mojomast/geoffrussy/internal/logging"
 	"github.com/mojomast/geoffrussy/internal/provider"
+	"github.com/mojomast/geoffrussy/internal/security"
 	"github.com/mojomast/geoffrussy/internal/state"
 )
 
@@ -18,23 +21,56 @@ type SendUpdateFunc func(update TaskUpdate)
 
 // TaskExecutor implements actual task execution using LLM
 type TaskExecutor struct {
-	store      *state.Store
-	provider   provider.Provider
-	modelName  string
-	ctx        context.Context
-	sendUpdate SendUpdateFunc // Function to send updates through TUI
-	phaseID    string         // For update messages
-	taskID     string         // For update messages
+	store         *state.Store
+	provider      provider.Provider
+	modelName     string
+	ctx           context.Context
+	sendUpdate    SendUpdateFunc // Function to send updates through TUI
+	phaseID       string         // For update messages
+	taskID        string         // For update messages
+	pathSanitizer *security.PathSanitizer
+	auditLogger   *security.AuditLogger
+	logger        *logging.Logger
 }
 
 // NewTaskExecutor creates a new task executor that actually implements tasks
 func NewTaskExecutor(store *state.Store, prov provider.Provider, sendUpdateFn SendUpdateFunc, modelName string) *TaskExecutor {
+	// Get current working directory as project root
+	projectRoot, err := os.Getwd()
+	if err != nil {
+		// Fallback to "." if we can't get working directory
+		projectRoot = "."
+	}
+
+	// Initialize path sanitizer
+	pathSanitizer, err := security.NewPathSanitizer(projectRoot)
+	if err != nil {
+		// This should rarely happen, but if it does, we'll create a sanitizer with "."
+		pathSanitizer, _ = security.NewPathSanitizer(".")
+	}
+
+	// Initialize audit logger
+	// Place audit log in .geoffrussy directory if it exists, otherwise in current directory
+	auditLogPath := filepath.Join(projectRoot, ".geoffrussy", "audit.log")
+	auditLogger, err := security.NewAuditLogger(auditLogPath)
+	if err != nil {
+		// Fallback to current directory if .geoffrussy doesn't exist
+		auditLogPath = filepath.Join(projectRoot, "geoffrussy-audit.log")
+		auditLogger, _ = security.NewAuditLogger(auditLogPath)
+	}
+
+	// Initialize structured logger
+	logger := logging.NewLogger(slog.LevelInfo, os.Stdout)
+
 	return &TaskExecutor{
-		store:      store,
-		provider:   prov,
-		modelName:  modelName,
-		ctx:        context.Background(),
-		sendUpdate: sendUpdateFn,
+		store:         store,
+		provider:      prov,
+		modelName:     modelName,
+		ctx:           context.Background(),
+		sendUpdate:    sendUpdateFn,
+		pathSanitizer: pathSanitizer,
+		auditLogger:   auditLogger,
+		logger:        logger,
 	}
 }
 
@@ -70,12 +106,19 @@ func (te *TaskExecutor) ExecuteTask(taskID string) error {
 	// Get task from store
 	task, err := te.store.GetTask(taskID)
 	if err != nil {
+		te.logger.Error("failed to get task",
+			"task_id", taskID,
+			"error", err)
 		return fmt.Errorf("failed to get task: %w", err)
 	}
 
 	// Get phase to understand context
 	phase, err := te.store.GetPhase(task.PhaseID)
 	if err != nil {
+		te.logger.Error("failed to get phase",
+			"task_id", taskID,
+			"phase_id", task.PhaseID,
+			"error", err)
 		return fmt.Errorf("failed to get phase: %w", err)
 	}
 
@@ -85,23 +128,45 @@ func (te *TaskExecutor) ExecuteTask(taskID string) error {
 	// Get project
 	project, err := te.store.GetProject(phase.ProjectID)
 	if err != nil {
+		te.logger.Error("failed to get project",
+			"task_id", taskID,
+			"phase_id", phase.ID,
+			"project_id", phase.ProjectID,
+			"error", err)
 		return fmt.Errorf("failed to get project: %w", err)
 	}
+
+	// Create contextual logger with task, phase, and project IDs
+	contextLogger := te.logger.With(
+		"task_id", taskID,
+		"phase_id", phase.ID,
+		"project_id", project.ID,
+	)
+
+	contextLogger.Info("starting task execution",
+		"task_description", task.Description,
+		"phase_title", phase.Title)
 
 	// Get interview data for context
 	interviewData, err := te.store.GetInterviewData(project.ID)
 	if err != nil {
+		contextLogger.Error("failed to get interview data",
+			"error", err)
 		return fmt.Errorf("failed to get interview data: %w", err)
 	}
 
 	// Get architecture for context
 	architecture, err := te.store.GetArchitecture(project.ID)
 	if err != nil {
+		contextLogger.Error("failed to get architecture",
+			"error", err)
 		return fmt.Errorf("failed to get architecture: %w", err)
 	}
 
 	// Build prompt for LLM
 	prompt := te.buildExecutionPrompt(task, phase, interviewData, architecture)
+	contextLogger.Debug("built execution prompt",
+		"prompt_length", len(prompt))
 
 	// Determine model to use
 	modelName := te.getModelForTask(task)
@@ -115,9 +180,19 @@ func (te *TaskExecutor) ExecuteTask(taskID string) error {
 		Timestamp: time.Now(),
 	})
 
+	contextLogger.Info("calling LLM for code generation",
+		"model", modelName)
+
 	// Call LLM to generate code
+	startTime := time.Now()
 	response, err := te.provider.Call(modelName, prompt)
+	duration := time.Since(startTime)
+
 	if err != nil {
+		contextLogger.Error("LLM call failed",
+			"model", modelName,
+			"duration_ms", duration.Milliseconds(),
+			"error", err)
 		te.sendUpdate(TaskUpdate{
 			TaskID:    taskID,
 			PhaseID:   phase.ID,
@@ -128,6 +203,12 @@ func (te *TaskExecutor) ExecuteTask(taskID string) error {
 		})
 		return fmt.Errorf("failed to call LLM: %w", err)
 	}
+
+	contextLogger.Info("LLM call completed",
+		"model", modelName,
+		"tokens_input", response.TokensInput,
+		"tokens_output", response.TokensOutput,
+		"duration_ms", duration.Milliseconds())
 
 	te.sendUpdate(TaskUpdate{
 		TaskID:    taskID,
@@ -141,6 +222,8 @@ func (te *TaskExecutor) ExecuteTask(taskID string) error {
 	var codeResp CodeGenerationResponse
 	if err := json.Unmarshal([]byte(response.Content), &codeResp); err != nil {
 		// If JSON parsing fails, treat as entire response as code
+		contextLogger.Warn("JSON parsing failed, treating response as markdown",
+			"error", err)
 		te.sendUpdate(TaskUpdate{
 			TaskID:    taskID,
 			PhaseID:   phase.ID,
@@ -161,6 +244,8 @@ func (te *TaskExecutor) ExecuteTask(taskID string) error {
 
 	// Show LLM's explanation
 	if codeResp.Explanation != "" {
+		contextLogger.Debug("LLM explanation",
+			"explanation", truncateString(codeResp.Explanation, 200))
 		te.sendUpdate(TaskUpdate{
 			TaskID:    taskID,
 			PhaseID:   phase.ID,
@@ -169,6 +254,9 @@ func (te *TaskExecutor) ExecuteTask(taskID string) error {
 			Timestamp: time.Now(),
 		})
 	}
+
+	contextLogger.Info("processing generated files",
+		"file_count", len(codeResp.Files))
 
 	te.sendUpdate(TaskUpdate{
 		TaskID:    taskID,
@@ -190,9 +278,22 @@ func (te *TaskExecutor) ExecuteTask(taskID string) error {
 			Timestamp: time.Now(),
 		})
 
+		contextLogger.Info("writing file",
+			"file_path", file.Path,
+			"file_size", len(file.Content),
+			"file_index", i+1,
+			"total_files", len(codeResp.Files))
+
 		if err := te.writeFile(file); err != nil {
+			contextLogger.Error("failed to write file",
+				"file_path", file.Path,
+				"error", err)
 			return fmt.Errorf("failed to write file %s: %w", file.Path, err)
 		}
+
+		contextLogger.Info("file written successfully",
+			"file_path", file.Path,
+			"file_size", len(file.Content))
 
 		te.sendUpdate(TaskUpdate{
 			TaskID:    taskID,
@@ -205,6 +306,8 @@ func (te *TaskExecutor) ExecuteTask(taskID string) error {
 
 	// Execute commands (optional - might be dangerous in auto-execution)
 	if len(codeResp.Commands) > 0 {
+		contextLogger.Info("commands generated",
+			"command_count", len(codeResp.Commands))
 		cmdList := fmt.Sprintf("%d commands", len(codeResp.Commands))
 		te.sendUpdate(TaskUpdate{
 			TaskID:    taskID,
@@ -214,6 +317,8 @@ func (te *TaskExecutor) ExecuteTask(taskID string) error {
 			Timestamp: time.Now(),
 		})
 	}
+
+	contextLogger.Info("task execution completed successfully")
 
 	return nil
 }
@@ -291,21 +396,71 @@ func (te *TaskExecutor) buildExecutionPrompt(
 }
 
 func (te *TaskExecutor) writeFile(file File) error {
+	return te.writeFileSafe(file)
+}
+
+// writeFileSafe validates the file path and writes the file with audit logging
+func (te *TaskExecutor) writeFileSafe(file File) error {
+	// Validate path using PathSanitizer before writing
+	safePath, err := te.pathSanitizer.ValidatePath(file.Path)
+	if err != nil {
+		// Log rejected path to audit log
+		te.auditLogger.LogPathRejection(file.Path, err.Error())
+		te.logger.Warn("path validation failed",
+			"file_path", file.Path,
+			"error", err,
+			"task_id", te.taskID,
+			"phase_id", te.phaseID)
+		return fmt.Errorf("path validation failed for '%s': %w", file.Path, err)
+	}
+
+	te.logger.Debug("path validated successfully",
+		"original_path", file.Path,
+		"safe_path", safePath,
+		"task_id", te.taskID,
+		"phase_id", te.phaseID)
+
 	// Create directory if needed
-	dir := filepath.Dir(file.Path)
+	dir := filepath.Dir(safePath)
 	if dir != "" && dir != "." {
 		if err := os.MkdirAll(dir, 0755); err != nil {
+			te.auditLogger.LogFileOperation("write", safePath, false)
+			te.logger.Error("failed to create directory",
+				"directory", dir,
+				"file_path", safePath,
+				"error", err,
+				"task_id", te.taskID,
+				"phase_id", te.phaseID)
 			return fmt.Errorf("failed to create directory: %w", err)
 		}
+		te.logger.Debug("created directory",
+			"directory", dir,
+			"task_id", te.taskID,
+			"phase_id", te.phaseID)
 	}
 
 	// Write file
-	if err := os.WriteFile(file.Path, []byte(file.Content), 0644); err != nil {
+	if err := os.WriteFile(safePath, []byte(file.Content), 0644); err != nil {
+		te.auditLogger.LogFileOperation("write", safePath, false)
+		te.logger.Error("failed to write file",
+			"file_path", safePath,
+			"error", err,
+			"task_id", te.taskID,
+			"phase_id", te.phaseID)
 		return fmt.Errorf("failed to write file: %w", err)
 	}
 
+	// Log successful file operation to audit log
+	te.auditLogger.LogFileOperation("write", safePath, true)
+	te.logger.Debug("file written successfully",
+		"file_path", safePath,
+		"file_size", len(file.Content),
+		"task_id", te.taskID,
+		"phase_id", te.phaseID)
+
 	return nil
 }
+
 
 func min(a, b int) int {
 	if a < b {

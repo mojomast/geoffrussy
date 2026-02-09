@@ -2,8 +2,12 @@ package provider
 
 import (
 	"fmt"
+	"log/slog"
 	"math"
+	"os"
 	"time"
+
+	"github.com/mojomast/geoffrussy/internal/logging"
 )
 
 // Provider is the interface that all AI model providers must implement
@@ -66,6 +70,7 @@ type BaseProvider struct {
 	authenticated bool
 	maxRetries    int
 	baseDelay     time.Duration
+	logger        *logging.Logger
 }
 
 // NewBaseProvider creates a new base provider
@@ -74,7 +79,18 @@ func NewBaseProvider(name string) *BaseProvider {
 		name:       name,
 		maxRetries: 3,
 		baseDelay:  time.Second,
+		logger:     logging.NewLogger(slog.LevelInfo, os.Stdout),
 	}
+}
+
+// SetLogger sets a custom logger for the provider
+func (b *BaseProvider) SetLogger(logger *logging.Logger) {
+	b.logger = logger
+}
+
+// GetLogger returns the provider's logger
+func (b *BaseProvider) GetLogger() *logging.Logger {
+	return b.logger
 }
 
 // Name returns the provider name

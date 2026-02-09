@@ -181,6 +181,8 @@ func (o *OpenAIProvider) Call(model string, prompt string) (*Response, error) {
 		return nil, fmt.Errorf("provider not authenticated")
 	}
 
+	startTime := time.Now()
+
 	reqBody := openAIRequest{
 		Model: model,
 		Messages: []openAIMessage{
@@ -221,12 +223,24 @@ func (o *OpenAIProvider) Call(model string, prompt string) (*Response, error) {
 	})
 
 	if err != nil {
+		o.GetLogger().Error("API call failed",
+			"provider", o.Name(),
+			"model", model,
+			"error", err.Error(),
+			"duration_ms", time.Since(startTime).Milliseconds(),
+		)
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
+		o.GetLogger().Error("API error response",
+			"provider", o.Name(),
+			"model", model,
+			"status_code", resp.StatusCode,
+			"duration_ms", time.Since(startTime).Milliseconds(),
+		)
 		return nil, fmt.Errorf("API error %d: %s", resp.StatusCode, string(body))
 	}
 
@@ -254,6 +268,20 @@ func (o *OpenAIProvider) Call(model string, prompt string) (*Response, error) {
 	if len(openAIResp.Choices) == 0 {
 		return nil, fmt.Errorf("no choices in response")
 	}
+
+	duration := time.Since(startTime)
+
+	// Log successful API call with metadata
+	o.GetLogger().Info("API call completed",
+		"provider", o.Name(),
+		"model", model,
+		"tokens_input", openAIResp.Usage.PromptTokens,
+		"tokens_output", openAIResp.Usage.CompletionTokens,
+		"tokens_total", openAIResp.Usage.TotalTokens,
+		"duration_ms", duration.Milliseconds(),
+		"rate_limit_remaining", rateLimitRemaining,
+		"quota_remaining", quotaRemaining,
+	)
 
 	return &Response{
 		Content:            openAIResp.Choices[0].Message.Content,

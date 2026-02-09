@@ -121,6 +121,7 @@ func (o *OpenCodeProvider) Call(model string, prompt string) (*Response, error) 
 		return nil, fmt.Errorf("provider not authenticated")
 	}
 
+	startTime := time.Now()
 	var response *Response
 	err := o.RetryWithBackoff(func() error {
 		// Use opencode run command
@@ -130,7 +131,6 @@ func (o *OpenCodeProvider) Call(model string, prompt string) (*Response, error) 
 		cmd.Stdout = &stdout
 		cmd.Stderr = &stderr
 
-		startTime := time.Now()
 		if err := cmd.Run(); err != nil {
 			return fmt.Errorf("opencode command failed: %w\nStderr: %s", err, stderr.String())
 		}
@@ -141,6 +141,18 @@ func (o *OpenCodeProvider) Call(model string, prompt string) (*Response, error) 
 		// We'll estimate based on content length
 		tokensInput := len(prompt) / 4 // rough estimate: 1 token ≈ 4 chars
 		tokensOutput := len(content) / 4
+
+		duration := time.Since(startTime)
+
+		// Log successful API call with metadata
+		o.GetLogger().Info("API call completed",
+			"provider", "opencode",
+			"model", model,
+			"tokens_input", tokensInput,
+			"tokens_output", tokensOutput,
+			"tokens_total", tokensInput+tokensOutput,
+			"duration_ms", duration.Milliseconds(),
+		)
 
 		response = &Response{
 			Content:      content,
@@ -153,6 +165,15 @@ func (o *OpenCodeProvider) Call(model string, prompt string) (*Response, error) 
 
 		return nil
 	})
+
+	if err != nil {
+		o.GetLogger().Error("API call failed",
+			"provider", "opencode",
+			"model", model,
+			"error", err.Error(),
+			"duration_ms", time.Since(startTime).Milliseconds(),
+		)
+	}
 
 	return response, err
 }

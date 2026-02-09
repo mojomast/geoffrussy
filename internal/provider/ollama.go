@@ -145,6 +145,7 @@ func (o *OllamaProvider) Call(model string, prompt string) (*Response, error) {
 		return nil, fmt.Errorf("provider not authenticated")
 	}
 
+	startTime := time.Now()
 	var response *Response
 	err := o.RetryWithBackoff(func() error {
 		// Use chat endpoint for better compatibility
@@ -196,6 +197,18 @@ func (o *OllamaProvider) Call(model string, prompt string) (*Response, error) {
 			content = ollamaResp.Message.Content
 		}
 
+		duration := time.Since(startTime)
+
+		// Log successful API call with metadata
+		o.GetLogger().Info("API call completed",
+			"provider", "ollama",
+			"model", model,
+			"tokens_input", ollamaResp.PromptEvalCount,
+			"tokens_output", ollamaResp.EvalCount,
+			"tokens_total", ollamaResp.PromptEvalCount+ollamaResp.EvalCount,
+			"duration_ms", duration.Milliseconds(),
+		)
+
 		response = &Response{
 			Content:      content,
 			TokensInput:  ollamaResp.PromptEvalCount,
@@ -207,6 +220,15 @@ func (o *OllamaProvider) Call(model string, prompt string) (*Response, error) {
 
 		return nil
 	})
+
+	if err != nil {
+		o.GetLogger().Error("API call failed",
+			"provider", "ollama",
+			"model", model,
+			"error", err.Error(),
+			"duration_ms", time.Since(startTime).Milliseconds(),
+		)
+	}
 
 	return response, err
 }

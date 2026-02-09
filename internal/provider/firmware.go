@@ -137,6 +137,8 @@ func (f *FirmwareProvider) Call(model string, prompt string) (*Response, error) 
 		return nil, fmt.Errorf("provider not authenticated")
 	}
 
+	startTime := time.Now()
+
 	reqBody := firmwareRequest{
 		Model: model,
 		Messages: []message{
@@ -176,12 +178,24 @@ func (f *FirmwareProvider) Call(model string, prompt string) (*Response, error) 
 	})
 
 	if err != nil {
+		f.GetLogger().Error("API call failed",
+			"provider", f.Name(),
+			"model", model,
+			"error", err.Error(),
+			"duration_ms", time.Since(startTime).Milliseconds(),
+		)
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
+		f.GetLogger().Error("API error response",
+			"provider", f.Name(),
+			"model", model,
+			"status_code", resp.StatusCode,
+			"duration_ms", time.Since(startTime).Milliseconds(),
+		)
 		return nil, fmt.Errorf("API error %d: %s", resp.StatusCode, string(body))
 	}
 
@@ -201,6 +215,19 @@ func (f *FirmwareProvider) Call(model string, prompt string) (*Response, error) 
 	if len(firmwareResp.Choices) == 0 {
 		return nil, fmt.Errorf("no choices in response")
 	}
+
+	duration := time.Since(startTime)
+
+	// Log successful API call with metadata
+	f.GetLogger().Info("API call completed",
+		"provider", f.Name(),
+		"model", model,
+		"tokens_input", firmwareResp.Usage.PromptTokens,
+		"tokens_output", firmwareResp.Usage.CompletionTokens,
+		"tokens_total", firmwareResp.Usage.TotalTokens,
+		"duration_ms", duration.Milliseconds(),
+		"rate_limit_remaining", rateLimitRemaining,
+	)
 
 	return &Response{
 		Content:            firmwareResp.Choices[0].Message.Content,

@@ -133,6 +133,7 @@ func (k *KimiProvider) Call(model string, prompt string) (*Response, error) {
 		return nil, fmt.Errorf("provider not authenticated")
 	}
 
+	startTime := time.Now()
 	var response *Response
 	err := k.RetryWithBackoff(func() error {
 		req := kimiRequest{
@@ -190,6 +191,19 @@ func (k *KimiProvider) Call(model string, prompt string) (*Response, error) {
 			}
 		}
 
+		duration := time.Since(startTime)
+
+		// Log successful API call with metadata
+		k.GetLogger().Info("API call completed",
+			"provider", "kimi",
+			"model", model,
+			"tokens_input", kimiResp.Usage.PromptTokens,
+			"tokens_output", kimiResp.Usage.CompletionTokens,
+			"tokens_total", kimiResp.Usage.TotalTokens,
+			"duration_ms", duration.Milliseconds(),
+			"rate_limit_remaining", rateLimitRemaining,
+		)
+
 		response = &Response{
 			Content:            content,
 			TokensInput:        kimiResp.Usage.PromptTokens,
@@ -202,6 +216,15 @@ func (k *KimiProvider) Call(model string, prompt string) (*Response, error) {
 
 		return nil
 	})
+
+	if err != nil {
+		k.GetLogger().Error("API call failed",
+			"provider", "kimi",
+			"model", model,
+			"error", err.Error(),
+			"duration_ms", time.Since(startTime).Milliseconds(),
+		)
+	}
 
 	return response, err
 }
