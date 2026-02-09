@@ -189,113 +189,219 @@ func (g *Generator) GenerateArchitecture(interviewData *state.InterviewData) (*A
 	// Create the architecture prompt
 	prompt := g.buildArchitecturePrompt(interviewData)
 
-	// Call the LLM
-	response, err := g.provider.Call(g.model, prompt)
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate architecture: %w", err)
+	// Try to generate and parse architecture with retry logic
+	maxRetries := 2
+	var lastErr error
+
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		// Call the LLM
+		response, err := g.provider.Call(g.model, prompt)
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate architecture: %w", err)
+		}
+
+		// Try to parse the response using JSON parsing
+		architecture, err := parseArchitectureJSON(response.Content, interviewData.ProjectID)
+		if err == nil {
+			// Success! Set additional fields and return
+			architecture.CreatedAt = time.Now()
+			return architecture, nil
+		}
+
+		// Parsing failed, save the error
+		lastErr = err
+
+		// If we've exhausted retries, return the error
+		if attempt >= maxRetries {
+			break
+		}
+
+		// Create a clarification prompt for retry
+		prompt = g.buildClarificationPrompt(response.Content, err)
 	}
 
-	// Parse the response into an architecture
-	architecture, err := g.parseArchitectureResponse(response.Content, interviewData)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse architecture: %w", err)
-	}
-
-	architecture.ProjectID = interviewData.ProjectID
-	architecture.CreatedAt = time.Now()
-
-	return architecture, nil
+	// All retries exhausted
+	return nil, fmt.Errorf("failed to parse architecture after %d attempts: %w", maxRetries+1, lastErr)
 }
+
 
 // buildArchitecturePrompt creates the prompt for architecture generation
 func (g *Generator) buildArchitecturePrompt(interviewData *state.InterviewData) string {
 	prompt := `You are an expert software architect. Based on the following project requirements, generate a comprehensive system architecture.
 
 CRITICAL OUTPUT RULES:
-- Use the section headers below EXACTLY as written (all caps).
-- Keep output in plain text/markdown only (no JSON, no code fences).
-- Include every section, even if brief.
-- Make recommendations concrete and implementation-ready.
+- Return ONLY valid JSON matching the schema below
+- Do NOT include markdown code fences (no ` + "```json" + ` or ` + "```" + `)
+- Do NOT include any text outside the JSON object
+- Ensure all required fields are present
+- Make recommendations concrete and implementation-ready
 
 PROJECT INFORMATION:
 Problem Statement: ` + interviewData.ProblemStatement + `
 Target Users: ` + strings.Join(interviewData.TargetUsers, ", ") + `
 Success Metrics: ` + strings.Join(interviewData.SuccessMetrics, ", ") + `
 
-Please provide a detailed architecture document with the following sections:
+OUTPUT FORMAT (REQUIRED):
+Return ONLY valid JSON matching this exact schema:
 
-1. SYSTEM OVERVIEW
-   - High-level description of the system
-   - Key architectural decisions
+{
+  "system_overview": "High-level description of the system and key architectural decisions",
+  "components": [
+    {
+      "name": "Component name",
+      "type": "frontend|backend|database|cache|queue|monitoring|other",
+      "purpose": "What this component does",
+      "technologies": ["Technology 1", "Technology 2"],
+      "dependencies": ["Component name 1", "Component name 2"]
+    }
+  ],
+  "data_flows": [
+    {
+      "name": "User journey name",
+      "description": "Description of this flow",
+      "steps": [
+        {
+          "order": 1,
+          "component": "Component name",
+          "action": "Action performed",
+          "description": "What happens in this step"
+        }
+      ],
+      "diagram": "Optional ASCII diagram"
+    }
+  ],
+  "tech_rationale": {
+    "language": "Why this language was chosen",
+    "framework": "Why this framework was chosen",
+    "database": "Why this database was chosen",
+    "infrastructure": "Why this infrastructure was chosen"
+  },
+  "scaling_strategy": {
+    "horizontal_scaling": "How to scale horizontally",
+    "vertical_scaling": "How to scale vertically",
+    "caching": "Caching strategy",
+    "load_balancing": "Load balancing approach",
+    "database_scaling": "Database scaling strategy"
+  },
+  "api_contract": {
+    "rest_endpoints": [
+      {
+        "method": "GET|POST|PUT|DELETE|PATCH",
+        "path": "/api/path",
+        "description": "What this endpoint does",
+        "request": "Optional request body description",
+        "response": "Optional response body description"
+      }
+    ],
+    "websockets": [
+      {
+        "name": "Event name",
+        "direction": "client-to-server|server-to-client|bidirectional",
+        "description": "What this event does",
+        "payload": "Optional payload description"
+      }
+    ],
+    "authentication": "Authentication method description"
+  },
+  "database_schema": {
+    "tables": [
+      {
+        "name": "table_name",
+        "description": "What this table stores",
+        "columns": [
+          {
+            "name": "column_name",
+            "type": "data_type",
+            "constraints": "PRIMARY KEY, FOREIGN KEY, NOT NULL, etc."
+          }
+        ]
+      }
+    ],
+    "relationships": [
+      {
+        "from": "table1",
+        "to": "table2",
+        "type": "one-to-one|one-to-many|many-to-many"
+      }
+    ]
+  },
+  "security_approach": {
+    "authentication": "Authentication method (JWT, OAuth, etc.)",
+    "authorization": "Authorization strategy (RBAC, ABAC, etc.)",
+    "encryption": "Encryption approach (TLS, at-rest encryption, etc.)",
+    "audit": "Audit logging strategy"
+  },
+  "observability": {
+    "logging": "Logging approach and tools",
+    "metrics": "Metrics collection strategy",
+    "tracing": "Distributed tracing approach"
+  },
+  "deployment": {
+    "development": "Development environment setup",
+    "staging": "Staging environment setup",
+    "production": "Production environment setup"
+  },
+  "risks": [
+    {
+      "name": "Risk name",
+      "probability": "low|medium|high|critical",
+      "impact": "low|medium|high|critical",
+      "mitigation": "How to mitigate this risk"
+    }
+  ],
+  "assumptions": [
+    "Assumption 1",
+    "Assumption 2"
+  ],
+  "unknowns": [
+    "Unknown 1 that needs clarification",
+    "Unknown 2 that needs clarification"
+  ]
+}
 
-2. COMPONENTS
-   - List all major components (frontend, backend, database, cache, etc.)
-   - For each component: name, type, purpose, technologies, dependencies
-
-3. DATA FLOWS
-   - Describe 2-3 key user journeys
-   - For each: name, description, step-by-step flow
-
-4. TECHNOLOGY RATIONALE
-   - Explain why each technology was chosen
-   - Consider: language, framework, database, infrastructure
-
-5. SCALING STRATEGY
-   - Horizontal scaling approach
-   - Vertical scaling approach
-   - Caching strategy
-   - Load balancing
-   - Database scaling
-
-6. API CONTRACT
-   - List 5-10 key REST endpoints (method, path, description)
-   - List any WebSocket events if applicable
-
-7. DATABASE SCHEMA
-   - List main tables with columns
-   - Describe key relationships
-
-8. SECURITY APPROACH
-   - Authentication method
-   - Authorization strategy
-   - Encryption approach
-   - Audit logging
-
-9. OBSERVABILITY STRATEGY
-   - Logging approach
-   - Metrics collection
-   - Distributed tracing
-
-10. DEPLOYMENT ARCHITECTURE
-    - Development environment
-    - Staging environment
-    - Production environment
-
-11. RISK ASSESSMENT
-    - List 3-5 potential risks
-    - For each: name, probability (low/medium/high/critical), impact (low/medium/high/critical), mitigation
-
-12. ASSUMPTIONS AND UNKNOWNS
-    - List key assumptions
-    - List unknowns that need clarification
-
-Format your response as structured text that can be parsed. Use clear section headers and consistent formatting.
-
-Required section headers in order:
-SYSTEM OVERVIEW
-COMPONENTS
-DATA FLOWS
-TECHNOLOGY RATIONALE
-SCALING STRATEGY
-API CONTRACT
-DATABASE SCHEMA
-SECURITY APPROACH
-OBSERVABILITY STRATEGY
-DEPLOYMENT ARCHITECTURE
-RISK ASSESSMENT
-ASSUMPTIONS AND UNKNOWNS`
+IMPORTANT: 
+- Return ONLY the JSON object, no markdown code fences
+- Ensure all required fields are present
+- Use the exact field names shown in the schema
+- Arrays can be empty but must be present
+- All string fields must have meaningful content (no empty strings for required fields)`
 
 	return prompt
+}
+
+// buildClarificationPrompt creates a clarification prompt when JSON parsing fails
+func (g *Generator) buildClarificationPrompt(previousResponse string, parseError error) string {
+	prompt := `Your previous response could not be parsed as valid JSON. 
+
+PARSING ERROR:
+` + parseError.Error() + `
+
+PREVIOUS RESPONSE (first 500 chars):
+` + truncateString(previousResponse, 500) + `
+
+CRITICAL REQUIREMENTS:
+1. Return ONLY valid JSON - no markdown code fences, no explanatory text
+2. The JSON must start with { and end with }
+3. All required fields must be present:
+   - system_overview (string, non-empty)
+   - components (array with at least one component)
+   - security_approach (object with authentication, authorization, encryption, audit)
+   - observability (object with logging, metrics, tracing)
+   - deployment (object with development, staging, production)
+4. Use proper JSON syntax: double quotes for strings, no trailing commas
+5. Ensure all string values are non-empty for required fields
+
+Please provide the architecture as valid JSON now.`
+
+	return prompt
+}
+
+// truncateString truncates a string to maxLen characters
+func truncateString(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
 }
 
 // parseArchitectureResponse parses the LLM response into an Architecture struct

@@ -338,8 +338,13 @@ func TestSetAPIKey(t *testing.T) {
 		t.Fatalf("SetAPIKey failed: %v", err)
 	}
 
-	if m.config.APIKeys["openai"] != "new-key" {
-		t.Errorf("Expected 'new-key', got '%s'", m.config.APIKeys["openai"])
+	// Use GetAPIKey to retrieve the key (it may be in keyring or config)
+	key, err := m.GetAPIKey("openai")
+	if err != nil {
+		t.Fatalf("GetAPIKey failed: %v", err)
+	}
+	if key != "new-key" {
+		t.Errorf("Expected 'new-key', got '%s'", key)
 	}
 
 	// Test empty provider

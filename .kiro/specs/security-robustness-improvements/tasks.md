@@ -137,29 +137,29 @@ This implementation plan breaks down the security and robustness improvements in
     - Sanitize API keys in log output
     - _Requirements: 5.2, 5.4, 5.5_
 
-- [-] 5. Checkpoint - Ensure all tests pass
+- [x] 5. Checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 6. Improve architecture parsing with JSON
+- [x] 6. Improve architecture parsing with JSON
   - Modify Architecture Generator to use JSON parsing instead of text extraction
   - Add retry logic for malformed responses
   - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5_
 
-  - [ ] 6.1 Define JSON schema types
+  - [x] 6.1 Define JSON schema types
     - Create `internal/design/architecture_json.go`
     - Define `ArchitectureJSON` struct with json tags
     - Define `ComponentJSON`, `DataFlowJSON`, etc.
     - Add validation functions for required fields
     - _Requirements: 2.2, 2.4_
 
-  - [ ] 6.2 Update architecture generation prompt
+  - [x] 6.2 Update architecture generation prompt
     - Modify `buildArchitecturePrompt()` in `internal/design/generator.go`
     - Add explicit JSON format instructions
     - Include JSON schema in prompt
     - Specify "no markdown code fences" requirement
     - _Requirements: 2.1_
 
-  - [ ] 6.3 Implement JSON parsing with fallback
+  - [x] 6.3 Implement JSON parsing with fallback
     - Create `parseArchitectureJSON(response string) (*Architecture, error)`
     - Try direct JSON parsing first
     - If failed, try extracting JSON from markdown code fences
@@ -167,7 +167,7 @@ This implementation plan breaks down the security and robustness improvements in
     - Convert JSON structs to Architecture struct
     - _Requirements: 2.2, 2.4_
 
-  - [ ] 6.4 Implement retry logic for malformed responses
+  - [x] 6.4 Implement retry logic for malformed responses
     - Modify `GenerateArchitecture()` to retry on parse failures
     - Create clarification prompt requesting valid JSON
     - Limit retries to 2 attempts
