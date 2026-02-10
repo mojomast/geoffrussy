@@ -381,7 +381,7 @@ func isRetryableError(err error) bool {
 
 	// Check for HTTP status codes in error message
 	// Retryable: 429 (rate limit), 500, 502, 503, 504 (server errors)
-	httpStatusRegex := regexp.MustCompile(`(?:error|status|code)\s*(\d{3})`)
+	httpStatusRegex := regexp.MustCompile(`(?:error|status|code)[:\s]*(\d{3})`)
 	matches := httpStatusRegex.FindStringSubmatch(errMsg)
 	if len(matches) > 1 {
 		statusCode, _ := strconv.Atoi(matches[1])
