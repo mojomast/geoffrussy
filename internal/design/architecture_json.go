@@ -9,19 +9,19 @@ import (
 
 // ArchitectureJSON represents the JSON schema for architecture parsing from LLM responses
 type ArchitectureJSON struct {
-	SystemOverview   string                 `json:"system_overview"`
-	Components       []ComponentJSON        `json:"components"`
-	DataFlows        []DataFlowJSON         `json:"data_flows"`
-	TechRationale    map[string]string      `json:"tech_rationale"`
-	ScalingStrategy  ScalingPlanJSON        `json:"scaling_strategy"`
-	APIContract      APISpecJSON            `json:"api_contract"`
-	DatabaseSchema   SchemaJSON             `json:"database_schema"`
-	SecurityApproach SecurityPlanJSON       `json:"security_approach"`
-	Observability    ObservabilityPlanJSON  `json:"observability"`
-	Deployment       DeploymentPlanJSON     `json:"deployment"`
-	Risks            []RiskJSON             `json:"risks"`
-	Assumptions      []string               `json:"assumptions"`
-	Unknowns         []string               `json:"unknowns"`
+	SystemOverview   string                `json:"system_overview"`
+	Components       []ComponentJSON       `json:"components"`
+	DataFlows        []DataFlowJSON        `json:"data_flows"`
+	TechRationale    map[string]string     `json:"tech_rationale"`
+	ScalingStrategy  ScalingPlanJSON       `json:"scaling_strategy"`
+	APIContract      APISpecJSON           `json:"api_contract"`
+	DatabaseSchema   SchemaJSON            `json:"database_schema"`
+	SecurityApproach SecurityPlanJSON      `json:"security_approach"`
+	Observability    ObservabilityPlanJSON `json:"observability"`
+	Deployment       DeploymentPlanJSON    `json:"deployment"`
+	Risks            []RiskJSON            `json:"risks"`
+	Assumptions      []string              `json:"assumptions"`
+	Unknowns         []string              `json:"unknowns"`
 }
 
 // ComponentJSON represents a system component in JSON format
@@ -371,6 +371,83 @@ func parseArchitectureJSON(response string, projectID string) (*Architecture, er
 
 	// Convert JSON structs to Architecture struct
 	return ConvertToArchitecture(&archData, projectID), nil
+}
+
+// parseArchitectureWithFallback parses an LLM response with graceful degradation
+// If validation fails, returns a partial architecture with available data
+func parseArchitectureWithFallback(response string, projectID string) (*Architecture, []string, error) {
+	var archData ArchitectureJSON
+	var validationErrors []string
+
+	// Try direct JSON parsing first
+	err := json.Unmarshal([]byte(response), &archData)
+	if err != nil {
+		// Try extracting JSON from markdown code fences
+		cleaned := extractJSONFromMarkdown(response)
+		if cleaned == "" {
+			// Complete failure to parse
+			return nil, nil, fmt.Errorf("failed to parse architecture JSON: %w", err)
+		}
+
+		// Try parsing the extracted JSON
+		err = json.Unmarshal([]byte(cleaned), &archData)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to parse extracted JSON: %w", err)
+		}
+	}
+
+	// Validate and collect errors without failing immediately
+	validationErrors = validateArchitectureJSONPartial(&archData)
+
+	if len(validationErrors) > 0 {
+		// Return partial architecture with validation warnings
+		arch := ConvertToArchitecture(&archData, projectID)
+		return arch, validationErrors, fmt.Errorf("architecture validation failed with %d error(s), returning partial architecture", len(validationErrors))
+	}
+
+	// Fully valid architecture
+	arch := ConvertToArchitecture(&archData, projectID)
+	return arch, nil, nil
+}
+
+// validateArchitectureJSONPartial validates architecture and returns all errors without failing
+func validateArchitectureJSONPartial(arch *ArchitectureJSON) []string {
+	var errors []string
+
+	// Validate system overview
+	if arch.SystemOverview == "" {
+		errors = append(errors, "system_overview is missing")
+	}
+
+	// Validate components
+	if len(arch.Components) == 0 {
+		errors = append(errors, "components array is empty")
+	} else {
+		for i, comp := range arch.Components {
+			if comp.Name == "" {
+				errors = append(errors, fmt.Sprintf("component[%d].name is missing", i))
+			}
+			if comp.Type == "" {
+				errors = append(errors, fmt.Sprintf("component[%d].type is missing", i))
+			}
+			if comp.Purpose == "" {
+				errors = append(errors, fmt.Sprintf("component[%d].purpose is missing", i))
+			}
+		}
+	}
+
+	// Validate security approach
+	if arch.SecurityApproach.Authentication == "" {
+		errors = append(errors, "security_approach.authentication is missing")
+	}
+	if arch.SecurityApproach.Authorization == "" {
+		errors = append(errors, "security_approach.authorization is missing")
+	}
+
+	// Note: We don't validate all fields strictly for partial parsing
+	// The goal is to accept whatever valid data we got
+
+	return errors
 }
 
 // extractJSONFromMarkdown extracts JSON content from markdown code fences

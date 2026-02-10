@@ -112,48 +112,49 @@ Tasks:
     - Validates required fields and converts to Architecture struct
     - Tests cover valid JSON, fenced JSON, missing fields, and invalid JSON
 
-- id: T4
-  title: Rate-Limit and Quota Tracking
-  Status: completed
-  estimate: 4-8h
-  files:
-    - internal/provider/provider.go
-    - internal/provider/openai_provider.go
-    - internal/provider/anthropic_provider.go
-    - internal/state/store.go
-    - cmd/geoffrussy/quota.go
-  steps:
-    - id: T4.1
-      action: Extend Response type with RateLimitInfo *RateLimitInfo and QuotaInfo *QuotaInfo
-      status: completed
-      verified: true
-      verify: gofmt && go test ./... -run TestProviderRateLimit -v
-    - id: T4.2
-      action: Add extractRateLimitInfo and extractQuotaInfo helpers in each provider
-      status: completed
-      verified: true
-      verify: go test ./... -run TestProviderRateLimit -v
-    - id: T4.3
-      action: Persist nullable rate/quota fields in state store; make DB schema nullable
-      status: completed
-      verified: true
-      verify: go test ./... -run TestProviderRateLimit -v
-    - id: T4.4
-      action: Add `geoffrussy quota` CLI command to display latest provider data
-      status: completed
-      verified: true
-      verify: go test ./... -run TestProviderRateLimit -v
-    - id: T4.5
-      action: Add unit/property tests for header extraction and persistence
-      status: completed
-      verified: true
-      verify: go test ./... -run TestProviderRateLimit -v
-  notes:
-    - All substeps completed, CLI command exists and works
-    - RateLimitInfo and QuotaInfo structs with nullable fields
-    - Header extraction helpers for multiple providers
-    - Migration added for nullable fields
-    - geoffrussy quota CLI command functional
+ - id: T4
+   title: Rate-Limit and Quota Tracking
+   Status: completed
+   estimate: 4-8h
+   files:
+     - internal/provider/provider.go
+     - internal/provider/openai_provider.go
+     - internal/provider/anthropic_provider.go
+     - internal/state/store.go
+     - internal/quota/monitor_test.go
+   steps:
+     - id: T4.1
+       action: Extend Response type with RateLimitInfo *RateLimitInfo and QuotaInfo *QuotaInfo
+       status: completed
+       verified: true
+       verify: gofmt && go test ./... -run TestProviderRateLimit -v
+     - id: T4.2
+       action: Add extractRateLimitInfo and extractQuotaInfo helpers in each provider
+       status: completed
+       verified: true
+       verify: go test ./... -run TestProviderRateLimit -v
+     - id: T4.3
+       action: Persist nullable rate/quota fields in state store; make DB schema nullable
+       status: completed
+       verified: true
+       verify: go test ./... -run TestProviderRateLimit -v
+     - id: T4.4
+       action: Add `geoffrussy quota` CLI command to display latest provider data
+       status: completed
+       verified: true
+       verify: go test ./... -run TestProviderRateLimit -v
+     - id: T4.5
+       action: Add unit/property tests for header extraction and persistence; update quota monitor tests to use pointer fields
+       status: completed
+       verified: true
+       verify: go test ./internal/quota -v
+   notes:
+     - All substeps completed, CLI command exists and works
+     - RateLimitInfo and QuotaInfo structs with nullable fields
+     - Header extraction helpers for multiple providers
+     - Migration added for nullable fields
+     - geoffrussy quota CLI command functional
+     - Quota monitor tests updated to use pointer fields for nullable struct fields
 
 - id: T5
   title: Improve Database Concurrency
@@ -214,25 +215,39 @@ Tasks:
      - Comprehensive tests for env/flag precedence and non-interactive failures
      - Added 12 tests in init_test.go: precedence tests, provider tests, validation tests
 
-- id: T7
-  title: Error Recovery and Graceful Degradation
-  Status: pending
-  estimate: 3-6h
-  files:
-    - internal/provider/baseprovider.go
-    - internal/executor/taskexecutor.go
-    - internal/design/generator.go
-  steps:
-    - id: T7.1
-      action: Expand RetryWithBackoff to classify retryable errors and use 1s base backoff
-      status: pending
-    - id: T7.2
-      action: Modify ExecuteTask to continue on single-file failures and aggregate errors
-      status: pending
-      verify: go test ./internal/executor -run TestExecuteTaskPartialFailure -v
-    - id: T7.3
-      action: Implement parseArchitectureWithFallback to return partial Architecture + warning error
-      status: pending
+ - id: T7
+   title: Error Recovery and Graceful Degradation
+   Status: completed
+   estimate: 3-6h
+   files:
+     - internal/provider/baseprovider.go
+     - internal/executor/taskexecutor.go
+     - internal/design/generator.go
+     - internal/design/architecture_json.go
+     - internal/design/architecture_json_test.go
+   steps:
+     - id: T7.1
+       action: Expand RetryWithBackoff to classify retryable errors and use 1s base backoff
+       status: completed
+       verified: true
+       verify: go test ./internal/provider -run "TestIsRetryableError|TestBaseProvider_RetryWithBackoff" -v
+     - id: T7.2
+       action: Modify ExecuteTask to continue on single-file failures and aggregate errors
+       status: completed
+       verified: true
+       verify: go test ./internal/executor -run TestExecuteTaskPartialFailure -v
+     - id: T7.3
+       action: Implement parseArchitectureWithFallback to return partial Architecture + warning error
+       status: completed
+       verified: true
+       verify: go test ./internal/design -run "TestParseArchitectureWithFallback|TestValidateArchitectureJSONPartial" -v
+   notes:
+     - Added isRetryableError() function to classify retryable errors based on HTTP status codes, network errors, and categorized errors
+     - RetryWithBackoff only retries retryable errors
+     - Modified ExecuteTask to continue on single-file failures and aggregate errors
+     - Modified ExecutePhase to aggregate task errors and continue with warnings
+     - Added parseArchitectureWithFallback() and validateArchitectureJSONPartial() for graceful degradation
+     - Architecture generation now returns partial architecture with warnings when validation fails
 
 - id: T8
   title: Final Checkpoint & Documentation
@@ -255,3 +270,4 @@ Tasks:
  - created: structured machine-friendly task list with explicit IDs, statuses, verify commands and target files
  - T5 completed: Implemented executeWithRetry with exponential backoff, refactored all write operations, added comprehensive tests
  - T6 completed: Added non-interactive mode, environment variable support, flags for API keys, validate subcommand implemented, comprehensive tests added
+ - T7 completed: Error Recovery and Graceful Degradation implemented

@@ -211,8 +211,15 @@ func (g *Generator) GenerateArchitecture(interviewData *state.InterviewData) (*A
 		// Parsing failed, save the error
 		lastErr = err
 
-		// If we've exhausted retries, return the error
+		// If we've exhausted retries, try graceful degradation
 		if attempt >= maxRetries {
+			// Try parsing with fallback for partial architecture
+			fallbackArch, warnings, parseErr := parseArchitectureWithFallback(response.Content, interviewData.ProjectID)
+			if parseErr == nil && fallbackArch != nil {
+				// Return partial architecture with warnings
+				fallbackArch.CreatedAt = time.Now()
+				return fallbackArch, fmt.Errorf("using partial architecture due to validation errors: %v", warnings)
+			}
 			break
 		}
 
@@ -220,10 +227,9 @@ func (g *Generator) GenerateArchitecture(interviewData *state.InterviewData) (*A
 		prompt = g.buildClarificationPrompt(response.Content, err)
 	}
 
-	// All retries exhausted
+	// All retries exhausted and fallback failed
 	return nil, fmt.Errorf("failed to parse architecture after %d attempts: %w", maxRetries+1, lastErr)
 }
-
 
 // buildArchitecturePrompt creates the prompt for architecture generation
 func (g *Generator) buildArchitecturePrompt(interviewData *state.InterviewData) string {

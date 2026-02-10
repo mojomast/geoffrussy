@@ -6,8 +6,12 @@ import (
 	"math"
 	"net/http"
 	"os"
+	"regexp"
+	"strconv"
+	"strings"
 	"time"
 
+	"github.com/mojomast/geoffrussy/internal/errors"
 	"github.com/mojomast/geoffrussy/internal/logging"
 )
 
@@ -146,6 +150,11 @@ func (b *BaseProvider) RetryWithBackoff(fn func() error) error {
 		// Don't retry on last attempt
 		if attempt == b.maxRetries {
 			break
+		}
+
+		// Check if error is retryable
+		if !isRetryableError(err) {
+			return err
 		}
 
 		// Calculate exponential backoff delay
@@ -355,4 +364,67 @@ func parseRetryAfterHeader(val string) (time.Duration, error) {
 	var seconds int
 	_, err := fmt.Sscanf(val, "%d", &seconds)
 	return time.Duration(seconds) * time.Second, err
+}
+
+// isRetryableError determines if an error should be retried
+func isRetryableError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	errMsg := strings.ToLower(err.Error())
+
+	// Check if error is already categorized
+	if catErr, ok := err.(*errors.CategorizedError); ok {
+		return catErr.Retryable
+	}
+
+	// Check for HTTP status codes in error message
+	// Retryable: 429 (rate limit), 500, 502, 503, 504 (server errors)
+	httpStatusRegex := regexp.MustCompile(`(?:error|status|code)\s*(\d{3})`)
+	matches := httpStatusRegex.FindStringSubmatch(errMsg)
+	if len(matches) > 1 {
+		statusCode, _ := strconv.Atoi(matches[1])
+		return statusCode == 429 || statusCode >= 500 && statusCode < 600
+	}
+
+	// Check for network-related errors
+	networkPatterns := []string{
+		"timeout",
+		"connection refused",
+		"connection reset",
+		"no route to host",
+		"network unreachable",
+		"dial tcp",
+		"temporary failure",
+		"temporary error",
+		"try again later",
+		"rate limit",
+		"quota exceeded",
+	}
+
+	for _, pattern := range networkPatterns {
+		if strings.Contains(errMsg, pattern) {
+			return true
+		}
+	}
+
+	// Non-retryable patterns
+	nonRetryablePatterns := []string{
+		"unauthorized",
+		"forbidden",
+		"not found",
+		"invalid",
+		"bad request",
+		"authentication failed",
+		"invalid api key",
+	}
+
+	for _, pattern := range nonRetryablePatterns {
+		if strings.Contains(errMsg, pattern) {
+			return false
+		}
+	}
+
+	return false
 }

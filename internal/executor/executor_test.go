@@ -564,3 +564,133 @@ done:
 		t.Errorf("expected phase status to be '%s', got %s", state.PhaseCompleted, updatedPhase.Status)
 	}
 }
+
+func TestExecutor_ExecuteTaskPartialFailure(t *testing.T) {
+	executor, store := setupTestExecutor(t)
+	defer store.Close()
+	defer executor.Close()
+
+	// Create a test project
+	project := &state.Project{
+		ID:        "test-project",
+		Name:      "Test Project",
+		CreatedAt: time.Now(),
+	}
+	if err := store.CreateProject(project); err != nil {
+		t.Fatalf("failed to create project: %v", err)
+	}
+	seedExecutionContext(t, store, project.ID)
+
+	// Create a test phase
+	phase := &state.Phase{
+		ID:        "phase-1",
+		ProjectID: project.ID,
+		Number:    1,
+		Title:     "Test Phase",
+		Status:    state.PhaseNotStarted,
+		CreatedAt: time.Now(),
+	}
+	if err := store.SavePhase(phase); err != nil {
+		t.Fatalf("failed to save phase: %v", err)
+	}
+
+	// Create a test task
+	task := &state.Task{
+		ID:          "task-1",
+		PhaseID:     phase.ID,
+		Number:      "1.1",
+		Description: "Test Task",
+		Status:      state.TaskNotStarted,
+	}
+	if err := store.SaveTask(task); err != nil {
+		t.Fatalf("failed to save task: %v", err)
+	}
+
+	// Mock provider to return response with multiple files
+	failingProvider := &mockProviderWithMultipleFiles{}
+	executor.provider = failingProvider
+
+	// Execute the task
+	err := executor.ExecuteTask(task.ID)
+
+	// Task should complete successfully (no error) even if some files failed
+	if err != nil {
+		t.Errorf("expected task to complete with partial success, got error: %v", err)
+	}
+
+	// Verify task status is completed
+	updatedTask, err := store.GetTask(task.ID)
+	if err != nil {
+		t.Fatalf("failed to get task: %v", err)
+	}
+
+	if updatedTask.Status != state.TaskCompleted {
+		t.Errorf("expected task status to be '%s', got %s", state.TaskCompleted, updatedTask.Status)
+	}
+}
+
+// mockProviderWithMultipleFiles is a mock provider that returns multiple files, some of which will fail
+type mockProviderWithMultipleFiles struct{}
+
+func (m *mockProviderWithMultipleFiles) Name() string {
+	return "mock-multiple-files"
+}
+
+func (m *mockProviderWithMultipleFiles) Authenticate(apiKey string) error {
+	return nil
+}
+
+func (m *mockProviderWithMultipleFiles) IsAuthenticated() bool {
+	return true
+}
+
+func (m *mockProviderWithMultipleFiles) ListModels() ([]provider.Model, error) {
+	return nil, nil
+}
+
+func (m *mockProviderWithMultipleFiles) DiscoverModels() ([]provider.Model, error) {
+	return nil, nil
+}
+
+func (m *mockProviderWithMultipleFiles) Call(model string, prompt string) (*provider.Response, error) {
+	return &provider.Response{
+		Content: `{
+			"explanation": "Creating test files",
+			"files": [
+				{
+					"path": "good-file.txt",
+					"content": "This file should be written successfully"
+				},
+				{
+					"path": "../bad-file.txt",
+					"content": "This file should fail path validation"
+				},
+				{
+					"path": "another-good-file.txt",
+					"content": "This file should also be written successfully"
+				}
+			]
+		}`,
+		TokensInput:  20,
+		TokensOutput: 10,
+		Model:        model,
+		Provider:     "mock",
+		Timestamp:    time.Now(),
+	}, nil
+}
+
+func (m *mockProviderWithMultipleFiles) Stream(model string, prompt string) (<-chan string, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
+func (m *mockProviderWithMultipleFiles) GetRateLimitInfo() (*provider.RateLimitInfo, error) {
+	return nil, nil
+}
+
+func (m *mockProviderWithMultipleFiles) GetQuotaInfo() (*provider.QuotaInfo, error) {
+	return nil, nil
+}
+
+func (m *mockProviderWithMultipleFiles) SupportsCodingPlan() bool {
+	return false
+}

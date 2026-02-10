@@ -266,7 +266,11 @@ func (te *TaskExecutor) ExecuteTask(taskID string) error {
 		Timestamp: time.Now(),
 	})
 
-	// Create files
+	// Create files with graceful degradation - continue on single-file failures
+	var fileErrors []error
+	successfulWrites := 0
+	totalFiles := len(codeResp.Files)
+
 	for i, file := range codeResp.Files {
 		preview := truncateString(file.Content, 200)
 
@@ -288,20 +292,28 @@ func (te *TaskExecutor) ExecuteTask(taskID string) error {
 			contextLogger.Error("failed to write file",
 				"file_path", file.Path,
 				"error", err)
-			return fmt.Errorf("failed to write file %s: %w", file.Path, err)
+			fileErrors = append(fileErrors, fmt.Errorf("failed to write file %s: %w", file.Path, err))
+			te.sendUpdate(TaskUpdate{
+				TaskID:    taskID,
+				PhaseID:   phase.ID,
+				Type:      TaskProgress,
+				Content:   fmt.Sprintf("Failed: %s - %v", file.Path, err),
+				Error:     err,
+				Timestamp: time.Now(),
+			})
+		} else {
+			successfulWrites++
+			contextLogger.Info("file written successfully",
+				"file_path", file.Path,
+				"file_size", len(file.Content))
+			te.sendUpdate(TaskUpdate{
+				TaskID:    taskID,
+				PhaseID:   phase.ID,
+				Type:      TaskProgress,
+				Content:   fmt.Sprintf("Created: %s (%d bytes)", file.Path, len(file.Content)),
+				Timestamp: time.Now(),
+			})
 		}
-
-		contextLogger.Info("file written successfully",
-			"file_path", file.Path,
-			"file_size", len(file.Content))
-
-		te.sendUpdate(TaskUpdate{
-			TaskID:    taskID,
-			PhaseID:   phase.ID,
-			Type:      TaskProgress,
-			Content:   fmt.Sprintf("Created: %s (%d bytes)", file.Path, len(file.Content)),
-			Timestamp: time.Now(),
-		})
 	}
 
 	// Execute commands (optional - might be dangerous in auto-execution)
@@ -314,6 +326,26 @@ func (te *TaskExecutor) ExecuteTask(taskID string) error {
 			PhaseID:   phase.ID,
 			Type:      TaskProgress,
 			Content:   cmdList,
+			Timestamp: time.Now(),
+		})
+	}
+
+	// Check if we had any failures
+	if len(fileErrors) > 0 {
+		if successfulWrites == 0 {
+			// All files failed, return error
+			return fmt.Errorf("failed to write any files (%d/%d), first error: %w", 0, totalFiles, fileErrors[0])
+		}
+		// Some files succeeded, log warning but continue
+		contextLogger.Warn("partial file write failure",
+			"successful_writes", successfulWrites,
+			"failed_writes", len(fileErrors),
+			"total_files", totalFiles)
+		te.sendUpdate(TaskUpdate{
+			TaskID:    taskID,
+			PhaseID:   phase.ID,
+			Type:      TaskProgress,
+			Content:   fmt.Sprintf("⚠️  Completed with %d/%d files written (%d failed)", successfulWrites, totalFiles, len(fileErrors)),
 			Timestamp: time.Now(),
 		})
 	}
@@ -460,7 +492,6 @@ func (te *TaskExecutor) writeFileSafe(file File) error {
 
 	return nil
 }
-
 
 func min(a, b int) int {
 	if a < b {

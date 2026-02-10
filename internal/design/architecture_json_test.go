@@ -2,6 +2,7 @@ package design
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -1292,4 +1293,94 @@ func TestExtractJSONFromMarkdown_WithSurroundingText(t *testing.T) {
 	markdown := "Here is the architecture:\n\n```json\n{\"system\": \"test\"}\n```\n\nThat's it!"
 	result := extractJSONFromMarkdown(markdown)
 	assert.Equal(t, `{"system": "test"}`, result)
+}
+
+func TestParseArchitectureWithFallback_PartialValid(t *testing.T) {
+	// Partial architecture - missing some fields but has valid JSON structure
+	response := `{
+		"system_overview": "Test system",
+		"components": [
+			{
+				"name": "Component 1",
+				"type": "service",
+				"purpose": "Test purpose"
+			}
+		]
+	}`
+
+	arch, warnings, err := parseArchitectureWithFallback(response, "test-project")
+
+	if err == nil {
+		t.Errorf("expected error for partial architecture, got nil")
+	}
+
+	if arch == nil {
+		t.Fatal("expected partial architecture, got nil")
+	}
+
+	if len(warnings) == 0 {
+		t.Errorf("expected warnings for partial architecture, got none")
+	}
+
+	if arch.SystemOverview == "" {
+		t.Error("expected system_overview to be set")
+	}
+
+	if len(arch.Components) == 0 {
+		t.Error("expected components to be set")
+	}
+}
+
+func TestParseArchitectureWithFallback_CompletelyInvalid(t *testing.T) {
+	// Completely invalid JSON
+	response := `not valid json at all`
+
+	arch, warnings, err := parseArchitectureWithFallback(response, "test-project")
+
+	if err == nil {
+		t.Errorf("expected error for invalid JSON, got nil")
+	}
+
+	if arch != nil {
+		t.Error("expected nil architecture for invalid JSON")
+	}
+
+	if warnings != nil {
+		t.Error("expected nil warnings for invalid JSON")
+	}
+}
+
+func TestValidateArchitectureJSONPartial_SomeFieldsMissing(t *testing.T) {
+	// Architecture with some fields missing
+	arch := &ArchitectureJSON{
+		Components: []ComponentJSON{
+			{Name: "Test Component", Type: "service", Purpose: "Test purpose"},
+		},
+	}
+
+	errors := validateArchitectureJSONPartial(arch)
+
+	if len(errors) == 0 {
+		t.Error("expected validation errors for missing fields")
+	}
+
+	// Should have errors for missing required fields
+	hasSystemOverviewError := false
+	hasSecurityError := false
+	for _, err := range errors {
+		if strings.Contains(err, "system_overview") {
+			hasSystemOverviewError = true
+		}
+		if strings.Contains(err, "security") {
+			hasSecurityError = true
+		}
+	}
+
+	if !hasSystemOverviewError {
+		t.Error("expected error for missing system_overview")
+	}
+
+	if !hasSecurityError {
+		t.Error("expected error for missing security fields")
+	}
 }

@@ -62,9 +62,9 @@ func TestCheckRateLimitWarning(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			info := &state.RateLimitInfo{
 				Provider:          "test",
-				RequestsRemaining: tc.requestsRemaining,
-				RequestsLimit:     tc.requestsLimit,
-				ResetAt:           time.Now().Add(time.Hour),
+				RequestsRemaining: &tc.requestsRemaining,
+				RequestsLimit:     &tc.requestsLimit,
+				ResetAt:           func() *time.Time { t := time.Now().Add(time.Hour); return &t }(),
 				CheckedAt:         time.Now(),
 			}
 
@@ -167,11 +167,14 @@ func TestGetCachedStatus(t *testing.T) {
 	monitor := NewMonitor(store)
 
 	// Save some rate limit info
+	remaining := 500
+	limit := 1000
+	resetTime := time.Now().Add(time.Hour)
 	rateLimitInfo := &state.RateLimitInfo{
 		Provider:          "test-provider",
-		RequestsRemaining: 500,
-		RequestsLimit:     1000,
-		ResetAt:           time.Now().Add(time.Hour),
+		RequestsRemaining: &remaining,
+		RequestsLimit:     &limit,
+		ResetAt:           &resetTime,
 		CheckedAt:         time.Now(),
 	}
 
@@ -215,11 +218,14 @@ func TestShouldDelayRequest(t *testing.T) {
 	monitor := NewMonitor(store)
 
 	// Test with no rate limit exceeded
+	remaining := 500
+	limit := 1000
+	resetTime := time.Now().Add(time.Hour)
 	rateLimitInfo := &state.RateLimitInfo{
 		Provider:          "test-provider",
-		RequestsRemaining: 500,
-		RequestsLimit:     1000,
-		ResetAt:           time.Now().Add(time.Hour),
+		RequestsRemaining: &remaining,
+		RequestsLimit:     &limit,
+		ResetAt:           &resetTime,
 		CheckedAt:         time.Now(),
 	}
 
@@ -241,11 +247,14 @@ func TestShouldDelayRequest(t *testing.T) {
 	}
 
 	// Test with rate limit exceeded
+	remaining2 := 0
+	limit2 := 1000
+	resetTime2 := time.Now().Add(time.Hour)
 	exceededInfo := &state.RateLimitInfo{
 		Provider:          "test-provider-2",
-		RequestsRemaining: 0,
-		RequestsLimit:     1000,
-		ResetAt:           time.Now().Add(time.Hour),
+		RequestsRemaining: &remaining2,
+		RequestsLimit:     &limit2,
+		ResetAt:           &resetTime2,
 		CheckedAt:         time.Now(),
 	}
 

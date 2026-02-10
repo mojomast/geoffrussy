@@ -102,7 +102,7 @@ func (e *Executor) ExecuteProject(projectID string, startPhaseID string, stopAft
 	return nil
 }
 
-// ExecutePhase executes all tasks in a phase
+// ExecutePhase executes all tasks in a phase with error aggregation
 func (e *Executor) ExecutePhase(phaseID string) error {
 	// Get phase from store
 	phase, err := e.store.GetPhase(phaseID)
@@ -129,21 +129,53 @@ func (e *Executor) ExecutePhase(phaseID string) error {
 		return fmt.Errorf("failed to list tasks: %w", err)
 	}
 
+	// Aggregate errors for graceful degradation
+	var taskErrors []error
+	completedTasks := 0
+	totalTasks := len(tasks)
+
 	for _, task := range tasks {
 		if task.Status == state.TaskCompleted {
+			completedTasks++
 			continue
 		}
 		if err := e.ExecuteTask(task.ID); err != nil {
-			// If task failed, stop phase execution
+			// Collect error but continue with other tasks
+			taskErrors = append(taskErrors, fmt.Errorf("task %s: %w", task.ID, err))
 			e.sendUpdate(TaskUpdate{
 				PhaseID:   phaseID,
 				Type:      TaskError,
-				Content:   fmt.Sprintf("Phase stopped due to task error: %v", err),
+				Content:   fmt.Sprintf("Task failed: %s - %v", task.Description, err),
 				Timestamp: time.Now(),
 				Error:     err,
 			})
-			return err
+		} else {
+			completedTasks++
 		}
+	}
+
+	// Update phase status based on results
+	if len(taskErrors) > 0 {
+		if completedTasks == 0 {
+			// All tasks failed, mark phase as error (blocked)
+			if err := e.store.UpdatePhaseStatus(phaseID, state.PhaseBlocked); err != nil {
+				return fmt.Errorf("failed to update phase status: %w", err)
+			}
+			e.sendUpdate(TaskUpdate{
+				PhaseID:   phaseID,
+				Type:      TaskBlocked,
+				Content:   fmt.Sprintf("Phase failed: 0/%d tasks completed", totalTasks),
+				Timestamp: time.Now(),
+			})
+			return fmt.Errorf("all tasks failed (%d errors), first error: %w", len(taskErrors), taskErrors[0])
+		}
+		// Some tasks succeeded, mark phase as completed with warning
+		e.sendUpdate(TaskUpdate{
+			PhaseID:   phaseID,
+			Type:      TaskProgress,
+			Content:   fmt.Sprintf("⚠️  Phase completed with %d/%d tasks (%d failed)", completedTasks, totalTasks, len(taskErrors)),
+			Timestamp: time.Now(),
+		})
 	}
 
 	// Update phase status to completed
@@ -155,7 +187,7 @@ func (e *Executor) ExecutePhase(phaseID string) error {
 	e.sendUpdate(TaskUpdate{
 		PhaseID:   phaseID,
 		Type:      TaskCompleted,
-		Content:   fmt.Sprintf("Completed phase: %s", phase.Title),
+		Content:   fmt.Sprintf("Completed phase: %s (%d/%d tasks)", phase.Title, completedTasks, totalTasks),
 		Timestamp: time.Now(),
 	})
 
