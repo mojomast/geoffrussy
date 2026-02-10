@@ -50,7 +50,7 @@ func Banner() string {
 			} else {
 				// Calculate gradient position based on character position relative to max width
 				t := float64(i) / float64(maxWidth-1)
-				if maxWidth == 1 {
+				if maxWidth <= 1 {
 					t = 0
 				}
 
@@ -65,7 +65,7 @@ func Banner() string {
 				result.WriteString(coloredChar)
 			}
 		}
-		// Add newline after each line except skip extra trailing newlines
+		// Add newline after each line except the last to avoid extra trailing newlines
 		if lineIdx < len(lines)-1 {
 			result.WriteRune('\n')
 		}
