@@ -1692,3 +1692,52 @@ func (s *Store) ListConfigByPrefix(prefix string) (map[string]string, error) {
 	}
 	return results, nil
 }
+
+// Cache operations
+
+// SetCache sets a cache value with an optional TTL
+func (s *Store) SetCache(key string, value string, ttl time.Duration) error {
+	var expiresAt *time.Time
+	if ttl > 0 {
+		t := time.Now().Add(ttl)
+		expiresAt = &t
+	}
+
+	query := `
+		INSERT INTO cache (key, value, created_at, expires_at)
+		VALUES (?, ?, ?, ?)
+		ON CONFLICT(key) DO UPDATE SET
+			value = excluded.value,
+			created_at = excluded.created_at,
+			expires_at = excluded.expires_at
+	`
+	return executeWithRetry(s.db, 100, 3, func(tx *sql.Tx) error {
+		_, err := tx.Exec(query, key, value, time.Now(), expiresAt)
+		if err != nil {
+			return fmt.Errorf("failed to set cache: %w", err)
+		}
+		return nil
+	})
+}
+
+// GetCache retrieves a cache value
+func (s *Store) GetCache(key string) (string, error) {
+	// First, clean up expired entries (lazy expiration)
+	cleanupQuery := `DELETE FROM cache WHERE expires_at < ?`
+	_, _ = s.db.Exec(cleanupQuery, time.Now())
+
+	query := `
+		SELECT value
+		FROM cache
+		WHERE key = ?
+	`
+	var value string
+	err := s.db.QueryRow(query, key).Scan(&value)
+	if err == sql.ErrNoRows {
+		return "", fmt.Errorf("cache key not found: %s", key)
+	}
+	if err != nil {
+		return "", fmt.Errorf("failed to get cache: %w", err)
+	}
+	return value, nil
+}

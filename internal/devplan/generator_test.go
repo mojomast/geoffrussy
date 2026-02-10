@@ -88,7 +88,7 @@ func TestDevPlanGenerator(t *testing.T) {
 `
 
 	mockProvider := &MockProvider{response: mockResponse}
-	generator := NewGenerator(mockProvider, "test-model")
+	generator := NewGenerator(mockProvider, "test-model", nil)
 
 	architecture := &design.Architecture{
 		ProjectID:      "test-project",
@@ -160,7 +160,7 @@ Thinking about the architecture...
 ]
 `
 		mockProviderCoT := &MockProvider{response: mockResponseCoT}
-		generatorCoT := NewGenerator(mockProviderCoT, "test-model")
+		generatorCoT := NewGenerator(mockProviderCoT, "test-model", nil)
 
 		phases, err := generatorCoT.GeneratePhases(architecture, interviewData)
 		if err != nil {
@@ -175,21 +175,11 @@ Thinking about the architecture...
 	t.Run("GeneratePhases_InvalidJSON", func(t *testing.T) {
 		// Create a generator with a provider that returns invalid JSON
 		invalidJSONProvider := &MockProvider{response: "This is not JSON"}
-		invalidGenerator := NewGenerator(invalidJSONProvider, "test-model")
+		invalidGenerator := NewGenerator(invalidJSONProvider, "test-model", nil)
 
-		phases, err := invalidGenerator.GeneratePhases(architecture, interviewData)
-		if err != nil {
-			t.Fatalf("Failed to generate phases: %v", err)
-		}
-
-		// Should fall back to default phases
-		if len(phases) == 0 {
-			t.Fatal("Should return default phases on invalid JSON")
-		}
-
-		// Check that we got the default phase
-		if phases[0].Title != "Setup & Infrastructure" {
-			t.Errorf("Expected default phase title, got %s", phases[0].Title)
+		_, err := invalidGenerator.GeneratePhases(architecture, interviewData)
+		if err == nil {
+			t.Fatal("Should return error on invalid JSON")
 		}
 	})
 
@@ -320,7 +310,7 @@ Thinking about the architecture...
 	})
 
 	t.Run("GeneratePhases_NoProvider", func(t *testing.T) {
-		generator := NewGenerator(nil, "test-model")
+		generator := NewGenerator(nil, "test-model", nil)
 
 		_, err := generator.GeneratePhases(architecture, interviewData)
 		if err == nil {
@@ -343,7 +333,7 @@ func containsHelper(s, substr string) bool {
 }
 
 func TestDevPlanGenerator_PhaseManipulation(t *testing.T) {
-	generator := NewGenerator(nil, "test-model")
+	generator := NewGenerator(nil, "test-model", nil)
 
 	phase1 := &Phase{
 		ID:              "phase-0",

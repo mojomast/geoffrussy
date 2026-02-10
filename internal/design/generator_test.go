@@ -264,7 +264,7 @@ func TestDesignGenerator(t *testing.T) {
 	}`
 
 	mockProvider := &MockProvider{response: mockResponse}
-	generator := NewGenerator(mockProvider, "test-model")
+	generator := NewGenerator(mockProvider, "test-model", nil)
 
 	interviewData := &state.InterviewData{
 		ProjectID:        "test-project",
@@ -376,7 +376,7 @@ func TestDesignGenerator(t *testing.T) {
 	})
 
 	t.Run("GenerateArchitecture_NoProvider", func(t *testing.T) {
-		generator := NewGenerator(nil, "test-model")
+		generator := NewGenerator(nil, "test-model", nil)
 
 		_, err := generator.GenerateArchitecture(interviewData)
 		if err == nil {
@@ -400,7 +400,7 @@ func containsHelper(s, substr string) bool {
 
 func TestDesignGenerator_Reiteration(t *testing.T) {
 	mockProvider := &MockProvider{response: "Updated system overview with better details"}
-	generator := NewGenerator(mockProvider, "test-model")
+	generator := NewGenerator(mockProvider, "test-model", nil)
 
 	architecture := &Architecture{
 		ProjectID:      "test-project",
@@ -518,7 +518,7 @@ func TestDesignGenerator_Reiteration(t *testing.T) {
 	})
 
 	t.Run("RefineArchitecture_NoProvider", func(t *testing.T) {
-		generator := NewGenerator(nil, "test-model")
+		generator := NewGenerator(nil, "test-model", nil)
 
 		_, err := generator.RefineArchitecture(architecture, "system_overview", "Update it")
 		if err == nil {
@@ -707,7 +707,7 @@ func TestGenerateArchitecture_RetryLogic(t *testing.T) {
 			responses: []string{validJSON},
 			callCount: 0,
 		}
-		generator := NewGenerator(mockProvider, "test-model")
+		generator := NewGenerator(mockProvider, "test-model", nil)
 
 		architecture, err := generator.GenerateArchitecture(interviewData)
 		if err != nil {
@@ -734,7 +734,7 @@ func TestGenerateArchitecture_RetryLogic(t *testing.T) {
 			responses: []string{malformedJSON, validJSON},
 			callCount: 0,
 		}
-		generator := NewGenerator(mockProvider, "test-model")
+		generator := NewGenerator(mockProvider, "test-model", nil)
 
 		architecture, err := generator.GenerateArchitecture(interviewData)
 		if err != nil {
@@ -758,7 +758,7 @@ func TestGenerateArchitecture_RetryLogic(t *testing.T) {
 			responses: []string{malformedJSON1, malformedJSON2, validJSON},
 			callCount: 0,
 		}
-		generator := NewGenerator(mockProvider, "test-model")
+		generator := NewGenerator(mockProvider, "test-model", nil)
 
 		architecture, err := generator.GenerateArchitecture(interviewData)
 		if err != nil {
@@ -781,7 +781,7 @@ func TestGenerateArchitecture_RetryLogic(t *testing.T) {
 			responses: []string{malformedJSON, malformedJSON, malformedJSON},
 			callCount: 0,
 		}
-		generator := NewGenerator(mockProvider, "test-model")
+		generator := NewGenerator(mockProvider, "test-model", nil)
 
 		architecture, err := generator.GenerateArchitecture(interviewData)
 		if err == nil {
@@ -810,7 +810,7 @@ func TestGenerateArchitecture_RetryLogic(t *testing.T) {
 			responses: []string{malformedJSON, jsonInMarkdown},
 			callCount: 0,
 		}
-		generator := NewGenerator(mockProvider, "test-model")
+		generator := NewGenerator(mockProvider, "test-model", nil)
 
 		architecture, err := generator.GenerateArchitecture(interviewData)
 		if err != nil {
@@ -828,7 +828,7 @@ func TestGenerateArchitecture_RetryLogic(t *testing.T) {
 }
 
 func TestBuildClarificationPrompt(t *testing.T) {
-	generator := NewGenerator(nil, "test-model")
+	generator := NewGenerator(nil, "test-model", nil)
 
 	t.Run("Creates clarification prompt with error details", func(t *testing.T) {
 		previousResponse := "This is not valid JSON"

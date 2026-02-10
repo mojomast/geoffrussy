@@ -107,7 +107,7 @@ func runDesign(cmd *cobra.Command, args []string) error {
 	printProviderUsageSnapshot(providerName, prov)
 
 	// 5. Initialize Generator
-	generator := design.NewGenerator(prov, modelName)
+	generator := design.NewGenerator(prov, modelName, store)
 
 	if designRefine != "" {
 		return handleRefinement(generator, store, projectID, designRefine)

@@ -2,29 +2,43 @@ package devplan
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/mojomast/geoffrussy/internal/design"
+	"github.com/mojomast/geoffrussy/internal/logging"
 	"github.com/mojomast/geoffrussy/internal/provider"
 	"github.com/mojomast/geoffrussy/internal/state"
 )
+
+// CacheStore interface for caching AI responses
+type CacheStore interface {
+	GetCache(key string) (string, error)
+	SetCache(key string, value string, ttl time.Duration) error
+}
 
 // Generator generates development plans from architecture
 type Generator struct {
 	provider provider.Provider
 	model    string
+	cache    CacheStore
+	logger   *logging.Logger
 }
 
 // NewGenerator creates a new devplan generator
-func NewGenerator(provider provider.Provider, model string) *Generator {
+func NewGenerator(provider provider.Provider, model string, cache CacheStore) *Generator {
 	return &Generator{
 		provider: provider,
 		model:    model,
+		cache:    cache,
+		logger:   logging.NewLogger(slog.LevelInfo, os.Stdout),
 	}
 }
 
@@ -91,15 +105,45 @@ func (g *Generator) GeneratePhases(architecture *design.Architecture, interviewD
 	}
 
 	prompt := g.buildPhasesPrompt(architecture, interviewData)
+	cacheKey := g.generateCacheKey(prompt)
 
+	// Check cache first
+	if g.cache != nil {
+		cached, err := g.cache.GetCache(cacheKey)
+		if err == nil && cached != "" {
+			// Validate cached content
+			phases, parseErr := g.parsePhasesResponse(cached)
+			if parseErr == nil {
+				g.logger.Info("Using cached development plan")
+				// Recalculate estimates since they are not cached in the JSON structure
+				for i := range phases {
+					phases[i].EstimatedTokens = g.estimatePhaseTokens(&phases[i])
+					phases[i].EstimatedCost = g.estimatePhaseCost(phases[i].EstimatedTokens)
+					phases[i].CreatedAt = time.Now()
+				}
+				return phases, nil
+			}
+			g.logger.Warn("Cached development plan invalid, regenerating", "error", parseErr)
+		}
+	}
+
+	// Generate fresh content
 	response, err := g.provider.Call(context.TODO(), g.model, prompt)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate phases: %w", err)
 	}
+	content := response.Content
 
-	phases, err := g.parsePhasesResponse(response.Content)
+	phases, err := g.parsePhasesResponse(content)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse phases: %w", err)
+	}
+
+	// Cache successful response (7 days TTL)
+	if g.cache != nil {
+		if err := g.cache.SetCache(cacheKey, content, 7*24*time.Hour); err != nil {
+			g.logger.Warn("Failed to cache response", "error", err)
+		}
 	}
 
 	// Estimate tokens and costs for each phase
@@ -117,11 +161,11 @@ func (g *Generator) buildPhasesPrompt(architecture *design.Architecture, intervi
 	prompt := `You are an expert software project planner. Based on the following architecture and requirements, generate 7-10 executable development phases.
 
 CRITICAL OUTPUT RULES:
-- Return ONLY a valid JSON array.
-- Do NOT include markdown code fences.
-- Do NOT include commentary or prose before/after JSON.
-- Each phase must include 3-5 tasks and concrete acceptance criteria.
-- Keep dependency IDs consistent and acyclic.
+1. Return ONLY a valid JSON array.
+2. Do NOT include markdown code fences (no ` + "```json" + ` or ` + "```" + `).
+3. Do NOT include commentary or prose before/after JSON.
+4. Each phase must include 3-5 tasks and concrete acceptance criteria.
+5. Keep dependency IDs consistent and acyclic.
 
 PROJECT: ` + interviewData.ProjectName + `
 PROBLEM: ` + interviewData.ProblemStatement + `
@@ -181,164 +225,97 @@ Generate the JSON now:`
 
 // parsePhasesResponse parses the LLM response into Phase structs
 func (g *Generator) parsePhasesResponse(response string) ([]Phase, error) {
-	// Simplified parser - in production you'd want more robust parsing
 	phases := []Phase{}
 
-	// Create default phases as a fallback
-	defaultPhases := []Phase{
-		{
-			ID:              "phase-0",
-			Number:          0,
-			Title:           "Setup & Infrastructure",
-			Objective:       "Set up project structure and development environment",
-			SuccessCriteria: []string{"Project initialized", "Dependencies installed", "Development environment working"},
-			Dependencies:    []string{},
-			Tasks: []Task{
-				{
-					ID:                  "task-0-1",
-					Number:              "0.1",
-					Description:         "Initialize project structure",
-					AcceptanceCriteria:  []string{"Project directory created", "Version control initialized"},
-					ImplementationNotes: []string{"Use standard project layout"},
-					Status:              TaskNotStarted,
-				},
-				{
-					ID:                  "task-0-2",
-					Number:              "0.2",
-					Description:         "Set up development environment",
-					AcceptanceCriteria:  []string{"All dependencies installed", "Build succeeds"},
-					ImplementationNotes: []string{"Document setup steps"},
-					Status:              TaskNotStarted,
-				},
-			},
-			Status: PhaseNotStarted,
-		},
-		{
-			ID:              "phase-1",
-			Number:          1,
-			Title:           "Database & Models",
-			Objective:       "Implement data models and database schema",
-			SuccessCriteria: []string{"Database schema created", "Models implemented", "Migrations working"},
-			Dependencies:    []string{"0"},
-			Tasks: []Task{
-				{
-					ID:                  "task-1-1",
-					Number:              "1.1",
-					Description:         "Design database schema",
-					AcceptanceCriteria:  []string{"Schema documented", "Relationships defined"},
-					ImplementationNotes: []string{"Consider normalization"},
-					Status:              TaskNotStarted,
-				},
-				{
-					ID:                  "task-1-2",
-					Number:              "1.2",
-					Description:         "Implement data models",
-					AcceptanceCriteria:  []string{"Models created", "Validation added"},
-					ImplementationNotes: []string{"Use ORM best practices"},
-					Status:              TaskNotStarted,
-				},
-			},
-			Status: PhaseNotStarted,
-		},
-		{
-			ID:              "phase-2",
-			Number:          2,
-			Title:           "Core API",
-			Objective:       "Implement core API endpoints",
-			SuccessCriteria: []string{"CRUD operations working", "API documented", "Tests passing"},
-			Dependencies:    []string{"1"},
-			Tasks: []Task{
-				{
-					ID:                  "task-2-1",
-					Number:              "2.1",
-					Description:         "Implement REST endpoints",
-					AcceptanceCriteria:  []string{"Endpoints created", "Request/response validated"},
-					ImplementationNotes: []string{"Follow REST conventions"},
-					Status:              TaskNotStarted,
-				},
-			},
-			Status: PhaseNotStarted,
-		},
+	if response == "" {
+		return nil, fmt.Errorf("empty response from provider")
 	}
 
-	// Try to parse the response, fall back to defaults if parsing fails
-	if response != "" {
-		// Extract JSON from the response
-		jsonContent := response
+	// Extract JSON from the response
+	jsonContent := response
 
-		// Remove scratchpad if present
-		if start := strings.Index(jsonContent, "<scratchpad>"); start != -1 {
-			if end := strings.Index(jsonContent, "</scratchpad>"); end != -1 {
-				// We keep what's after the scratchpad
-				if end+13 < len(jsonContent) {
-					jsonContent = jsonContent[end+13:]
-				}
+	// Remove scratchpad if present
+	if start := strings.Index(jsonContent, "<scratchpad>"); start != -1 {
+		if end := strings.Index(jsonContent, "</scratchpad>"); end != -1 {
+			// We keep what's after the scratchpad
+			if end+13 < len(jsonContent) {
+				jsonContent = jsonContent[end+13:]
 			}
 		}
+	}
 
-		// Handle Markdown code blocks
-		if strings.Contains(jsonContent, "```json") {
-			parts := strings.Split(jsonContent, "```json")
-			if len(parts) > 1 {
-				jsonContent = parts[1]
-			}
-			parts = strings.Split(jsonContent, "```")
-			if len(parts) > 0 {
-				jsonContent = parts[0]
-			}
-		} else if strings.Contains(jsonContent, "```") {
-			// Handle generic code blocks
-			parts := strings.Split(jsonContent, "```")
-			if len(parts) > 1 {
-				jsonContent = parts[1]
-			}
+	// Handle Markdown code blocks
+	if strings.Contains(jsonContent, "```json") {
+		parts := strings.Split(jsonContent, "```json")
+		if len(parts) > 1 {
+			jsonContent = parts[1]
+		}
+		parts = strings.Split(jsonContent, "```")
+		if len(parts) > 0 {
+			jsonContent = parts[0]
+		}
+	} else if strings.Contains(jsonContent, "```") {
+		// Handle generic code blocks
+		parts := strings.Split(jsonContent, "```")
+		if len(parts) > 1 {
+			jsonContent = parts[1]
+		}
+	}
+
+	// Find JSON array start and end
+	startIdx := strings.Index(jsonContent, "[")
+	endIdx := strings.LastIndex(jsonContent, "]")
+
+	if startIdx != -1 && endIdx != -1 && endIdx > startIdx {
+		jsonContent = jsonContent[startIdx : endIdx+1]
+	}
+
+	jsonContent = strings.TrimSpace(jsonContent)
+
+	err := json.Unmarshal([]byte(jsonContent), &phases)
+	if err != nil {
+		// Log the raw output for debugging
+		g.logger.Error("Failed to parse phases JSON",
+			"error", err,
+			"raw_content", response,
+			"extracted_json", jsonContent,
+		)
+		return nil, fmt.Errorf("failed to parse AI response as JSON: %w. Check logs for raw output", err)
+	}
+
+	// Post-process parsed phases
+	for i := range phases {
+		// Generate ID if missing
+		if phases[i].ID == "" {
+			phases[i].ID = fmt.Sprintf("phase-%d", phases[i].Number)
 		}
 
-		// Find JSON array start and end
-		startIdx := strings.Index(jsonContent, "[")
-		endIdx := strings.LastIndex(jsonContent, "]")
-
-		if startIdx != -1 && endIdx != -1 && endIdx > startIdx {
-			jsonContent = jsonContent[startIdx : endIdx+1]
+		// Ensure Status is set
+		if phases[i].Status == "" {
+			phases[i].Status = PhaseNotStarted
 		}
 
-		jsonContent = strings.TrimSpace(jsonContent)
+		// Process tasks
+		for j := range phases[i].Tasks {
+			// Generate Task ID if missing
+			if phases[i].Tasks[j].ID == "" {
+				phases[i].Tasks[j].ID = fmt.Sprintf("task-%d-%d", phases[i].Number, j+1)
+			}
 
-		err := json.Unmarshal([]byte(jsonContent), &phases)
-		if err != nil {
-			phases = defaultPhases
-		} else {
-			// Post-process parsed phases
-			for i := range phases {
-				// Generate ID if missing
-				if phases[i].ID == "" {
-					phases[i].ID = fmt.Sprintf("phase-%d", phases[i].Number)
-				}
-
-				// Ensure Status is set
-				if phases[i].Status == "" {
-					phases[i].Status = PhaseNotStarted
-				}
-
-				// Process tasks
-				for j := range phases[i].Tasks {
-					// Generate Task ID if missing
-					if phases[i].Tasks[j].ID == "" {
-						phases[i].Tasks[j].ID = fmt.Sprintf("task-%d-%d", phases[i].Number, j+1)
-					}
-
-					// Ensure Task Status is set
-					if phases[i].Tasks[j].Status == "" {
-						phases[i].Tasks[j].Status = TaskNotStarted
-					}
-				}
+			// Ensure Task Status is set
+			if phases[i].Tasks[j].Status == "" {
+				phases[i].Tasks[j].Status = TaskNotStarted
 			}
 		}
-	} else {
-		phases = defaultPhases
 	}
 
 	return phases, nil
+}
+
+// generateCacheKey generates a cache key for a prompt
+func (g *Generator) generateCacheKey(prompt string) string {
+	hash := sha256.Sum256([]byte(prompt + g.model))
+	return hex.EncodeToString(hash[:])
 }
 
 // estimatePhaseTokens estimates the token usage for a phase
