@@ -44,6 +44,7 @@ type PhaseProgress struct {
 	CompletedTasks  int
 	InProgressTasks int
 	BlockedTasks    int
+	SkippedTasks    int
 	Percentage      float64
 }
 
@@ -117,14 +118,19 @@ func (s *Store) CalculateProgress(projectID string) (*ProgressStats, error) {
 	}
 
 	// Calculate completion percentage
-	if stats.TotalTasks > 0 {
-		stats.CompletionPercentage = float64(stats.CompletedTasks) / float64(stats.TotalTasks) * 100
+	activeTasks := stats.TotalTasks - stats.SkippedTasks
+	if activeTasks > 0 {
+		stats.CompletionPercentage = float64(stats.CompletedTasks) / float64(activeTasks) * 100
 	}
 
 	// Estimate remaining time based on completion rate
 	if stats.CompletedTasks > 0 && stats.CompletionPercentage > 0 {
 		avgTimePerTask := stats.ElapsedTime / time.Duration(stats.CompletedTasks)
-		remainingTasks := stats.TotalTasks - stats.CompletedTasks
+		// Only count remaining active tasks
+		remainingTasks := stats.TotalTasks - stats.SkippedTasks - stats.CompletedTasks
+		if remainingTasks < 0 {
+			remainingTasks = 0
+		}
 		stats.EstimatedRemaining = avgTimePerTask * time.Duration(remainingTasks)
 	}
 
@@ -159,11 +165,14 @@ func (s *Store) GetPhaseProgress(phaseID string) (*PhaseProgress, error) {
 			progress.InProgressTasks++
 		case TaskBlocked:
 			progress.BlockedTasks++
+		case TaskSkipped:
+			progress.SkippedTasks++
 		}
 	}
 
-	if progress.TotalTasks > 0 {
-		progress.Percentage = float64(progress.CompletedTasks) / float64(progress.TotalTasks) * 100
+	activeTasks := progress.TotalTasks - progress.SkippedTasks
+	if activeTasks > 0 {
+		progress.Percentage = float64(progress.CompletedTasks) / float64(activeTasks) * 100
 	}
 
 	return progress, nil
@@ -209,11 +218,14 @@ func (s *Store) ListAllPhaseProgress(projectID string) ([]*PhaseProgress, error)
 				progress.InProgressTasks++
 			case TaskBlocked:
 				progress.BlockedTasks++
+			case TaskSkipped:
+				progress.SkippedTasks++
 			}
 		}
 
-		if progress.TotalTasks > 0 {
-			progress.Percentage = float64(progress.CompletedTasks) / float64(progress.TotalTasks) * 100
+		activeTasks := progress.TotalTasks - progress.SkippedTasks
+		if activeTasks > 0 {
+			progress.Percentage = float64(progress.CompletedTasks) / float64(activeTasks) * 100
 		}
 
 		progressList = append(progressList, progress)
