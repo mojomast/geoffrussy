@@ -43,3 +43,22 @@ build/
 # Temporary files
 tmp/
 temp/
+
+# Local tool settings and editor swap/state
+.claude/
+*.local.json
+
+# Log files
+*.log
+
+# Python artifacts
+__pycache__/
+*.pyc
+
+# Environment files (local config)
+.env
+.env.*
+
+# Keys and certificates
+*.pem
+*.key
