@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/mojomast/geoffrussy/internal/config"
+	"github.com/mojomast/geoffrussy/internal/provider"
 	"github.com/spf13/cobra"
 )
 
@@ -28,20 +29,25 @@ func runValidate(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to load configuration: %w", err)
 	}
 
-	// Check for required API keys
-	requiredProviders := []string{"openai", "anthropic", "firmware", "requesty", "zai", "kimi"}
+	// Check for required API keys — dynamically discovered from the provider registry
+	registeredProviders := provider.GetProviderNames()
 
 	fmt.Println("\nAPI Keys:")
 	allValid := true
-	for _, provider := range requiredProviders {
-		_, err := cfgManager.GetAPIKey(provider)
+	configuredCount := 0
+	for _, p := range registeredProviders {
+		_, err := cfgManager.GetAPIKey(p)
 		if err != nil {
-			fmt.Printf("  ✗ %s: Not configured\n", provider)
-			allValid = false
+			fmt.Printf("  - %s: Not configured\n", p)
 		} else {
-			source := cfgManager.GetAPIKeySource(provider)
-			fmt.Printf("  ✓ %s: Configured (%s)\n", provider, source)
+			source := cfgManager.GetAPIKeySource(p)
+			fmt.Printf("  ✓ %s: Configured (%s)\n", p, source)
+			configuredCount++
 		}
+	}
+	if configuredCount == 0 {
+		fmt.Println("  ✗ No providers configured — at least one API key is required")
+		allValid = false
 	}
 
 	// Check for default models

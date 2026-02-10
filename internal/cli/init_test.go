@@ -6,14 +6,31 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/mojomast/geoffrussy/internal/provider"
 	"github.com/spf13/cobra"
 )
 
-func TestGetAPIKey_Precedence_FlagOverEnv(t *testing.T) {
-	// Set flag value
-	flagAPIKeyOpenAI = "flag-key"
+// setFlagAPIKey is a test helper that sets a dynamic flag value for a provider.
+func setFlagAPIKey(t *testing.T, name, value string) {
+	t.Helper()
+	ptr, ok := flagAPIKeys[name]
+	if !ok {
+		t.Fatalf("provider %q not found in flagAPIKeys map", name)
+	}
+	*ptr = value
+}
 
-	// Set env value
+// resetAllFlagAPIKeys clears every dynamic flag value.
+func resetAllFlagAPIKeys() {
+	for _, ptr := range flagAPIKeys {
+		*ptr = ""
+	}
+}
+
+func TestGetAPIKey_Precedence_FlagOverEnv(t *testing.T) {
+	setFlagAPIKey(t, "openai", "flag-key")
+	defer resetAllFlagAPIKeys()
+
 	os.Setenv("GEOFFRUSSY_OPENAI_API_KEY", "env-key")
 	defer os.Unsetenv("GEOFFRUSSY_OPENAI_API_KEY")
 
@@ -24,17 +41,12 @@ func TestGetAPIKey_Precedence_FlagOverEnv(t *testing.T) {
 	if key != "flag-key" {
 		t.Errorf("Expected flag-key, got %s", key)
 	}
-
-	// Reset
-	flagAPIKeyOpenAI = ""
 }
 
 func TestGetAPIKey_Precedence_EnvOverConfig(t *testing.T) {
-	// Set env value
 	os.Setenv("GEOFFRUSSY_OPENAI_API_KEY", "env-key")
 	defer os.Unsetenv("GEOFFRUSSY_OPENAI_API_KEY")
 
-	// Create a temp config with different value
 	tmpDir := t.TempDir()
 	configContent := `api_keys:
   openai: config-key
@@ -44,7 +56,6 @@ func TestGetAPIKey_Precedence_EnvOverConfig(t *testing.T) {
 		t.Fatalf("Failed to write test config: %v", err)
 	}
 
-	// Set config path to temp file
 	os.Setenv("GEOFFRUSSY_CONFIG", configPath)
 	defer os.Unsetenv("GEOFFRUSSY_CONFIG")
 
@@ -58,24 +69,13 @@ func TestGetAPIKey_Precedence_EnvOverConfig(t *testing.T) {
 }
 
 func TestGetAPIKey_Precedence_ConfigFallback(t *testing.T) {
-	// This test is skipped because getAPIKey uses config.NewManager().Load(nil)
-	// which always loads from the default config path based on OS.
-	// To properly test config fallback, we would need to either:
-	// 1. Modify getAPIKey to accept a config path
-	// 2. Mock config.NewManager() function
-	// 3. Write an integration test
-	// For now, we rely on integration tests and manual testing for this scenario.
 	t.Skip("Config fallback requires integration testing or mocking")
 }
 
 func TestGetAPIKey_NoKeyFound(t *testing.T) {
-	// Ensure no flag, env, or config
-	flagAPIKeyOpenAI = ""
+	resetAllFlagAPIKeys()
 	os.Unsetenv("GEOFFRUSSY_OPENAI_API_KEY")
 
-	// This test verifies that getAPIKey returns an error when no key is found
-	// Note: If the default config file exists with keys, this test might not work as expected
-	// In that case, the test should be marked as integration test or we need to mock the config
 	_, err := getAPIKey("openai")
 	if err != nil {
 		if !strings.Contains(err.Error(), "no API key found") {
@@ -87,75 +87,48 @@ func TestGetAPIKey_NoKeyFound(t *testing.T) {
 }
 
 func TestGetAPIKey_AllProviders(t *testing.T) {
-	providers := []string{
-		"openai",
-		"anthropic",
-		"firmware",
-		"requesty",
-		"zai",
-		"kimi",
-	}
+	// Test every registered provider, not just the original 6
+	providerNames := provider.GetProviderNames()
 
-	for _, provider := range providers {
-		t.Run(provider, func(t *testing.T) {
-			// Set flag value based on provider
-			flagValue := "flag-" + provider + "-key"
-			switch provider {
-			case "openai":
-				flagAPIKeyOpenAI = flagValue
-			case "anthropic":
-				flagAPIKeyAnthropic = flagValue
-			case "firmware":
-				flagAPIKeyFirmware = flagValue
-			case "requesty":
-				flagAPIKeyRequesty = flagValue
-			case "zai":
-				flagAPIKeyZAI = flagValue
-			case "kimi":
-				flagAPIKeyKimi = flagValue
-			}
+	for _, name := range providerNames {
+		t.Run(name, func(t *testing.T) {
+			flagValue := "flag-" + name + "-key"
+			setFlagAPIKey(t, name, flagValue)
+			defer resetAllFlagAPIKeys()
 
 			// Set env value (should be ignored in favor of flag)
-			envVar := "GEOFFRUSSY_" + strings.ToUpper(provider) + "_API_KEY"
-			os.Setenv(envVar, "env-"+provider+"-key")
+			envVar := "GEOFFRUSSY_" + strings.ToUpper(name) + "_API_KEY"
+			os.Setenv(envVar, "env-"+name+"-key")
 			defer os.Unsetenv(envVar)
 
-			key, err := getAPIKey(provider)
+			key, err := getAPIKey(name)
 			if err != nil {
-				t.Fatalf("getAPIKey(%s) failed: %v", provider, err)
+				t.Fatalf("getAPIKey(%s) failed: %v", name, err)
 			}
 			if key != flagValue {
 				t.Errorf("Expected %s, got %s", flagValue, key)
 			}
-
-			// Reset flag
-			flagAPIKeyOpenAI = ""
-			flagAPIKeyAnthropic = ""
-			flagAPIKeyFirmware = ""
-			flagAPIKeyRequesty = ""
-			flagAPIKeyZAI = ""
-			flagAPIKeyKimi = ""
 		})
 	}
 }
 
-func TestValidateNonInteractiveConfig_Success(t *testing.T) {
-	// Set all flags
-	flagAPIKeyOpenAI = "flag-openai-key"
-	flagAPIKeyAnthropic = "flag-anthropic-key"
-	flagAPIKeyFirmware = "flag-firmware-key"
-	flagAPIKeyRequesty = "flag-requesty-key"
-	flagAPIKeyZAI = "flag-zai-key"
-	flagAPIKeyKimi = "flag-kimi-key"
+func TestGetAPIKey_DynamicProviderCount(t *testing.T) {
+	// Verify that flagAPIKeys has an entry for every registered provider
+	providerNames := provider.GetProviderNames()
+	if len(flagAPIKeys) != len(providerNames) {
+		t.Errorf("Expected %d providers in flagAPIKeys, got %d", len(providerNames), len(flagAPIKeys))
+	}
+	for _, name := range providerNames {
+		if _, ok := flagAPIKeys[name]; !ok {
+			t.Errorf("Provider %q missing from flagAPIKeys map", name)
+		}
+	}
+}
 
-	defer func() {
-		flagAPIKeyOpenAI = ""
-		flagAPIKeyAnthropic = ""
-		flagAPIKeyFirmware = ""
-		flagAPIKeyRequesty = ""
-		flagAPIKeyZAI = ""
-		flagAPIKeyKimi = ""
-	}()
+func TestValidateNonInteractiveConfig_Success(t *testing.T) {
+	// Set at least one key so validation passes
+	setFlagAPIKey(t, "openai", "flag-openai-key")
+	defer resetAllFlagAPIKeys()
 
 	err := validateNonInteractiveConfig()
 	if err != nil {
@@ -163,28 +136,31 @@ func TestValidateNonInteractiveConfig_Success(t *testing.T) {
 	}
 }
 
-func TestValidateNonInteractiveConfig_MissingKey(t *testing.T) {
-	// Set all flags except one
-	flagAPIKeyOpenAI = "flag-openai-key"
-	flagAPIKeyAnthropic = "flag-anthropic-key"
-	flagAPIKeyFirmware = "flag-firmware-key"
-	flagAPIKeyRequesty = "flag-requesty-key"
-	flagAPIKeyZAI = ""
-	flagAPIKeyKimi = "flag-kimi-key"
-
-	defer func() {
-		flagAPIKeyOpenAI = ""
-		flagAPIKeyAnthropic = ""
-		flagAPIKeyFirmware = ""
-		flagAPIKeyRequesty = ""
-		flagAPIKeyZAI = ""
-		flagAPIKeyKimi = ""
-	}()
+func TestValidateNonInteractiveConfig_AllProviders(t *testing.T) {
+	// Set keys for all providers
+	for _, name := range provider.GetProviderNames() {
+		setFlagAPIKey(t, name, "flag-"+name+"-key")
+	}
+	defer resetAllFlagAPIKeys()
 
 	err := validateNonInteractiveConfig()
 	if err != nil {
-		if !strings.Contains(err.Error(), "zai") {
-			t.Logf("Expected error to mention 'zai', got: %v", err)
+		t.Fatalf("validateNonInteractiveConfig failed: %v", err)
+	}
+}
+
+func TestValidateNonInteractiveConfig_NoKeysAvailable(t *testing.T) {
+	resetAllFlagAPIKeys()
+	// Also clear any env vars
+	for _, name := range provider.GetProviderNames() {
+		envVar := "GEOFFRUSSY_" + strings.ToUpper(name) + "_API_KEY"
+		os.Unsetenv(envVar)
+	}
+
+	err := validateNonInteractiveConfig()
+	if err != nil {
+		if !strings.Contains(err.Error(), "no API keys configured") {
+			t.Logf("Expected 'no API keys configured' error, got: %v", err)
 		}
 	} else {
 		t.Log("No error returned - this may mean keys exist in default config file")
@@ -192,30 +168,11 @@ func TestValidateNonInteractiveConfig_MissingKey(t *testing.T) {
 }
 
 func TestValidateNonInteractiveConfig_EnvFallback(t *testing.T) {
-	// Set env for missing flag
+	resetAllFlagAPIKeys()
+
+	// Set env for a single provider
 	os.Setenv("GEOFFRUSSY_OPENAI_API_KEY", "env-openai-key")
-	os.Setenv("GEOFFRUSSY_ANTHROPIC_API_KEY", "env-anthropic-key")
-	os.Setenv("GEOFFRUSSY_FIRMWARE_API_KEY", "env-firmware-key")
-	os.Setenv("GEOFFRUSSY_REQUESTY_API_KEY", "env-requesty-key")
-	os.Setenv("GEOFFRUSSY_ZAI_API_KEY", "env-zai-key")
-	os.Setenv("GEOFFRUSSY_KIMI_API_KEY", "env-kimi-key")
-
-	defer func() {
-		os.Unsetenv("GEOFFRUSSY_OPENAI_API_KEY")
-		os.Unsetenv("GEOFFRUSSY_ANTHROPIC_API_KEY")
-		os.Unsetenv("GEOFFRUSSY_FIRMWARE_API_KEY")
-		os.Unsetenv("GEOFFRUSSY_REQUESTY_API_KEY")
-		os.Unsetenv("GEOFFRUSSY_ZAI_API_KEY")
-		os.Unsetenv("GEOFFRUSSY_KIMI_API_KEY")
-	}()
-
-	// Don't set flags
-	flagAPIKeyOpenAI = ""
-	flagAPIKeyAnthropic = ""
-	flagAPIKeyFirmware = ""
-	flagAPIKeyRequesty = ""
-	flagAPIKeyZAI = ""
-	flagAPIKeyKimi = ""
+	defer os.Unsetenv("GEOFFRUSSY_OPENAI_API_KEY")
 
 	err := validateNonInteractiveConfig()
 	if err != nil {
@@ -224,32 +181,20 @@ func TestValidateNonInteractiveConfig_EnvFallback(t *testing.T) {
 }
 
 func TestValidateNonInteractiveConfig_ConfigFallback(t *testing.T) {
-	// Create a temp config with all keys
 	tmpDir := t.TempDir()
 	configContent := `api_keys:
   openai: config-openai-key
   anthropic: config-anthropic-key
-  firmware: config-firmware-key
-  requesty: config-requesty-key
-  zai: config-zai-key
-  kimi: config-kimi-key
 `
 	configPath := filepath.Join(tmpDir, "config.yaml")
 	if err := os.WriteFile(configPath, []byte(configContent), 0600); err != nil {
 		t.Fatalf("Failed to write test config: %v", err)
 	}
 
-	// Set config path to temp file
 	os.Setenv("GEOFFRUSSY_CONFIG", configPath)
 	defer os.Unsetenv("GEOFFRUSSY_CONFIG")
 
-	// Don't set flags or env
-	flagAPIKeyOpenAI = ""
-	flagAPIKeyAnthropic = ""
-	flagAPIKeyFirmware = ""
-	flagAPIKeyRequesty = ""
-	flagAPIKeyZAI = ""
-	flagAPIKeyKimi = ""
+	resetAllFlagAPIKeys()
 
 	err := validateNonInteractiveConfig()
 	if err != nil {
@@ -257,30 +202,11 @@ func TestValidateNonInteractiveConfig_ConfigFallback(t *testing.T) {
 	}
 }
 
-func TestValidateNonInteractiveConfig_NoKeysAvailable(t *testing.T) {
-	// Don't set flags or env
-	flagAPIKeyOpenAI = ""
-	flagAPIKeyAnthropic = ""
-	flagAPIKeyFirmware = ""
-	flagAPIKeyRequesty = ""
-	flagAPIKeyZAI = ""
-	flagAPIKeyKimi = ""
-
-	err := validateNonInteractiveConfig()
-	if err != nil {
-		t.Logf("Got expected error: %v", err)
-	} else {
-		t.Log("No error returned - this may mean keys exist in default config file")
-	}
-}
-
 func TestRunInitNonInteractive_Command(t *testing.T) {
-	// This is a basic test to ensure the function is defined
-	// The function signature is: func runInitNonInteractive(cmd *cobra.Command, args []string) error
+	// Basic test to ensure the function is defined and callable
 }
 
 func TestInitCommand_NonInteractiveFlag(t *testing.T) {
-	// Test that the non-interactive flag is properly defined
 	flags := initCmd.Flags()
 
 	flag, err := flags.GetBool("non-interactive")
@@ -291,12 +217,12 @@ func TestInitCommand_NonInteractiveFlag(t *testing.T) {
 		t.Errorf("Expected non-interactive flag default to be false, got %v", flag)
 	}
 
-	// Check if the flag is marked as required in cobra
-	flagNames := []string{"api-key-openai", "api-key-anthropic", "api-key-firmware", "api-key-requesty", "api-key-zai", "api-key-kimi", "non-interactive"}
-	for _, flagName := range flagNames {
-		flag := initCmd.Flags().Lookup(flagName)
-		if flag == nil {
-			t.Errorf("Flag %s is not defined", flagName)
+	// Verify that every registered provider has a corresponding flag
+	for _, name := range provider.GetProviderNames() {
+		flagName := "api-key-" + name
+		f := initCmd.Flags().Lookup(flagName)
+		if f == nil {
+			t.Errorf("Flag %s is not defined for provider %s", flagName, name)
 		}
 	}
 }
@@ -337,5 +263,95 @@ func TestInitCommand_SplitsCorrectly(t *testing.T) {
 				// This might succeed if we're in a valid directory
 			}
 		})
+	}
+}
+
+func TestProviderDisplayName(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"openai", "OpenAI"},
+		{"anthropic", "Anthropic"},
+		{"firmware", "Firmware.ai"},
+		{"ollama", "Ollama (Local)"},
+		{"zai", "Z.ai"},
+		{"unknown", "Unknown"},
+		{"", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := providerDisplayName(tt.input)
+			if got != tt.expected {
+				t.Errorf("providerDisplayName(%q) = %q, want %q", tt.input, got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestValidateOnlyFlag_Defined(t *testing.T) {
+	f := initCmd.Flags().Lookup("validate-only")
+	if f == nil {
+		t.Fatal("Flag --validate-only is not defined")
+	}
+	if f.DefValue != "false" {
+		t.Errorf("Expected default false, got %s", f.DefValue)
+	}
+}
+
+func TestRunValidateOnly_WithKey(t *testing.T) {
+	setFlagAPIKey(t, "openai", "test-key")
+	defer resetAllFlagAPIKeys()
+
+	err := runValidateOnly()
+	if err != nil {
+		t.Fatalf("runValidateOnly failed with a configured key: %v", err)
+	}
+}
+
+func TestRunValidateOnly_NoKeys(t *testing.T) {
+	resetAllFlagAPIKeys()
+	// Clear env vars too
+	for _, name := range provider.GetProviderNames() {
+		envVar := "GEOFFRUSSY_" + strings.ToUpper(name) + "_API_KEY"
+		os.Unsetenv(envVar)
+	}
+
+	err := runValidateOnly()
+	if err != nil {
+		if !strings.Contains(err.Error(), "no API keys found") {
+			t.Logf("Expected 'no API keys found' error, got: %v", err)
+		}
+	} else {
+		t.Log("No error returned - keys may exist in default config file")
+	}
+}
+
+func TestDescribeKeySource(t *testing.T) {
+	// Test flag source
+	setFlagAPIKey(t, "openai", "flag-val")
+	defer resetAllFlagAPIKeys()
+
+	src := describeKeySource("openai", "flag-val")
+	if src != "flag" {
+		t.Errorf("Expected 'flag', got %q", src)
+	}
+
+	// Test env source
+	resetAllFlagAPIKeys()
+	os.Setenv("GEOFFRUSSY_OPENAI_API_KEY", "env-val")
+	defer os.Unsetenv("GEOFFRUSSY_OPENAI_API_KEY")
+
+	src = describeKeySource("openai", "env-val")
+	if src != "env" {
+		t.Errorf("Expected 'env', got %q", src)
+	}
+
+	// Test config source (fallback)
+	os.Unsetenv("GEOFFRUSSY_OPENAI_API_KEY")
+	src = describeKeySource("openai", "some-config-val")
+	if src != "config" {
+		t.Errorf("Expected 'config', got %q", src)
 	}
 }

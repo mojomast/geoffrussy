@@ -61,6 +61,20 @@ geoffrussy review
 geoffrussy develop
 ```
 
+Non-interactive initialization (CI / scripted environments):
+
+```bash
+geoffrussy init --non-interactive --api-key-openai "$OPENAI_KEY"
+```
+
+Only providers whose keys are supplied (via flag, env `GEOFFRUSSY_<PROVIDER>_API_KEY`, or config) will be configured. You no longer need to supply keys for every provider.
+
+Validate configuration without creating project files:
+
+```bash
+geoffrussy init --validate-only
+```
+
 Useful during execution:
 
 ```bash
@@ -78,6 +92,18 @@ geoffrussy quota --refresh
 - Config: `~/.geoffrussy/config.yaml`
 
 API keys are stored in OS keyring when available, with secure fallback metadata tracked in config.
+
+## Security
+
+The path sanitizer validates all file paths against the project root to prevent directory traversal attacks. This includes **symlink resolution**: symlinks that resolve to locations outside the project root are rejected, including chained symlinks. On Windows, UNC paths (`\\server\share`) are also rejected.
+
+See `docs/archive/reports/SECURITY_AUDIT.md` for the full audit report.
+
+## Rate Limits and Quota Monitoring
+
+Rate-limit and quota data extracted from provider API response headers is automatically persisted to SQLite after each API call. This means `geoffrussy quota --refresh` and the quota monitor return real data from the last call rather than zeros.
+
+Providers that support rate-limit headers (OpenAI, Anthropic, Kimi, etc.) will have their `requests_remaining`, `requests_limit`, `tokens_remaining`, and `tokens_limit` tracked. Warning thresholds are applied at 70% (caution), 85% (warning), 95% (critical), and 100% (exceeded).
 
 ## Granular Model Assignment
 

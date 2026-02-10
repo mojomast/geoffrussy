@@ -15,8 +15,8 @@ By participating in this project, you agree to abide by our Code of Conduct:
 
 ### Prerequisites
 
-- Go 1.21 or later
-- GCC (for SQLite compilation)
+- Go 1.24 or later
+- GCC (for SQLite compilation via go-sqlite3)
 - Git
 - Make
 - Docker (optional, for containerized development)
@@ -320,6 +320,23 @@ func TestInterviewEngine_AskQuestion(t *testing.T) {
 - Minimum 100 iterations
 - Reference design document property
 - Tag format: `// Feature: geoffrey-ai-agent, Property N: <property text>`
+
+#### Symlink-Aware Path Tests
+
+Path sanitizer tests create real temp directories with symlinks. When writing tests
+that involve file paths, use `filepath.EvalSymlinks(t.TempDir())` to canonicalize
+the temp directory (important on macOS where `/tmp` -> `/private/tmp`).
+
+### Adding a New Provider
+
+Providers are registered dynamically via `internal/provider/registry.go`. To add a new provider:
+
+1. Create `internal/provider/<name>.go` implementing the `Provider` interface.
+2. Add a factory entry to the `Registry` map in `internal/provider/registry.go`.
+3. Optionally add a display name entry in `providerDisplayName()` in `internal/cli/init.go`.
+4. The CLI will automatically generate `--api-key-<name>` flags and `GEOFFRUSSY_<NAME>_API_KEY` env var support.
+5. If the provider returns rate-limit or quota headers, override `GetRateLimitInfo()` / `GetQuotaInfo()` and call `SetStore()` to enable persistent storage.
+6. Add tests in `internal/provider/<name>_test.go`.
 
 Example:
 ```go

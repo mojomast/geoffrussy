@@ -463,11 +463,11 @@ func TestPathSanitizer_ValidatePath_Propertied(t *testing.T) {
 		if !strings.ContainsAny(path, "/\\") && !strings.ContainsAny(path, ":") {
 			return true
 		}
-		_, err := ps.ValidatePath(path)
+		safePath, err := ps.ValidatePath(path)
 		// Any error (invalid input, path traversal, etc.) is valid behavior
 		// If it passes, the result should be absolute
 		if err == nil {
-			return filepath.IsAbs(path)
+			return filepath.IsAbs(safePath)
 		}
 		// For paths that fail, we accept any error
 		return true
@@ -575,6 +575,12 @@ func TestPathSanitizer_Symlink(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpDir)
 
+	// Resolve the temp dir itself to a canonical path (macOS /tmp -> /private/tmp)
+	tmpDir, err = filepath.EvalSymlinks(tmpDir)
+	if err != nil {
+		t.Fatalf("Failed to resolve temp dir: %v", err)
+	}
+
 	projectRoot := tmpDir
 	ps, err := NewPathSanitizer(projectRoot)
 	if err != nil {
@@ -590,21 +596,16 @@ func TestPathSanitizer_Symlink(t *testing.T) {
 	}{
 		{
 			name: "symlink pointing inside project root",
-			path: "link.txt",
+			path: "link_inside.txt",
 			setup: func() (func(), error) {
-				// Create a file and link to it
-				content := []byte("test content")
+				// Create a file inside the project root
 				targetPath := filepath.Join(projectRoot, "target.txt")
-				if err := os.WriteFile(targetPath, content, 0644); err != nil {
+				if err := os.WriteFile(targetPath, []byte("test content"), 0644); err != nil {
 					return nil, err
 				}
-				linkPath := filepath.Join(projectRoot, "link.txt")
-				// Use absolute path for symlink target
-				absTargetPath, err := filepath.Abs("target.txt")
-				if err != nil {
-					return nil, err
-				}
-				if err := os.Symlink(absTargetPath, linkPath); err != nil {
+				// Create a symlink that points to the file inside the project root
+				linkPath := filepath.Join(projectRoot, "link_inside.txt")
+				if err := os.Symlink(targetPath, linkPath); err != nil {
 					return nil, err
 				}
 				return func() { _ = os.Remove(linkPath); _ = os.Remove(targetPath) }, nil
@@ -613,20 +614,159 @@ func TestPathSanitizer_Symlink(t *testing.T) {
 		},
 		{
 			name: "symlink pointing to file outside root",
-			path: "link.txt",
+			path: "link_outside.txt",
 			setup: func() (func(), error) {
-				// Create a link to a file outside the project root
-				// Note: The current PathSanitizer does NOT follow symlinks,
-				// so it will allow symlinks that point outside the root.
-				// This is by design to prevent directory traversal attacks.
-				// We're testing the current behavior to ensure it's documented.
-				linkPath := filepath.Join(projectRoot, "link.txt")
-				if err := os.Symlink("/etc/passwd", linkPath); err != nil {
+				// Create a directory outside the project root
+				outsideDir, err := os.MkdirTemp("", "geoffrussy_outside")
+				if err != nil {
 					return nil, err
 				}
-				return func() { _ = os.Remove(linkPath) }, nil
+				outsideDir, err = filepath.EvalSymlinks(outsideDir)
+				if err != nil {
+					return nil, err
+				}
+				outsideFile := filepath.Join(outsideDir, "secret.txt")
+				if err := os.WriteFile(outsideFile, []byte("secret"), 0644); err != nil {
+					return nil, err
+				}
+
+				// Create a symlink inside the project root that points outside
+				linkPath := filepath.Join(projectRoot, "link_outside.txt")
+				if err := os.Symlink(outsideFile, linkPath); err != nil {
+					return nil, err
+				}
+				return func() {
+					_ = os.Remove(linkPath)
+					_ = os.RemoveAll(outsideDir)
+				}, nil
 			},
-			wantErr: false, // Symlinks pointing outside are allowed (no directory traversal)
+			wantErr:     true,
+			errContains: "outside project root",
+		},
+		{
+			name: "symlink directory pointing outside root",
+			path: "link_dir/file.txt",
+			setup: func() (func(), error) {
+				// Create a directory outside the project root
+				outsideDir, err := os.MkdirTemp("", "geoffrussy_outside_dir")
+				if err != nil {
+					return nil, err
+				}
+				outsideDir, err = filepath.EvalSymlinks(outsideDir)
+				if err != nil {
+					return nil, err
+				}
+				outsideFile := filepath.Join(outsideDir, "file.txt")
+				if err := os.WriteFile(outsideFile, []byte("outside content"), 0644); err != nil {
+					return nil, err
+				}
+
+				// Create a directory symlink inside the project root pointing outside
+				linkPath := filepath.Join(projectRoot, "link_dir")
+				if err := os.Symlink(outsideDir, linkPath); err != nil {
+					return nil, err
+				}
+				return func() {
+					_ = os.Remove(linkPath)
+					_ = os.RemoveAll(outsideDir)
+				}, nil
+			},
+			wantErr:     true,
+			errContains: "outside project root",
+		},
+		{
+			name: "symlink within subdirectory pointing inside root",
+			path: "subdir/link_in.txt",
+			setup: func() (func(), error) {
+				// Create subdirectory and target file
+				subdir := filepath.Join(projectRoot, "subdir")
+				if err := os.MkdirAll(subdir, 0755); err != nil {
+					return nil, err
+				}
+				targetPath := filepath.Join(projectRoot, "real_file.txt")
+				if err := os.WriteFile(targetPath, []byte("real content"), 0644); err != nil {
+					return nil, err
+				}
+				linkPath := filepath.Join(subdir, "link_in.txt")
+				if err := os.Symlink(targetPath, linkPath); err != nil {
+					return nil, err
+				}
+				return func() {
+					_ = os.RemoveAll(subdir)
+					_ = os.Remove(targetPath)
+				}, nil
+			},
+			wantErr: false,
+		},
+		{
+			name: "chained symlinks staying inside root",
+			path: "chain_link.txt",
+			setup: func() (func(), error) {
+				// target.txt -> link1.txt -> chain_link.txt, all inside root
+				targetPath := filepath.Join(projectRoot, "chain_target.txt")
+				if err := os.WriteFile(targetPath, []byte("chain content"), 0644); err != nil {
+					return nil, err
+				}
+				link1Path := filepath.Join(projectRoot, "chain_link1.txt")
+				if err := os.Symlink(targetPath, link1Path); err != nil {
+					return nil, err
+				}
+				link2Path := filepath.Join(projectRoot, "chain_link.txt")
+				if err := os.Symlink(link1Path, link2Path); err != nil {
+					return nil, err
+				}
+				return func() {
+					_ = os.Remove(link2Path)
+					_ = os.Remove(link1Path)
+					_ = os.Remove(targetPath)
+				}, nil
+			},
+			wantErr: false,
+		},
+		{
+			name: "chained symlinks escaping root via intermediate",
+			path: "chain_escape.txt",
+			setup: func() (func(), error) {
+				// Create external target
+				outsideDir, err := os.MkdirTemp("", "geoffrussy_chain_escape")
+				if err != nil {
+					return nil, err
+				}
+				outsideDir, err = filepath.EvalSymlinks(outsideDir)
+				if err != nil {
+					return nil, err
+				}
+				outsideFile := filepath.Join(outsideDir, "escaped.txt")
+				if err := os.WriteFile(outsideFile, []byte("escaped"), 0644); err != nil {
+					return nil, err
+				}
+
+				// First link inside root pointing outside
+				link1 := filepath.Join(projectRoot, "escape_link1.txt")
+				if err := os.Symlink(outsideFile, link1); err != nil {
+					return nil, err
+				}
+				// Second link pointing to first link
+				link2 := filepath.Join(projectRoot, "chain_escape.txt")
+				if err := os.Symlink(link1, link2); err != nil {
+					return nil, err
+				}
+				return func() {
+					_ = os.Remove(link2)
+					_ = os.Remove(link1)
+					_ = os.RemoveAll(outsideDir)
+				}, nil
+			},
+			wantErr:     true,
+			errContains: "outside project root",
+		},
+		{
+			name: "non-existent path without symlinks is allowed",
+			path: "new_file.txt",
+			setup: func() (func(), error) {
+				return func() {}, nil
+			},
+			wantErr: false,
 		},
 	}
 
@@ -647,6 +787,9 @@ func TestPathSanitizer_Symlink(t *testing.T) {
 					t.Errorf("ValidatePath() expected error but got none, returned path: %v", safePath)
 					return
 				}
+				if tt.errContains != "" && !strings.Contains(err.Error(), tt.errContains) {
+					t.Errorf("ValidatePath() error = %v, want error containing %v", err, tt.errContains)
+				}
 				return
 			}
 			if err != nil {
@@ -654,5 +797,53 @@ func TestPathSanitizer_Symlink(t *testing.T) {
 				return
 			}
 		})
+	}
+}
+
+// TestPathSanitizer_SymlinkWindowsUNC tests Windows UNC path handling
+func TestPathSanitizer_SymlinkWindowsUNC(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		ps, err := NewPathSanitizer("C:\\Users\\user\\project")
+		if err != nil {
+			t.Fatalf("Failed to create PathSanitizer: %v", err)
+		}
+
+		// UNC paths should be rejected
+		uncPaths := []string{
+			`\\server\share\file.txt`,
+			`\\?\C:\secret\file.txt`,
+			`\\.\device`,
+		}
+
+		for _, uncPath := range uncPaths {
+			t.Run("UNC:"+uncPath, func(t *testing.T) {
+				_, err := ps.ValidatePath(uncPath)
+				if err == nil {
+					t.Errorf("ValidatePath() expected error for UNC path %s but got none", uncPath)
+				}
+			})
+		}
+	} else {
+		// On non-Windows, test that paths starting with \\ are handled gracefully
+		tmpDir, err := os.MkdirTemp("", "geoffrussy_unc_test")
+		if err != nil {
+			t.Fatalf("Failed to create temp dir: %v", err)
+		}
+		defer os.RemoveAll(tmpDir)
+
+		tmpDir, err = filepath.EvalSymlinks(tmpDir)
+		if err != nil {
+			t.Fatalf("Failed to resolve temp dir: %v", err)
+		}
+
+		ps, err := NewPathSanitizer(tmpDir)
+		if err != nil {
+			t.Fatalf("Failed to create PathSanitizer: %v", err)
+		}
+
+		// On Unix, \\ is treated as a relative path component
+		// This should either succeed (if treated as a file named "\\server") or fail
+		// but it must not panic
+		_, _ = ps.ValidatePath(`\\server\share\file.txt`)
 	}
 }

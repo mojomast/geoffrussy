@@ -25,33 +25,24 @@ directory structure and prompting for API keys.`,
 
 // flags for non-interactive configuration
 var (
-	flagAPIKeyOpenAI    string
-	flagAPIKeyAnthropic string
-	flagAPIKeyFirmware  string
-	flagAPIKeyRequesty  string
-	flagAPIKeyZAI       string
-	flagAPIKeyKimi      string
-	flagNonInteractive  bool
+	// flagAPIKeys stores API key flag values keyed by provider name.
+	// Populated dynamically from the provider registry at init time.
+	flagAPIKeys        = make(map[string]*string)
+	flagNonInteractive bool
+	flagValidateOnly   bool
 )
 
 func init() {
-	// Define flags for API keys
-	initCmd.Flags().StringVar(&flagAPIKeyOpenAI, "api-key-openai", "", "OpenAI API key")
-	initCmd.Flags().StringVar(&flagAPIKeyAnthropic, "api-key-anthropic", "", "Anthropic API key")
-	initCmd.Flags().StringVar(&flagAPIKeyFirmware, "api-key-firmware", "", "Firmware.ai API key")
-	initCmd.Flags().StringVar(&flagAPIKeyRequesty, "api-key-requesty", "", "Requesty.ai API key")
-	initCmd.Flags().StringVar(&flagAPIKeyZAI, "api-key-zai", "", "Z.ai API key")
-	initCmd.Flags().StringVar(&flagAPIKeyKimi, "api-key-kimi", "", "Kimi API key")
+	// Dynamically register API key flags for all providers in the registry
+	for _, name := range provider.GetProviderNames() {
+		flagName := "api-key-" + name
+		desc := name + " API key"
+		val := new(string)
+		flagAPIKeys[name] = val
+		initCmd.Flags().StringVar(val, flagName, "", desc)
+	}
 	initCmd.Flags().BoolVar(&flagNonInteractive, "non-interactive", false, "Run in non-interactive mode (no prompts)")
-
-	// Mark flags as required
-	initCmd.MarkFlagRequired("api-key-openai")
-	initCmd.MarkFlagRequired("api-key-anthropic")
-	initCmd.MarkFlagRequired("api-key-firmware")
-	initCmd.MarkFlagRequired("api-key-requesty")
-	initCmd.MarkFlagRequired("api-key-zai")
-	initCmd.MarkFlagRequired("api-key-kimi")
-	initCmd.MarkFlagRequired("non-interactive")
+	initCmd.Flags().BoolVar(&flagValidateOnly, "validate-only", false, "Only validate configuration without creating project files")
 }
 
 // validateConfiguration validates the configuration before running init
@@ -62,11 +53,9 @@ func validateConfiguration(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// validateNonInteractiveConfig validates the non-interactive configuration
+// validateNonInteractiveConfig validates the non-interactive configuration.
+// Only providers whose API keys are supplied (via flag, env, or config) are configured.
 func validateNonInteractiveConfig() error {
-	// Check if required API keys are provided via flags
-	requiredProviders := []string{"openai", "anthropic", "firmware", "requesty", "zai", "kimi"}
-
 	// Load existing config
 	cfgManager := config.NewManager()
 	if err := cfgManager.Load(nil); err != nil {
@@ -74,14 +63,21 @@ func validateNonInteractiveConfig() error {
 	}
 
 	cfg := cfgManager.GetConfig()
+	configured := 0
 
-	for _, provider := range requiredProviders {
-		// Priority: flag > environment variable > config file
-		key, err := getAPIKey(provider)
+	// Try to resolve an API key for every registered provider.
+	// Only providers with a key available are added to the config.
+	for _, name := range provider.GetProviderNames() {
+		key, err := getAPIKey(name)
 		if err != nil {
-			return fmt.Errorf("API key not found for %s. Use --api-key-%s flag or set %s environment variable", provider, provider, strings.ToUpper(provider)+"_API_KEY")
+			continue // provider not configured – skip
 		}
-		cfg.APIKeys[provider] = key
+		cfg.APIKeys[name] = key
+		configured++
+	}
+
+	if configured == 0 {
+		return fmt.Errorf("no API keys configured. Provide at least one key via --api-key-<provider> flag or GEOFFRUSSY_<PROVIDER>_API_KEY environment variable")
 	}
 
 	// Save the configuration
@@ -93,37 +89,14 @@ func validateNonInteractiveConfig() error {
 }
 
 // getAPIKey retrieves the API key for a provider, checking in order: flag, environment variable, config
-func getAPIKey(provider string) (string, error) {
-	// Check flag first
-	switch provider {
-	case "openai":
-		if flagAPIKeyOpenAI != "" {
-			return flagAPIKeyOpenAI, nil
-		}
-	case "anthropic":
-		if flagAPIKeyAnthropic != "" {
-			return flagAPIKeyAnthropic, nil
-		}
-	case "firmware":
-		if flagAPIKeyFirmware != "" {
-			return flagAPIKeyFirmware, nil
-		}
-	case "requesty":
-		if flagAPIKeyRequesty != "" {
-			return flagAPIKeyRequesty, nil
-		}
-	case "zai":
-		if flagAPIKeyZAI != "" {
-			return flagAPIKeyZAI, nil
-		}
-	case "kimi":
-		if flagAPIKeyKimi != "" {
-			return flagAPIKeyKimi, nil
-		}
+func getAPIKey(providerName string) (string, error) {
+	// Check flag first (dynamically from the flagAPIKeys map)
+	if ptr, ok := flagAPIKeys[providerName]; ok && ptr != nil && *ptr != "" {
+		return *ptr, nil
 	}
 
 	// Check environment variable
-	envVar := "GEOFFRUSSY_" + strings.ToUpper(provider) + "_API_KEY"
+	envVar := "GEOFFRUSSY_" + strings.ToUpper(providerName) + "_API_KEY"
 	if apiKey := os.Getenv(envVar); apiKey != "" {
 		return apiKey, nil
 	}
@@ -135,18 +108,63 @@ func getAPIKey(provider string) (string, error) {
 	}
 
 	cfg := cfgManager.GetConfig()
-	if apiKey, ok := cfg.APIKeys[provider]; ok {
+	if apiKey, ok := cfg.APIKeys[providerName]; ok {
 		return apiKey, nil
 	}
 
-	return "", fmt.Errorf("no API key found for %s", provider)
+	return "", fmt.Errorf("no API key found for %s", providerName)
 }
 
 func runInit(cmd *cobra.Command, args []string) error {
+	if flagValidateOnly {
+		return runValidateOnly()
+	}
 	if flagNonInteractive {
 		return runInitNonInteractive(cmd, args)
 	}
 	return runInitInteractive(cmd, args)
+}
+
+// runValidateOnly checks that at least one provider has a valid API key
+// reachable via flag, env, or config — then exits without modifying anything.
+func runValidateOnly() error {
+	fmt.Println("🔍 Validating configuration (dry-run)...")
+
+	cfgManager := config.NewManager()
+	if err := cfgManager.Load(nil); err != nil {
+		return fmt.Errorf("failed to load configuration: %w", err)
+	}
+
+	configured := 0
+	for _, name := range provider.GetProviderNames() {
+		key, err := getAPIKey(name)
+		if err != nil {
+			fmt.Printf("  - %s: not configured\n", name)
+			continue
+		}
+		source := describeKeySource(name, key)
+		fmt.Printf("  ✓ %s: configured (%s)\n", name, source)
+		configured++
+	}
+
+	if configured == 0 {
+		return fmt.Errorf("validation failed: no API keys found. Provide at least one key via --api-key-<provider> flag or GEOFFRUSSY_<PROVIDER>_API_KEY environment variable")
+	}
+
+	fmt.Printf("\n✓ Validation passed: %d provider(s) configured\n", configured)
+	return nil
+}
+
+// describeKeySource returns a short description of where a key came from.
+func describeKeySource(name, key string) string {
+	if ptr, ok := flagAPIKeys[name]; ok && ptr != nil && *ptr != "" && *ptr == key {
+		return "flag"
+	}
+	envVar := "GEOFFRUSSY_" + strings.ToUpper(name) + "_API_KEY"
+	if os.Getenv(envVar) == key {
+		return "env"
+	}
+	return "config"
 }
 
 func runInitInteractive(cmd *cobra.Command, args []string) error {
@@ -350,25 +368,14 @@ func promptForAPIKeys(cfgManager *config.Manager) error {
 	fmt.Println("\n📝 API Key Configuration")
 	fmt.Println("Enter API keys for the providers you want to use (press Enter to skip):")
 
-	providers := []struct {
-		name string
-		key  string
-	}{
-		{"OpenAI", "openai"},
-		{"Anthropic", "anthropic"},
-		{"Firmware.ai", "firmware"},
-		{"Requesty.ai", "requesty"},
-		{"Z.ai", "zai"},
-		{"Kimi", "kimi"},
-	}
-
-	for _, provider := range providers {
-		fmt.Printf("\n%s API Key: ", provider.name)
+	for _, name := range provider.GetProviderNames() {
+		displayName := providerDisplayName(name)
+		fmt.Printf("\n%s API Key: ", displayName)
 		apiKey, _ := reader.ReadString('\n')
 		apiKey = strings.TrimSpace(apiKey)
 		if apiKey != "" {
-			cfgManager.SetAPIKey(provider.key, apiKey)
-			fmt.Printf("✓ %s API key configured\n", provider.name)
+			cfgManager.SetAPIKey(name, apiKey)
+			fmt.Printf("✓ %s API key configured\n", displayName)
 		}
 	}
 
@@ -386,6 +393,36 @@ func promptForAPIKeys(cfgManager *config.Manager) error {
 	}
 
 	return nil
+}
+
+// providerDisplayName returns a human-friendly display name for a provider.
+func providerDisplayName(name string) string {
+	display := map[string]string{
+		"anthropic":    "Anthropic",
+		"deepinfra":    "DeepInfra",
+		"firmware":     "Firmware.ai",
+		"fireworks":    "Fireworks",
+		"groq":         "Groq",
+		"kimi":         "Kimi",
+		"mistral":      "Mistral",
+		"ollama":       "Ollama (Local)",
+		"openai":       "OpenAI",
+		"openai-codex": "OpenAI Codex",
+		"opencode":     "OpenCode",
+		"openrouter":   "OpenRouter",
+		"perplexity":   "Perplexity",
+		"requesty":     "Requesty.ai",
+		"together":     "Together",
+		"zai":          "Z.ai",
+	}
+	if d, ok := display[name]; ok {
+		return d
+	}
+	// Fallback: capitalize first letter
+	if len(name) == 0 {
+		return name
+	}
+	return strings.ToUpper(name[:1]) + name[1:]
 }
 
 func displayConfiguredModels(cfgMgr *config.Manager) {
@@ -416,26 +453,12 @@ func displayConfiguredModels(cfgMgr *config.Manager) {
 		modelsByProvider[m.Provider] = append(modelsByProvider[m.Provider], m.Name)
 	}
 
-	providerDisplayNames := map[string]string{
-		"openai":    "OpenAI",
-		"anthropic": "Anthropic",
-		"ollama":    "Ollama (Local)",
-		"firmware":  "Firmware.ai",
-		"requesty":  "Requesty.ai",
-		"zai":       "Z.ai",
-		"kimi":      "Kimi",
-		"opencode":  "OpenCode",
-	}
-
-	for provider := range cfg.APIKeys {
-		models, ok := modelsByProvider[provider]
+	for p := range cfg.APIKeys {
+		models, ok := modelsByProvider[p]
 		if !ok {
 			continue
 		}
-		displayName := providerDisplayNames[provider]
-		if displayName == "" {
-			displayName = strings.Title(provider)
-		}
+		displayName := providerDisplayName(p)
 		fmt.Printf("\n📦 %s:\n", displayName)
 		for _, model := range models {
 			fmt.Printf("   • %s\n", model)

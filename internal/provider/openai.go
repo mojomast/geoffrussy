@@ -8,7 +8,10 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
+
+	"github.com/mojomast/geoffrussy/internal/state"
 )
 
 // OpenAIProvider implements the Provider interface for OpenAI
@@ -16,6 +19,15 @@ type OpenAIProvider struct {
 	*BaseProvider
 	baseURL    string
 	httpClient *http.Client
+
+	// store is an optional state store for persisting rate limit / quota info.
+	store *state.Store
+
+	// In-memory cache of the most recent rate-limit / quota data extracted
+	// from HTTP response headers.  Protected by mu.
+	mu            sync.Mutex
+	lastRateLimit *RateLimitInfo
+	lastQuotaInfo *QuotaInfo
 }
 
 // NewOpenAIProvider creates a new OpenAI provider
@@ -36,6 +48,11 @@ func NewOpenAIProviderWithName(name string) *OpenAIProvider {
 			Timeout: 60 * time.Second,
 		},
 	}
+}
+
+// SetStore assigns a state store for persisting rate-limit and quota data.
+func (o *OpenAIProvider) SetStore(store *state.Store) {
+	o.store = store
 }
 
 // openAIRequest represents a request to OpenAI API
@@ -251,6 +268,15 @@ func (o *OpenAIProvider) Call(model string, prompt string) (*Response, error) {
 	quotaInfo := ExtractQuotaInfo(resp)
 	quotaRemaining := quotaInfo.TokensRemaining
 
+	// Cache in memory
+	o.mu.Lock()
+	o.lastRateLimit = rateLimitInfo
+	o.lastQuotaInfo = quotaInfo
+	o.mu.Unlock()
+
+	// Persist to store if available
+	o.persistRateLimitAndQuota(rateLimitInfo, quotaInfo)
+
 	var openAIResp openAIResponse
 	if err := json.NewDecoder(resp.Body).Decode(&openAIResp); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
@@ -372,29 +398,130 @@ func (o *OpenAIProvider) Stream(model string, prompt string) (<-chan string, err
 	return ch, nil
 }
 
-// GetRateLimitInfo returns rate limit information for OpenAI
+// GetRateLimitInfo returns rate limit information for OpenAI.
+// It returns the most recent data: first from the state store, then from the
+// in-memory cache populated by the last Call().
 func (o *OpenAIProvider) GetRateLimitInfo() (*RateLimitInfo, error) {
-	// OpenAI rate limits are extracted from response headers
-	// This is a placeholder that would be populated from the last API call
-	// To get actual rate limit info, you would need to make a test request
-	return &RateLimitInfo{
-		RequestsRemaining: 0,
-		RequestsLimit:     0,
-		ResetAt:           time.Time{},
-		RetryAfter:        0,
-	}, nil
+	// Try reading from the persistent store first.
+	if o.store != nil {
+		stateInfo, err := o.store.GetRateLimit(o.Name())
+		if err == nil && stateInfo != nil {
+			return &RateLimitInfo{
+				RequestsRemaining: derefIntOr(stateInfo.RequestsRemaining, 0),
+				RequestsLimit:     derefIntOr(stateInfo.RequestsLimit, 0),
+				ResetAt:           derefTimeOr(stateInfo.ResetAt, time.Time{}),
+			}, nil
+		}
+	}
+
+	// Fall back to in-memory cache.
+	o.mu.Lock()
+	cached := o.lastRateLimit
+	o.mu.Unlock()
+	if cached != nil {
+		return cached, nil
+	}
+
+	return &RateLimitInfo{}, nil
 }
 
-// GetQuotaInfo returns quota information for OpenAI
+// GetQuotaInfo returns quota information for OpenAI.
 func (o *OpenAIProvider) GetQuotaInfo() (*QuotaInfo, error) {
-	// OpenAI quota information is extracted from response headers
-	// This is a placeholder that would be populated from the last API call
-	// To get actual quota info, you would need to make a test request
-	return &QuotaInfo{
-		TokensRemaining: 0,
-		TokensLimit:     0,
-		CostRemaining:   0,
-		CostLimit:       0,
-		ResetAt:         time.Time{},
-	}, nil
+	// Try reading from the persistent store first.
+	if o.store != nil {
+		stateInfo, err := o.store.GetQuota(o.Name())
+		if err == nil && stateInfo != nil {
+			return &QuotaInfo{
+				TokensRemaining: derefIntOr(stateInfo.TokensRemaining, 0),
+				TokensLimit:     derefIntOr(stateInfo.TokensLimit, 0),
+				CostRemaining:   derefFloat64Or(stateInfo.CostRemaining, 0),
+				CostLimit:       derefFloat64Or(stateInfo.CostLimit, 0),
+				ResetAt:         stateInfo.ResetAt,
+			}, nil
+		}
+	}
+
+	// Fall back to in-memory cache.
+	o.mu.Lock()
+	cached := o.lastQuotaInfo
+	o.mu.Unlock()
+	if cached != nil {
+		return cached, nil
+	}
+
+	return &QuotaInfo{}, nil
+}
+
+// persistRateLimitAndQuota saves extracted rate-limit and quota info to the store.
+func (o *OpenAIProvider) persistRateLimitAndQuota(rl *RateLimitInfo, qi *QuotaInfo) {
+	if o.store == nil {
+		return
+	}
+
+	now := time.Now()
+
+	if rl != nil {
+		remaining := rl.RequestsRemaining
+		limit := rl.RequestsLimit
+		resetAt := rl.ResetAt
+		stateRL := &state.RateLimitInfo{
+			Provider:          o.Name(),
+			RequestsRemaining: &remaining,
+			RequestsLimit:     &limit,
+			ResetAt:           &resetAt,
+			CheckedAt:         now,
+		}
+		if err := o.store.SaveRateLimit(o.Name(), stateRL); err != nil {
+			o.GetLogger().Error("failed to persist rate limit info",
+				"provider", o.Name(),
+				"error", err.Error(),
+			)
+		}
+	}
+
+	if qi != nil {
+		tokensRemaining := qi.TokensRemaining
+		tokensLimit := qi.TokensLimit
+		costRemaining := qi.CostRemaining
+		costLimit := qi.CostLimit
+		stateQI := &state.QuotaInfo{
+			Provider:        o.Name(),
+			TokensRemaining: &tokensRemaining,
+			TokensLimit:     &tokensLimit,
+			CostRemaining:   &costRemaining,
+			CostLimit:       &costLimit,
+			ResetAt:         qi.ResetAt,
+			CheckedAt:       now,
+		}
+		if err := o.store.SaveQuota(o.Name(), stateQI); err != nil {
+			o.GetLogger().Error("failed to persist quota info",
+				"provider", o.Name(),
+				"error", err.Error(),
+			)
+		}
+	}
+}
+
+// derefIntOr dereferences an *int, returning fallback if nil.
+func derefIntOr(p *int, fallback int) int {
+	if p != nil {
+		return *p
+	}
+	return fallback
+}
+
+// derefFloat64Or dereferences a *float64, returning fallback if nil.
+func derefFloat64Or(p *float64, fallback float64) float64 {
+	if p != nil {
+		return *p
+	}
+	return fallback
+}
+
+// derefTimeOr dereferences a *time.Time, returning fallback if nil.
+func derefTimeOr(p *time.Time, fallback time.Time) time.Time {
+	if p != nil {
+		return *p
+	}
+	return fallback
 }

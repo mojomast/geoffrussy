@@ -2,7 +2,9 @@ package security
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 )
 
@@ -39,11 +41,19 @@ func NewPathSanitizer(projectRoot string) (*PathSanitizer, error) {
 // - The path cannot be resolved to an absolute path
 // - The resolved path is outside the project root
 // - The path contains directory traversal sequences that escape the project root
+// - The path is a symlink that resolves to a location outside the project root
 //
 // The returned path is always an absolute, cleaned path suitable for file operations.
+// On Windows, UNC paths (\\server\share) are rejected unless they resolve within
+// the project root.
 func (ps *PathSanitizer) ValidatePath(path string) (string, error) {
 	if path == "" {
 		return "", fmt.Errorf("path cannot be empty")
+	}
+
+	// On Windows, reject UNC paths that start with \\ early
+	if runtime.GOOS == "windows" && strings.HasPrefix(path, `\\`) {
+		return "", fmt.Errorf("path '%s' is outside project root '%s'", path, ps.projectRoot)
 	}
 
 	// Convert to absolute path
@@ -53,7 +63,7 @@ func (ps *PathSanitizer) ValidatePath(path string) (string, error) {
 	if filepath.IsAbs(path) {
 		// Already absolute, just clean it
 		absPath = filepath.Clean(path)
-		
+
 		// If it's an absolute path, it must be checked immediately
 		// to ensure it's within the project root
 		if !ps.isWithinRoot(absPath) {
@@ -66,7 +76,7 @@ func (ps *PathSanitizer) ValidatePath(path string) (string, error) {
 			return "", fmt.Errorf("failed to resolve path to absolute: %w", err)
 		}
 		absPath = filepath.Clean(absPath)
-		
+
 		// Check if the resolved path is within the project root
 		if !ps.isWithinRoot(absPath) {
 			return "", fmt.Errorf("path '%s' is outside project root '%s'", path, ps.projectRoot)
@@ -79,7 +89,85 @@ func (ps *PathSanitizer) ValidatePath(path string) (string, error) {
 		return "", fmt.Errorf("path '%s' contains directory traversal sequences", path)
 	}
 
+	// Resolve symlinks to get the canonical path.
+	// If the path exists on disk, EvalSymlinks will follow all symlinks
+	// and return the real path. This prevents symlink escape attacks where
+	// a symlink inside the project root points to a file outside it.
+	canonicalPath, err := filepath.EvalSymlinks(absPath)
+	if err != nil {
+		// If the path doesn't exist (e.g., creating a new file),
+		// walk up to find the deepest existing ancestor and resolve that.
+		canonicalPath, err = resolveExistingAncestor(absPath)
+		if err != nil {
+			// If we can't resolve any ancestor, the cleaned absPath is acceptable
+			// as long as it passed the string-based checks above.
+			return absPath, nil
+		}
+	}
+
+	canonicalPath = filepath.Clean(canonicalPath)
+
+	// Verify the canonical (symlink-resolved) path is still within project root.
+	// We also need a canonical project root for a fair comparison.
+	canonicalRoot := ps.projectRoot
+	if resolved, err := filepath.EvalSymlinks(ps.projectRoot); err == nil {
+		canonicalRoot = filepath.Clean(resolved)
+	}
+
+	if !isWithinRootCanonical(canonicalPath, canonicalRoot) {
+		return "", fmt.Errorf("path '%s' resolves to '%s' which is outside project root '%s'",
+			path, canonicalPath, ps.projectRoot)
+	}
+
 	return absPath, nil
+}
+
+// resolveExistingAncestor walks up from the given path and resolves symlinks
+// for the deepest existing ancestor, then appends the remaining path components.
+// This is used when the full path does not exist yet (e.g., creating a new file).
+func resolveExistingAncestor(absPath string) (string, error) {
+	current := absPath
+	var tail []string
+
+	for {
+		if _, err := os.Lstat(current); err == nil {
+			resolved, err := filepath.EvalSymlinks(current)
+			if err != nil {
+				return "", err
+			}
+			// Re-join the non-existent tail components
+			parts := append([]string{resolved}, tail...)
+			return filepath.Join(parts...), nil
+		}
+		parent := filepath.Dir(current)
+		if parent == current {
+			// Reached filesystem root without finding an existing path
+			return "", fmt.Errorf("no existing ancestor found for path: %s", absPath)
+		}
+		tail = append([]string{filepath.Base(current)}, tail...)
+		current = parent
+	}
+}
+
+// isWithinRootCanonical checks if the given canonical path is within the canonical root.
+func isWithinRootCanonical(absPath, root string) bool {
+	rel, err := filepath.Rel(root, absPath)
+	if err != nil {
+		return false
+	}
+
+	// If the relative path starts with "..", it's outside the root
+	if strings.HasPrefix(rel, "..") {
+		return false
+	}
+
+	// Handle Windows paths with forward slash conversion
+	relForward := filepath.ToSlash(rel)
+	if strings.HasPrefix(relForward, "../") || relForward == ".." {
+		return false
+	}
+
+	return true
 }
 
 // IsPathSafe performs a boolean check to determine if a path is safe.

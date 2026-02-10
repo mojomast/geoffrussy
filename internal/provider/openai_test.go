@@ -4,9 +4,12 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/mojomast/geoffrussy/internal/state"
 )
 
 func TestNewOpenAIProvider(t *testing.T) {
@@ -539,5 +542,265 @@ func TestOpenAIProvider_SupportsCodingPlan(t *testing.T) {
 
 	if provider.SupportsCodingPlan() {
 		t.Error("OpenAI should not support coding plan")
+	}
+}
+
+func TestOpenAIProvider_SetStore(t *testing.T) {
+	prov := NewOpenAIProvider()
+	if prov.store != nil {
+		t.Error("Expected store to be nil initially")
+	}
+
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	store, err := state.NewStore(dbPath)
+	if err != nil {
+		t.Fatalf("Failed to create store: %v", err)
+	}
+	defer store.Close()
+
+	prov.SetStore(store)
+	if prov.store == nil {
+		t.Error("Expected store to be set")
+	}
+}
+
+func TestOpenAIProvider_PersistRateLimitAndQuota(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	store, err := state.NewStore(dbPath)
+	if err != nil {
+		t.Fatalf("Failed to create store: %v", err)
+	}
+	defer store.Close()
+
+	// Create a test server that returns rate limit and quota headers
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-RateLimit-Remaining-Requests", "42")
+		w.Header().Set("X-RateLimit-Limit-Requests", "100")
+		w.Header().Set("X-RateLimit-Remaining-Tokens", "5000")
+		w.Header().Set("X-Ratelimit-Limit-Tokens", "10000")
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(openAIResponse{
+			ID: "chatcmpl-test",
+			Choices: []struct {
+				Index   int `json:"index"`
+				Message struct {
+					Role    string `json:"role"`
+					Content string `json:"content"`
+				} `json:"message"`
+				FinishReason string `json:"finish_reason"`
+			}{
+				{
+					Index: 0,
+					Message: struct {
+						Role    string `json:"role"`
+						Content string `json:"content"`
+					}{"assistant", "Hello!"},
+					FinishReason: "stop",
+				},
+			},
+			Usage: struct {
+				PromptTokens     int `json:"prompt_tokens"`
+				CompletionTokens int `json:"completion_tokens"`
+				TotalTokens      int `json:"total_tokens"`
+			}{
+				PromptTokens:     10,
+				CompletionTokens: 5,
+				TotalTokens:      15,
+			},
+		})
+	}))
+	defer server.Close()
+
+	prov := NewOpenAIProvider()
+	prov.Authenticate("sk-test123")
+	prov.baseURL = server.URL
+	prov.SetStore(store)
+
+	// Make a call — should persist rate limit and quota
+	resp, err := prov.Call("gpt-4", "Hello")
+	if err != nil {
+		t.Fatalf("Call failed: %v", err)
+	}
+	if resp.RateLimitRemaining != 42 {
+		t.Errorf("Expected RateLimitRemaining 42, got %d", resp.RateLimitRemaining)
+	}
+
+	// Verify data was persisted to the store
+	rl, err := store.GetRateLimit("openai")
+	if err != nil {
+		t.Fatalf("GetRateLimit failed: %v", err)
+	}
+	if rl.RequestsRemaining == nil || *rl.RequestsRemaining != 42 {
+		t.Errorf("Expected persisted RequestsRemaining 42, got %v", rl.RequestsRemaining)
+	}
+	if rl.RequestsLimit == nil || *rl.RequestsLimit != 100 {
+		t.Errorf("Expected persisted RequestsLimit 100, got %v", rl.RequestsLimit)
+	}
+
+	qi, err := store.GetQuota("openai")
+	if err != nil {
+		t.Fatalf("GetQuota failed: %v", err)
+	}
+	if qi.TokensRemaining == nil || *qi.TokensRemaining != 5000 {
+		t.Errorf("Expected persisted TokensRemaining 5000, got %v", qi.TokensRemaining)
+	}
+	if qi.TokensLimit == nil || *qi.TokensLimit != 10000 {
+		t.Errorf("Expected persisted TokensLimit 10000, got %v", qi.TokensLimit)
+	}
+}
+
+func TestOpenAIProvider_GetRateLimitInfo_FromStore(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	store, err := state.NewStore(dbPath)
+	if err != nil {
+		t.Fatalf("Failed to create store: %v", err)
+	}
+	defer store.Close()
+
+	// Seed the store with data
+	remaining := 77
+	limit := 200
+	now := time.Now()
+	stateRL := &state.RateLimitInfo{
+		Provider:          "openai",
+		RequestsRemaining: &remaining,
+		RequestsLimit:     &limit,
+		ResetAt:           &now,
+		CheckedAt:         now,
+	}
+	if err := store.SaveRateLimit("openai", stateRL); err != nil {
+		t.Fatalf("SaveRateLimit failed: %v", err)
+	}
+
+	prov := NewOpenAIProvider()
+	prov.SetStore(store)
+
+	info, err := prov.GetRateLimitInfo()
+	if err != nil {
+		t.Fatalf("GetRateLimitInfo failed: %v", err)
+	}
+	if info.RequestsRemaining != 77 {
+		t.Errorf("Expected RequestsRemaining 77, got %d", info.RequestsRemaining)
+	}
+	if info.RequestsLimit != 200 {
+		t.Errorf("Expected RequestsLimit 200, got %d", info.RequestsLimit)
+	}
+}
+
+func TestOpenAIProvider_GetQuotaInfo_FromStore(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	store, err := state.NewStore(dbPath)
+	if err != nil {
+		t.Fatalf("Failed to create store: %v", err)
+	}
+	defer store.Close()
+
+	// Seed the store with data
+	tokensRemaining := 9000
+	tokensLimit := 50000
+	costRemaining := 4.50
+	costLimit := 10.0
+	stateQI := &state.QuotaInfo{
+		Provider:        "openai",
+		TokensRemaining: &tokensRemaining,
+		TokensLimit:     &tokensLimit,
+		CostRemaining:   &costRemaining,
+		CostLimit:       &costLimit,
+		ResetAt:         time.Now(),
+		CheckedAt:       time.Now(),
+	}
+	if err := store.SaveQuota("openai", stateQI); err != nil {
+		t.Fatalf("SaveQuota failed: %v", err)
+	}
+
+	prov := NewOpenAIProvider()
+	prov.SetStore(store)
+
+	info, err := prov.GetQuotaInfo()
+	if err != nil {
+		t.Fatalf("GetQuotaInfo failed: %v", err)
+	}
+	if info.TokensRemaining != 9000 {
+		t.Errorf("Expected TokensRemaining 9000, got %d", info.TokensRemaining)
+	}
+	if info.TokensLimit != 50000 {
+		t.Errorf("Expected TokensLimit 50000, got %d", info.TokensLimit)
+	}
+	if info.CostRemaining != 4.50 {
+		t.Errorf("Expected CostRemaining 4.50, got %f", info.CostRemaining)
+	}
+	if info.CostLimit != 10.0 {
+		t.Errorf("Expected CostLimit 10.0, got %f", info.CostLimit)
+	}
+}
+
+func TestOpenAIProvider_GetRateLimitInfo_FallbackToMemory(t *testing.T) {
+	prov := NewOpenAIProvider()
+	// No store set — should fall back to in-memory cache
+
+	// First call with no cache — should return empty info
+	info, err := prov.GetRateLimitInfo()
+	if err != nil {
+		t.Fatalf("GetRateLimitInfo failed: %v", err)
+	}
+	if info.RequestsRemaining != 0 || info.RequestsLimit != 0 {
+		t.Errorf("Expected zero values for uncached provider, got remaining=%d limit=%d",
+			info.RequestsRemaining, info.RequestsLimit)
+	}
+
+	// Simulate caching via a Call
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-RateLimit-Remaining-Requests", "33")
+		w.Header().Set("X-RateLimit-Limit-Requests", "60")
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(openAIResponse{
+			ID: "chatcmpl-test",
+			Choices: []struct {
+				Index   int `json:"index"`
+				Message struct {
+					Role    string `json:"role"`
+					Content string `json:"content"`
+				} `json:"message"`
+				FinishReason string `json:"finish_reason"`
+			}{
+				{
+					Index: 0,
+					Message: struct {
+						Role    string `json:"role"`
+						Content string `json:"content"`
+					}{"assistant", "Hi"},
+					FinishReason: "stop",
+				},
+			},
+			Usage: struct {
+				PromptTokens     int `json:"prompt_tokens"`
+				CompletionTokens int `json:"completion_tokens"`
+				TotalTokens      int `json:"total_tokens"`
+			}{5, 2, 7},
+		})
+	}))
+	defer server.Close()
+
+	prov.Authenticate("sk-test123")
+	prov.baseURL = server.URL
+
+	_, err = prov.Call("gpt-4", "Hi")
+	if err != nil {
+		t.Fatalf("Call failed: %v", err)
+	}
+
+	// Now the in-memory cache should be populated
+	info, err = prov.GetRateLimitInfo()
+	if err != nil {
+		t.Fatalf("GetRateLimitInfo failed: %v", err)
+	}
+	if info.RequestsRemaining != 33 {
+		t.Errorf("Expected in-memory cached RequestsRemaining 33, got %d", info.RequestsRemaining)
+	}
+	if info.RequestsLimit != 60 {
+		t.Errorf("Expected in-memory cached RequestsLimit 60, got %d", info.RequestsLimit)
 	}
 }
