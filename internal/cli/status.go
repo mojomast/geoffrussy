@@ -178,11 +178,12 @@ func displayProgressSummary(progress *state.ProgressStats) {
 	fmt.Println("------------------------------------------------------------")
 	fmt.Printf("  Completion: %.1f%%\n", progress.CompletionPercentage)
 	displayProgressBar(int(progress.CompletionPercentage))
-	fmt.Printf("  Tasks: %d/%d completed (%d in progress, %d blocked)\n",
+	fmt.Printf("  Tasks: %d/%d completed (%d in progress, %d blocked, %d skipped)\n",
 		progress.CompletedTasks,
 		progress.TotalTasks,
 		progress.InProgressTasks,
 		progress.BlockedTasks,
+		progress.SkippedTasks,
 	)
 	fmt.Printf("  Phases: %d/%d completed (%d in progress, %d blocked)\n",
 		progress.CompletedPhases,
@@ -215,6 +216,9 @@ func displayPhaseProgress(progress *state.PhaseProgress, verbose bool) {
 			}
 			if progress.BlockedTasks > 0 {
 				fmt.Printf("  🚫 Blocked: %d tasks\n", progress.BlockedTasks)
+			}
+			if progress.SkippedTasks > 0 {
+				fmt.Printf("  ⏭️  Skipped: %d tasks\n", progress.SkippedTasks)
 			}
 		}
 	}
