@@ -24,6 +24,7 @@ func Banner() string {
 `
 
 	// Define gradient colors: cyan (#3CADFF) to purple (#BA3CFF)
+	// Using hardcoded valid hex values, so errors can be safely ignored
 	startColor, _ := colorful.Hex("#3CADFF")
 	endColor, _ := colorful.Hex("#BA3CFF")
 
@@ -41,10 +42,10 @@ func Banner() string {
 	// Build the gradient banner
 	var result strings.Builder
 
-	for _, line := range lines {
+	for lineIdx, line := range lines {
 		for i, char := range line {
-			if char == ' ' || char == '\n' {
-				// Don't color spaces and newlines, just add them
+			if char == ' ' {
+				// Don't color spaces, just add them
 				result.WriteRune(char)
 			} else {
 				// Calculate gradient position based on character position relative to max width
@@ -64,7 +65,10 @@ func Banner() string {
 				result.WriteString(coloredChar)
 			}
 		}
-		result.WriteRune('\n')
+		// Add newline after each line except skip extra trailing newlines
+		if lineIdx < len(lines)-1 {
+			result.WriteRune('\n')
+		}
 	}
 
 	return result.String()
