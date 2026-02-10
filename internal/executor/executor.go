@@ -427,8 +427,5 @@ func (e *Executor) sendUpdate(update TaskUpdate) {
 	case e.updateChan <- update:
 	case <-e.ctx.Done():
 		// Context cancelled, don't send update
-	default:
-		// Channel full, drop update
-		// In a production system, we might want to log this
 	}
 }

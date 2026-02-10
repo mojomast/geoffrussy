@@ -695,3 +695,44 @@ func (m *mockProviderWithMultipleFiles) GetQuotaInfo() (*provider.QuotaInfo, err
 func (m *mockProviderWithMultipleFiles) SupportsCodingPlan() bool {
 	return false
 }
+
+func TestExecutor_Backpressure(t *testing.T) {
+	executor, store := setupTestExecutor(t)
+	defer store.Close()
+	defer executor.Close()
+
+	// Channel buffer size is 100
+	const bufferSize = 100
+	const extraMessages = 50
+	const totalMessages = bufferSize + extraMessages
+
+	// Start a goroutine to send messages
+	go func() {
+		for i := 0; i < totalMessages; i++ {
+			executor.sendUpdate(TaskUpdate{
+				TaskID:    "task-1",
+				Type:      TaskProgress,
+				Content:   "Update",
+				Timestamp: time.Now(),
+			})
+		}
+	}()
+
+	// Read messages
+	receivedCount := 0
+	timeout := time.After(5 * time.Second)
+
+	for i := 0; i < totalMessages; i++ {
+		select {
+		case <-executor.StreamOutput():
+			receivedCount++
+		case <-timeout:
+			t.Errorf("timeout waiting for messages. Received %d/%d", receivedCount, totalMessages)
+			return
+		}
+	}
+
+	if receivedCount != totalMessages {
+		t.Errorf("expected %d messages, got %d", totalMessages, receivedCount)
+	}
+}
