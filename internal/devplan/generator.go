@@ -1,8 +1,11 @@
 package devplan
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -89,7 +92,7 @@ func (g *Generator) GeneratePhases(architecture *design.Architecture, interviewD
 
 	prompt := g.buildPhasesPrompt(architecture, interviewData)
 
-	response, err := g.provider.Call(g.model, prompt)
+	response, err := g.provider.Call(context.TODO(), g.model, prompt)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate phases: %w", err)
 	}
@@ -688,7 +691,20 @@ func (g *Generator) UpdatePhaseMarkdown(phase *Phase, filePath string) error {
 
 // writeFile is a helper to write content to a file
 func writeFile(path, content string) error {
-	return fmt.Errorf("file writing not implemented - use external file writer")
+	// Ensure parent directory exists
+	dir := filepath.Dir(path)
+	if dir != "" && dir != "." {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return fmt.Errorf("failed to create directory %s: %w", dir, err)
+		}
+	}
+
+	// Write the file with secure permissions (owner read/write only)
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		return fmt.Errorf("failed to write file %s: %w", path, err)
+	}
+
+	return nil
 }
 
 // UpdateMasterPlanWithChangelog updates the master plan with changelog

@@ -3,6 +3,7 @@ package provider
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -127,7 +128,7 @@ func (k *KimiProvider) ListModels() ([]Model, error) {
 }
 
 // Call makes a non-streaming API call to Kimi
-func (k *KimiProvider) Call(model string, prompt string) (*Response, error) {
+func (k *KimiProvider) Call(ctx context.Context, model string, prompt string) (*Response, error) {
 	if !k.IsAuthenticated() {
 		return nil, fmt.Errorf("provider not authenticated")
 	}
@@ -225,7 +226,7 @@ func (k *KimiProvider) Call(model string, prompt string) (*Response, error) {
 }
 
 // Stream makes a streaming API call to Kimi
-func (k *KimiProvider) Stream(model string, prompt string) (<-chan string, error) {
+func (k *KimiProvider) Stream(ctx context.Context, model string, prompt string) (<-chan string, error) {
 	if !k.IsAuthenticated() {
 		return nil, fmt.Errorf("provider not authenticated")
 	}

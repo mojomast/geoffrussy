@@ -344,7 +344,7 @@ func (h *ExecHandlers) handleHandleBlocker(ctx context.Context, args map[string]
 		}
 
 		prompt := fmt.Sprintf("Analyze the failure for task %s.\n\nLogs:\n%s\n\nReturn exactly four sections with these headers:\n1) ROOT_CAUSE\n2) EVIDENCE\n3) FIX_PLAN\n4) VERIFY_COMMANDS\n\nKeep fixes concrete and scoped to this task. Do not include markdown code fences.", taskID, string(logs))
-		resp, err := prov.Call(modelName, prompt)
+		resp, err := prov.Call(context.TODO(), modelName, prompt)
 		if err != nil {
 			return ErrorResult(fmt.Sprintf("Failed to analyze: %v", err)), nil
 		}

@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"context"
 	"testing"
 	"time"
 )
@@ -145,7 +146,7 @@ func TestBridge_Call(t *testing.T) {
 	bridge := NewBridge()
 
 	// Test with non-existent provider
-	_, err := bridge.Call("nonexistent", "model", "prompt")
+	_, err := bridge.Call(context.TODO(), "nonexistent", "model", "prompt")
 	if err == nil {
 		t.Error("expected error when calling non-existent provider")
 	}
@@ -153,7 +154,7 @@ func TestBridge_Call(t *testing.T) {
 	// Test with unauthenticated provider
 	provider := NewOpenAIProvider()
 	bridge.RegisterProvider(provider)
-	_, err = bridge.Call("openai", "gpt-4", "Hello")
+	_, err = bridge.Call(context.TODO(), "openai", "gpt-4", "Hello")
 	if err == nil {
 		t.Error("expected error when calling unauthenticated provider")
 	}
@@ -163,7 +164,7 @@ func TestBridge_Stream(t *testing.T) {
 	bridge := NewBridge()
 
 	// Test with non-existent provider
-	_, err := bridge.Stream("nonexistent", "model", "prompt")
+	_, err := bridge.Stream(context.TODO(), "nonexistent", "model", "prompt")
 	if err == nil {
 		t.Error("expected error when streaming from non-existent provider")
 	}
@@ -171,7 +172,7 @@ func TestBridge_Stream(t *testing.T) {
 	// Test with unauthenticated provider
 	provider := NewOpenAIProvider()
 	bridge.RegisterProvider(provider)
-	_, err = bridge.Stream("openai", "gpt-4", "Hello")
+	_, err = bridge.Stream(context.TODO(), "openai", "gpt-4", "Hello")
 	if err == nil {
 		t.Error("expected error when streaming from unauthenticated provider")
 	}

@@ -1663,3 +1663,32 @@ func (s *Store) GetConfig(key string) (string, error) {
 	}
 	return value, nil
 }
+
+// ListConfigByPrefix returns all config entries whose key starts with the given prefix.
+// Results are ordered by key.
+func (s *Store) ListConfigByPrefix(prefix string) (map[string]string, error) {
+	query := `
+		SELECT key, value
+		FROM config
+		WHERE key LIKE ?
+		ORDER BY key
+	`
+	rows, err := s.db.Query(query, prefix+"%")
+	if err != nil {
+		return nil, fmt.Errorf("failed to list config by prefix: %w", err)
+	}
+	defer rows.Close()
+
+	results := make(map[string]string)
+	for rows.Next() {
+		var key, value string
+		if err := rows.Scan(&key, &value); err != nil {
+			return nil, fmt.Errorf("failed to scan config row: %w", err)
+		}
+		results[key] = value
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating config rows: %w", err)
+	}
+	return results, nil
+}

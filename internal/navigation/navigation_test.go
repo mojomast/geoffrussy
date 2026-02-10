@@ -260,21 +260,81 @@ func TestHistoryTracker(t *testing.T) {
 	gitMgr := git.NewManager(".")
 	tracker := NewHistoryTracker(store, gitMgr)
 
-	// Record a navigation event
-	err = tracker.RecordNavigation("test-project", state.StageDesign, state.StageInterview)
+	projectID := "test-project"
+
+	// Initially, history should be empty
+	history, err := tracker.GetNavigationHistory(projectID)
 	if err != nil {
-		t.Errorf("failed to record navigation: %v", err)
+		t.Errorf("failed to get empty navigation history: %v", err)
+	}
+	if len(history) != 0 {
+		t.Errorf("expected empty history, got %d events", len(history))
 	}
 
-	// Get history (will be empty in this implementation, but should not error)
-	history, err := tracker.GetNavigationHistory("test-project")
+	// Record navigation events with slight delay to get different timestamps
+	err = tracker.RecordNavigation(projectID, state.StageDesign, state.StageInterview)
+	if err != nil {
+		t.Fatalf("failed to record first navigation: %v", err)
+	}
+
+	// Sleep briefly to ensure different unix timestamps
+	time.Sleep(1100 * time.Millisecond)
+
+	err = tracker.RecordNavigation(projectID, state.StageInterview, state.StageDesign)
+	if err != nil {
+		t.Fatalf("failed to record second navigation: %v", err)
+	}
+
+	// Get history - should now have 2 events
+	history, err = tracker.GetNavigationHistory(projectID)
 	if err != nil {
 		t.Errorf("failed to get navigation history: %v", err)
 	}
 
-	// Should return empty slice without error
-	if history == nil {
-		t.Error("expected empty history slice, got nil")
+	if len(history) != 2 {
+		t.Fatalf("expected 2 history events, got %d", len(history))
+	}
+
+	// First event should be the earlier one
+	if history[0].FromStage != state.StageDesign || history[0].ToStage != state.StageInterview {
+		t.Errorf("first event: expected design->interview, got %s->%s", history[0].FromStage, history[0].ToStage)
+	}
+
+	if history[1].FromStage != state.StageInterview || history[1].ToStage != state.StageDesign {
+		t.Errorf("second event: expected interview->design, got %s->%s", history[1].FromStage, history[1].ToStage)
+	}
+
+	// Verify project ID is set
+	for _, event := range history {
+		if event.ProjectID != projectID {
+			t.Errorf("expected projectID %s, got %s", projectID, event.ProjectID)
+		}
+	}
+
+	// Verify GetIterationCount works with real history
+	count, err := tracker.GetIterationCount(projectID, state.StageInterview)
+	if err != nil {
+		t.Errorf("failed to get iteration count: %v", err)
+	}
+	if count != 1 {
+		t.Errorf("expected 1 visit to interview, got %d", count)
+	}
+
+	count, err = tracker.GetIterationCount(projectID, state.StageDesign)
+	if err != nil {
+		t.Errorf("failed to get iteration count: %v", err)
+	}
+	if count != 1 {
+		t.Errorf("expected 1 visit to design, got %d", count)
+	}
+
+	// History for a different project should be empty
+	otherHistory, err := tracker.GetNavigationHistory("other-project")
+	if err != nil {
+		t.Errorf("failed to get other project history: %v", err)
+	}
+	if len(otherHistory) != 0 {
+		t.Errorf("expected empty history for other project, got %d events", len(otherHistory))
 	}
 }
 
@@ -291,47 +351,161 @@ func TestCheckPrerequisites(t *testing.T) {
 	gitMgr := git.NewManager(".")
 	nav := NewNavigator(store, gitMgr)
 
-	testCases := []struct {
-		name        string
-		from        state.Stage
-		to          state.Stage
-		expectError bool
-	}{
-		{
-			name:        "Interview to Design",
-			from:        state.StageInterview,
-			to:          state.StageDesign,
-			expectError: false,
-		},
-		{
-			name:        "Design to Plan",
-			from:        state.StageDesign,
-			to:          state.StagePlan,
-			expectError: false,
-		},
-		{
-			name:        "Plan to Review",
-			from:        state.StagePlan,
-			to:          state.StageReview,
-			expectError: false,
-		},
-		{
-			name:        "Review to Develop",
-			from:        state.StageReview,
-			to:          state.StageDevelop,
-			expectError: false,
-		},
+	projectID := "test-prereqs"
+
+	// Create project
+	project := &state.Project{
+		ID:           projectID,
+		Name:         "Test Prerequisites",
+		CreatedAt:    time.Now(),
+		CurrentStage: state.StageInit,
+	}
+	if err := store.CreateProject(project); err != nil {
+		t.Fatalf("failed to create project: %v", err)
 	}
 
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			err := nav.checkPrerequisites(tc.from, tc.to)
-			if tc.expectError && err == nil {
-				t.Error("expected error, got nil")
-			}
-			if !tc.expectError && err != nil {
-				t.Errorf("expected no error, got: %v", err)
-			}
-		})
+	t.Run("Init to Interview succeeds with project", func(t *testing.T) {
+		err := nav.checkPrerequisites(projectID, state.StageInit, state.StageInterview)
+		if err != nil {
+			t.Errorf("expected no error, got: %v", err)
+		}
+	})
+
+	t.Run("Interview to Design fails without interview data", func(t *testing.T) {
+		err := nav.checkPrerequisites(projectID, state.StageInterview, state.StageDesign)
+		if err == nil {
+			t.Error("expected error for missing interview data, got nil")
+		}
+	})
+
+	// Add interview data
+	interviewData := &state.InterviewData{
+		ProjectID:        projectID,
+		ProjectName:      "Test Prerequisites",
+		CreatedAt:        time.Now(),
+		ProblemStatement: "Test problem",
 	}
+	if err := store.SaveInterviewData(projectID, interviewData); err != nil {
+		t.Fatalf("failed to save interview data: %v", err)
+	}
+
+	t.Run("Interview to Design succeeds with interview data", func(t *testing.T) {
+		err := nav.checkPrerequisites(projectID, state.StageInterview, state.StageDesign)
+		if err != nil {
+			t.Errorf("expected no error, got: %v", err)
+		}
+	})
+
+	t.Run("Design to Plan fails without architecture", func(t *testing.T) {
+		err := nav.checkPrerequisites(projectID, state.StageDesign, state.StagePlan)
+		if err == nil {
+			t.Error("expected error for missing architecture, got nil")
+		}
+	})
+
+	// Add architecture
+	architecture := &state.Architecture{
+		ProjectID: projectID,
+		CreatedAt: time.Now(),
+		Content:   "Test architecture",
+	}
+	if err := store.SaveArchitecture(projectID, architecture); err != nil {
+		t.Fatalf("failed to save architecture: %v", err)
+	}
+
+	t.Run("Design to Plan succeeds with architecture", func(t *testing.T) {
+		err := nav.checkPrerequisites(projectID, state.StageDesign, state.StagePlan)
+		if err != nil {
+			t.Errorf("expected no error, got: %v", err)
+		}
+	})
+
+	t.Run("Plan to Review fails without phases", func(t *testing.T) {
+		err := nav.checkPrerequisites(projectID, state.StagePlan, state.StageReview)
+		if err == nil {
+			t.Error("expected error for missing phases, got nil")
+		}
+	})
+
+	// Add a phase
+	phase := &state.Phase{
+		ID:        "phase-1",
+		ProjectID: projectID,
+		Number:    1,
+		Title:     "Phase 1",
+		Status:    state.PhaseNotStarted,
+		CreatedAt: time.Now(),
+	}
+	if err := store.SavePhase(phase); err != nil {
+		t.Fatalf("failed to save phase: %v", err)
+	}
+
+	t.Run("Plan to Review succeeds with phases", func(t *testing.T) {
+		err := nav.checkPrerequisites(projectID, state.StagePlan, state.StageReview)
+		if err != nil {
+			t.Errorf("expected no error, got: %v", err)
+		}
+	})
+
+	t.Run("Review to Develop succeeds with phases", func(t *testing.T) {
+		err := nav.checkPrerequisites(projectID, state.StageReview, state.StageDevelop)
+		if err != nil {
+			t.Errorf("expected no error, got: %v", err)
+		}
+	})
+
+	t.Run("Develop to Complete fails without tasks", func(t *testing.T) {
+		err := nav.checkPrerequisites(projectID, state.StageDevelop, state.StageComplete)
+		if err == nil {
+			t.Error("expected error for missing tasks, got nil")
+		}
+	})
+
+	// Add tasks - one incomplete
+	task1 := &state.Task{
+		ID:          "task-1",
+		PhaseID:     phase.ID,
+		Number:      "1.1",
+		Description: "First task",
+		Status:      state.TaskCompleted,
+	}
+	task2 := &state.Task{
+		ID:          "task-2",
+		PhaseID:     phase.ID,
+		Number:      "1.2",
+		Description: "Second task",
+		Status:      state.TaskInProgress,
+	}
+	if err := store.SaveTask(task1); err != nil {
+		t.Fatalf("failed to save task1: %v", err)
+	}
+	if err := store.SaveTask(task2); err != nil {
+		t.Fatalf("failed to save task2: %v", err)
+	}
+
+	t.Run("Develop to Complete fails with incomplete tasks", func(t *testing.T) {
+		err := nav.checkPrerequisites(projectID, state.StageDevelop, state.StageComplete)
+		if err == nil {
+			t.Error("expected error for incomplete tasks, got nil")
+		}
+	})
+
+	// Complete the second task
+	if err := store.UpdateTaskStatus(task2.ID, state.TaskCompleted); err != nil {
+		t.Fatalf("failed to complete task2: %v", err)
+	}
+
+	t.Run("Develop to Complete succeeds with all tasks complete", func(t *testing.T) {
+		err := nav.checkPrerequisites(projectID, state.StageDevelop, state.StageComplete)
+		if err != nil {
+			t.Errorf("expected no error, got: %v", err)
+		}
+	})
+
+	t.Run("Unknown target stage returns error", func(t *testing.T) {
+		err := nav.checkPrerequisites(projectID, state.StageInit, state.Stage("unknown"))
+		if err == nil {
+			t.Error("expected error for unknown stage, got nil")
+		}
+	})
 }

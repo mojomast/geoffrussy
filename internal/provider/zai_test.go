@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -144,7 +145,7 @@ func TestZAIProvider_Call(t *testing.T) {
 	provider.Authenticate("test-api-key")
 
 	// Make API call
-	resp, err := provider.Call("z-coder-v1", "Hello")
+	resp, err := provider.Call(context.TODO(), "z-coder-v1", "Hello")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -212,7 +213,7 @@ func TestZAIProvider_Stream(t *testing.T) {
 	provider.Authenticate("test-api-key")
 
 	// Make streaming call
-	ch, err := provider.Stream("z-coder-v1", "Hello")
+	ch, err := provider.Stream(context.TODO(), "z-coder-v1", "Hello")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -400,7 +401,7 @@ func TestZAIProvider_CallError(t *testing.T) {
 	provider.SetMaxRetries(0) // Don't retry for this test
 
 	// Make API call
-	_, err := provider.Call("z-coder-v1", "Hello")
+	_, err := provider.Call(context.TODO(), "z-coder-v1", "Hello")
 	if err == nil {
 		t.Error("expected error, got nil")
 	}

@@ -1,6 +1,7 @@
 package interview
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -315,7 +316,7 @@ Answer: %s
 
 Follow-up question:`, question.Text, answer.Text)
 
-	response, err := e.provider.Call(e.model, prompt)
+	response, err := e.provider.Call(context.TODO(), e.model, prompt)
 	if err != nil {
 		return "", fmt.Errorf("failed to generate follow-up: %w", err)
 	}
@@ -356,7 +357,7 @@ OUTPUT RULES:
 
 Analysis:`, question.Text, answer.Text)
 
-	response, err := e.provider.Call(e.model, prompt)
+	response, err := e.provider.Call(context.TODO(), e.model, prompt)
 	if err != nil {
 		return nil, fmt.Errorf("failed to analyze answer: %w", err)
 	}
@@ -844,7 +845,7 @@ Category: %s
 
 Proposed default answer:`, question.Text, question.Category)
 
-	response, err := e.provider.Call(e.model, prompt)
+	response, err := e.provider.Call(context.TODO(), e.model, prompt)
 	if err != nil {
 		return "", fmt.Errorf("failed to propose default: %w", err)
 	}

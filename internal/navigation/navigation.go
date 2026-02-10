@@ -2,6 +2,7 @@ package navigation
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/mojomast/geoffrussy/internal/git"
@@ -43,8 +44,8 @@ func (n *Navigator) NavigateToStage(projectID string, targetStage state.Stage) (
 
 	currentStage := project.CurrentStage
 
-	// Validate navigation
-	if err := n.ValidateNavigation(currentStage, targetStage); err != nil {
+	// Validate navigation (with prerequisite checks)
+	if err := n.ValidateNavigationWithPrereqs(projectID, currentStage, targetStage); err != nil {
 		return nil, fmt.Errorf("invalid navigation: %w", err)
 	}
 
@@ -132,7 +133,52 @@ func (n *Navigator) ValidateNavigation(from, to state.Stage) error {
 	}
 
 	// Moving forward one stage requires prerequisites
-	return n.checkPrerequisites(from, to)
+	// Note: checkPrerequisites needs project context but ValidateNavigation
+	// doesn't have projectID. We skip prerequisite checks when called without
+	// project context (e.g. direct validation). NavigateToStage does its own
+	// prerequisite check before calling ValidateNavigation.
+	return nil
+}
+
+// ValidateNavigationWithPrereqs validates navigation including prerequisite checks
+func (n *Navigator) ValidateNavigationWithPrereqs(projectID string, from, to state.Stage) error {
+	// Get stage order
+	stageOrder := map[state.Stage]int{
+		state.StageInit:      0,
+		state.StageInterview: 1,
+		state.StageDesign:    2,
+		state.StagePlan:      3,
+		state.StageReview:    4,
+		state.StageDevelop:   5,
+		state.StageComplete:  6,
+	}
+
+	fromOrder, fromOk := stageOrder[from]
+	toOrder, toOk := stageOrder[to]
+
+	if !fromOk {
+		return fmt.Errorf("unknown source stage: %s", from)
+	}
+	if !toOk {
+		return fmt.Errorf("unknown target stage: %s", to)
+	}
+
+	if from == to {
+		return fmt.Errorf("already at stage %s", to)
+	}
+
+	if toOrder > fromOrder+1 {
+		return fmt.Errorf("cannot skip stages: must complete %s before moving to %s",
+			n.getStageAtOrder(fromOrder+1, stageOrder), to)
+	}
+
+	// Can always go backwards
+	if toOrder < fromOrder {
+		return nil
+	}
+
+	// Moving forward one stage requires prerequisites
+	return n.checkPrerequisites(projectID, from, to)
 }
 
 // getStageAtOrder returns the stage at a given order
@@ -146,34 +192,69 @@ func (n *Navigator) getStageAtOrder(order int, stageOrder map[state.Stage]int) s
 }
 
 // checkPrerequisites checks if prerequisites are met for stage transition
-func (n *Navigator) checkPrerequisites(from, to state.Stage) error {
+func (n *Navigator) checkPrerequisites(projectID string, from, to state.Stage) error {
 	// Define prerequisites for each stage
 	switch to {
 	case state.StageInterview:
-		// Init must be complete
+		// Init must be complete - project must exist
+		_, err := n.store.GetProject(projectID)
+		if err != nil {
+			return fmt.Errorf("project must be initialized before starting interview: %w", err)
+		}
 		return nil
 
 	case state.StageDesign:
-		// Interview must be complete
-		// Check if interview data exists
+		// Interview must be complete - interview data must exist
+		_, err := n.store.GetInterviewData(projectID)
+		if err != nil {
+			return fmt.Errorf("interview must be completed before starting design: %w", err)
+		}
 		return nil
 
 	case state.StagePlan:
-		// Design must be complete
-		// Check if architecture exists
+		// Design must be complete - architecture must exist
+		_, err := n.store.GetArchitecture(projectID)
+		if err != nil {
+			return fmt.Errorf("architecture must be generated before creating a plan: %w", err)
+		}
 		return nil
 
 	case state.StageReview:
-		// Plan must be complete
-		// Check if devplan exists
+		// Plan must be complete - phases must exist
+		phases, err := n.store.ListPhases(projectID)
+		if err != nil {
+			return fmt.Errorf("failed to check phases: %w", err)
+		}
+		if len(phases) == 0 {
+			return fmt.Errorf("development plan must be created before review")
+		}
 		return nil
 
 	case state.StageDevelop:
-		// Review must be complete
+		// Review must be complete - phases must exist (review acknowledges them)
+		phases, err := n.store.ListPhases(projectID)
+		if err != nil {
+			return fmt.Errorf("failed to check phases: %w", err)
+		}
+		if len(phases) == 0 {
+			return fmt.Errorf("development plan must exist before starting development")
+		}
 		return nil
 
 	case state.StageComplete:
-		// All phases must be complete
+		// All tasks must be complete
+		tasks, err := n.store.ListTasksByProject(projectID)
+		if err != nil {
+			return fmt.Errorf("failed to check tasks: %w", err)
+		}
+		if len(tasks) == 0 {
+			return fmt.Errorf("no tasks found - cannot mark project as complete")
+		}
+		for _, task := range tasks {
+			if task.Status != state.TaskCompleted && task.Status != state.TaskSkipped {
+				return fmt.Errorf("all tasks must be completed or skipped before marking project as complete (task %s is %s)", task.ID, task.Status)
+			}
+		}
 		return nil
 
 	default:
@@ -366,9 +447,68 @@ func (h *HistoryTracker) RecordNavigation(projectID string, from, to state.Stage
 
 // GetNavigationHistory returns the navigation history for a project
 func (h *HistoryTracker) GetNavigationHistory(projectID string) ([]NavigationEvent, error) {
-	// In a full implementation, this would query a navigation_history table
-	// For now, we'll return an empty slice
-	return []NavigationEvent{}, nil
+	prefix := fmt.Sprintf("nav_history_%s_", projectID)
+	entries, err := h.store.ListConfigByPrefix(prefix)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query navigation history: %w", err)
+	}
+
+	events := make([]NavigationEvent, 0, len(entries))
+	for key, value := range entries {
+		event, err := parseNavigationEvent(projectID, key, value)
+		if err != nil {
+			// Skip malformed entries rather than failing
+			continue
+		}
+		events = append(events, event)
+	}
+
+	// Sort by timestamp (oldest first)
+	sortNavigationEvents(events)
+
+	return events, nil
+}
+
+// parseNavigationEvent parses a stored navigation event from config key-value pair.
+// Key format: nav_history_{projectID}_{unixTimestamp}
+// Value format: {fromStage}->{toStage} at {RFC3339Timestamp}
+func parseNavigationEvent(projectID, key, value string) (NavigationEvent, error) {
+	// Parse the value: "{from}->{to} at {timestamp}"
+	arrowIdx := strings.Index(value, "->")
+	if arrowIdx < 0 {
+		return NavigationEvent{}, fmt.Errorf("malformed navigation event value: %s", value)
+	}
+
+	atIdx := strings.Index(value, " at ")
+	if atIdx < 0 {
+		return NavigationEvent{}, fmt.Errorf("malformed navigation event value: %s", value)
+	}
+
+	from := state.Stage(value[:arrowIdx])
+	to := state.Stage(value[arrowIdx+2 : atIdx])
+	timestampStr := value[atIdx+4:]
+
+	ts, err := time.Parse(time.RFC3339, timestampStr)
+	if err != nil {
+		return NavigationEvent{}, fmt.Errorf("failed to parse timestamp: %w", err)
+	}
+
+	return NavigationEvent{
+		ID:        key,
+		ProjectID: projectID,
+		FromStage: from,
+		ToStage:   to,
+		Timestamp: ts,
+	}, nil
+}
+
+// sortNavigationEvents sorts events by timestamp ascending
+func sortNavigationEvents(events []NavigationEvent) {
+	for i := 1; i < len(events); i++ {
+		for j := i; j > 0 && events[j].Timestamp.Before(events[j-1].Timestamp); j-- {
+			events[j], events[j-1] = events[j-1], events[j]
+		}
+	}
 }
 
 // GetIterationCount returns the number of times a stage has been visited

@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -188,7 +189,7 @@ func TestOllamaProvider_Call(t *testing.T) {
 	provider.Authenticate("")
 
 	// Make API call
-	resp, err := provider.Call("llama2:latest", "Hello")
+	resp, err := provider.Call(context.TODO(), "llama2:latest", "Hello")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -284,7 +285,7 @@ func TestOllamaProvider_Stream(t *testing.T) {
 	provider.Authenticate("")
 
 	// Make streaming call
-	ch, err := provider.Stream("llama2:latest", "Hello")
+	ch, err := provider.Stream(context.TODO(), "llama2:latest", "Hello")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -366,7 +367,7 @@ func TestOllamaProvider_CallError(t *testing.T) {
 	provider.SetMaxRetries(0) // Don't retry for this test
 
 	// Make API call
-	_, err := provider.Call("nonexistent:latest", "Hello")
+	_, err := provider.Call(context.TODO(), "nonexistent:latest", "Hello")
 	if err == nil {
 		t.Error("expected error, got nil")
 	}

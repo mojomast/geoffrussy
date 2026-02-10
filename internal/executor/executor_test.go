@@ -1,6 +1,7 @@
 package executor
 
 import (
+	"context"
 	"fmt"
 	"testing"
 	"time"
@@ -21,7 +22,7 @@ func (m *mockExecutorProvider) ListModels() ([]provider.Model, error) { return n
 
 func (m *mockExecutorProvider) DiscoverModels() ([]provider.Model, error) { return nil, nil }
 
-func (m *mockExecutorProvider) Call(model string, prompt string) (*provider.Response, error) {
+func (m *mockExecutorProvider) Call(ctx context.Context, model string, prompt string) (*provider.Response, error) {
 	return &provider.Response{
 		Content:      `{"explanation":"ok","files":[]}`,
 		TokensInput:  10,
@@ -32,7 +33,7 @@ func (m *mockExecutorProvider) Call(model string, prompt string) (*provider.Resp
 	}, nil
 }
 
-func (m *mockExecutorProvider) Stream(model string, prompt string) (<-chan string, error) {
+func (m *mockExecutorProvider) Stream(ctx context.Context, model string, prompt string) (<-chan string, error) {
 	return nil, fmt.Errorf("not implemented")
 }
 
@@ -652,7 +653,7 @@ func (m *mockProviderWithMultipleFiles) DiscoverModels() ([]provider.Model, erro
 	return nil, nil
 }
 
-func (m *mockProviderWithMultipleFiles) Call(model string, prompt string) (*provider.Response, error) {
+func (m *mockProviderWithMultipleFiles) Call(ctx context.Context, model string, prompt string) (*provider.Response, error) {
 	return &provider.Response{
 		Content: `{
 			"explanation": "Creating test files",
@@ -679,7 +680,7 @@ func (m *mockProviderWithMultipleFiles) Call(model string, prompt string) (*prov
 	}, nil
 }
 
-func (m *mockProviderWithMultipleFiles) Stream(model string, prompt string) (<-chan string, error) {
+func (m *mockProviderWithMultipleFiles) Stream(ctx context.Context, model string, prompt string) (<-chan string, error) {
 	return nil, fmt.Errorf("not implemented")
 }
 

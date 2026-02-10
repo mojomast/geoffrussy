@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -241,7 +242,7 @@ fi`
 	provider.Authenticate("")
 
 	// Make API call
-	resp, err := provider.Call("claude-sonnet-4", "Hello")
+	resp, err := provider.Call(context.TODO(), "claude-sonnet-4", "Hello")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -295,7 +296,7 @@ fi`
 	provider.Authenticate("")
 
 	// Make streaming call
-	ch, err := provider.Stream("claude-sonnet-4", "Hello")
+	ch, err := provider.Stream(context.TODO(), "claude-sonnet-4", "Hello")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -369,7 +370,7 @@ fi`
 	provider.SetMaxRetries(0) // Don't retry for this test
 
 	// Make API call
-	_, err := provider.Call("nonexistent", "Hello")
+	_, err := provider.Call(context.TODO(), "nonexistent", "Hello")
 	if err == nil {
 		t.Error("expected error, got nil")
 	}

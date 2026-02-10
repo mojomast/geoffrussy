@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -294,7 +295,7 @@ func TestOpenAIProvider_Call(t *testing.T) {
 				provider.Authenticate("sk-test123")
 			}
 
-			resp, err := provider.Call(tt.model, tt.prompt)
+			resp, err := provider.Call(context.TODO(), tt.model, tt.prompt)
 
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Call() error = %v, wantErr %v", err, tt.wantErr)
@@ -421,7 +422,7 @@ data: [DONE]
 				provider.Authenticate("sk-test123")
 			}
 
-			ch, err := provider.Stream(tt.model, tt.prompt)
+			ch, err := provider.Stream(context.TODO(), tt.model, tt.prompt)
 
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Stream() error = %v, wantErr %v", err, tt.wantErr)
@@ -488,7 +489,7 @@ func TestOpenAIProvider_RetryWithBackoff(t *testing.T) {
 	provider.SetBaseDelay(10 * time.Millisecond) // Speed up test
 
 	start := time.Now()
-	resp, err := provider.Call("gpt-4", "Test retry")
+	resp, err := provider.Call(context.TODO(), "gpt-4", "Test retry")
 	duration := time.Since(start)
 
 	if err != nil {
@@ -619,7 +620,7 @@ func TestOpenAIProvider_PersistRateLimitAndQuota(t *testing.T) {
 	prov.SetStore(store)
 
 	// Make a call — should persist rate limit and quota
-	resp, err := prov.Call("gpt-4", "Hello")
+	resp, err := prov.Call(context.TODO(), "gpt-4", "Hello")
 	if err != nil {
 		t.Fatalf("Call failed: %v", err)
 	}
@@ -787,7 +788,7 @@ func TestOpenAIProvider_GetRateLimitInfo_FallbackToMemory(t *testing.T) {
 	prov.Authenticate("sk-test123")
 	prov.baseURL = server.URL
 
-	_, err = prov.Call("gpt-4", "Hi")
+	_, err = prov.Call(context.TODO(), "gpt-4", "Hi")
 	if err != nil {
 		t.Fatalf("Call failed: %v", err)
 	}

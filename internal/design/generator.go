@@ -1,6 +1,7 @@
 package design
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -195,7 +196,7 @@ func (g *Generator) GenerateArchitecture(interviewData *state.InterviewData) (*A
 
 	for attempt := 0; attempt <= maxRetries; attempt++ {
 		// Call the LLM
-		response, err := g.provider.Call(g.model, prompt)
+		response, err := g.provider.Call(context.TODO(), g.model, prompt)
 		if err != nil {
 			return nil, fmt.Errorf("failed to generate architecture: %w", err)
 		}
@@ -566,7 +567,7 @@ Please provide the updated content for this section, maintaining consistency wit
 
 	prompt += "\n\nOUTPUT RULES:\n- Return only the revised section content.\n- No preamble, no explanations, no markdown code fences.\n- Keep content specific and implementation-oriented."
 
-	response, err := g.provider.Call(g.model, prompt)
+	response, err := g.provider.Call(context.TODO(), g.model, prompt)
 	if err != nil {
 		return nil, fmt.Errorf("failed to refine architecture: %w", err)
 	}

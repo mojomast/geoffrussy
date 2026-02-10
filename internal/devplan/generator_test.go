@@ -1,6 +1,9 @@
 package devplan
 
 import (
+	"context"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -34,7 +37,7 @@ func (m *MockProvider) DiscoverModels() ([]provider.Model, error) {
 	return []provider.Model{}, nil
 }
 
-func (m *MockProvider) Call(model string, prompt string) (*provider.Response, error) {
+func (m *MockProvider) Call(ctx context.Context, model string, prompt string) (*provider.Response, error) {
 	return &provider.Response{
 		Content:      m.response,
 		TokensInput:  100,
@@ -44,7 +47,7 @@ func (m *MockProvider) Call(model string, prompt string) (*provider.Response, er
 	}, nil
 }
 
-func (m *MockProvider) Stream(model string, prompt string) (<-chan string, error) {
+func (m *MockProvider) Stream(ctx context.Context, model string, prompt string) (<-chan string, error) {
 	ch := make(chan string, 1)
 	ch <- m.response
 	close(ch)
@@ -542,6 +545,89 @@ func TestDevPlanGenerator_PhaseManipulation(t *testing.T) {
 
 		if len(issues) == 0 {
 			t.Error("Should have validation issues")
+		}
+	})
+}
+
+func TestWriteFile(t *testing.T) {
+	t.Run("WriteToExistingDirectory", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		fp := filepath.Join(tmpDir, "test.md")
+
+		err := writeFile(fp, "# Test Content")
+		if err != nil {
+			t.Fatalf("Failed to write file: %v", err)
+		}
+
+		content, err := os.ReadFile(fp)
+		if err != nil {
+			t.Fatalf("Failed to read written file: %v", err)
+		}
+
+		if string(content) != "# Test Content" {
+			t.Errorf("Expected '# Test Content', got %q", string(content))
+		}
+	})
+
+	t.Run("CreateNestedDirectories", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		fp := filepath.Join(tmpDir, "a", "b", "c", "test.md")
+
+		err := writeFile(fp, "Nested content")
+		if err != nil {
+			t.Fatalf("Failed to write file with nested dirs: %v", err)
+		}
+
+		content, err := os.ReadFile(fp)
+		if err != nil {
+			t.Fatalf("Failed to read written file: %v", err)
+		}
+
+		if string(content) != "Nested content" {
+			t.Errorf("Expected 'Nested content', got %q", string(content))
+		}
+	})
+
+	t.Run("OverwriteExistingFile", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		fp := filepath.Join(tmpDir, "test.md")
+
+		err := writeFile(fp, "Original")
+		if err != nil {
+			t.Fatalf("Failed first write: %v", err)
+		}
+
+		err = writeFile(fp, "Updated")
+		if err != nil {
+			t.Fatalf("Failed second write: %v", err)
+		}
+
+		content, err := os.ReadFile(fp)
+		if err != nil {
+			t.Fatalf("Failed to read file: %v", err)
+		}
+
+		if string(content) != "Updated" {
+			t.Errorf("Expected 'Updated', got %q", string(content))
+		}
+	})
+
+	t.Run("WriteEmptyContent", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		fp := filepath.Join(tmpDir, "empty.md")
+
+		err := writeFile(fp, "")
+		if err != nil {
+			t.Fatalf("Failed to write empty file: %v", err)
+		}
+
+		info, err := os.Stat(fp)
+		if err != nil {
+			t.Fatalf("Failed to stat file: %v", err)
+		}
+
+		if info.Size() != 0 {
+			t.Errorf("Expected empty file, got size %d", info.Size())
 		}
 	})
 }

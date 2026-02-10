@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"math"
@@ -22,8 +23,8 @@ type Provider interface {
 	IsAuthenticated() bool
 	ListModels() ([]Model, error)
 	DiscoverModels() ([]Model, error) // For dynamic discovery (OpenCode)
-	Call(model string, prompt string) (*Response, error)
-	Stream(model string, prompt string) (<-chan string, error)
+	Call(ctx context.Context, model string, prompt string) (*Response, error)
+	Stream(ctx context.Context, model string, prompt string) (<-chan string, error)
 	GetRateLimitInfo() (*RateLimitInfo, error)
 	GetQuotaInfo() (*QuotaInfo, error)
 	SupportsCodingPlan() bool // For Z.ai and Kimi

@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -159,7 +160,7 @@ func TestRequestyProvider_Call(t *testing.T) {
 	provider.baseURL = server.URL + "/v1"
 	provider.Authenticate("test-key")
 
-	response, err := provider.Call("test-model", "test prompt")
+	response, err := provider.Call(context.TODO(), "test-model", "test prompt")
 	if err != nil {
 		t.Fatalf("Call failed: %v", err)
 	}
@@ -190,7 +191,7 @@ func TestRequestyProvider_Call(t *testing.T) {
 func TestRequestyProvider_Call_NotAuthenticated(t *testing.T) {
 	provider := NewRequestyProvider()
 
-	_, err := provider.Call("test-model", "test prompt")
+	_, err := provider.Call(context.TODO(), "test-model", "test prompt")
 	if err == nil {
 		t.Error("Expected error when not authenticated")
 	}
@@ -209,7 +210,7 @@ func TestRequestyProvider_Call_ServerError(t *testing.T) {
 	provider.Authenticate("test-key")
 	provider.SetMaxRetries(1) // Reduce retries for faster test
 
-	_, err := provider.Call("test-model", "test prompt")
+	_, err := provider.Call(context.TODO(), "test-model", "test prompt")
 	if err == nil {
 		t.Error("Expected error for server error")
 	}

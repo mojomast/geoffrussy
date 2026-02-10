@@ -3,6 +3,7 @@ package provider
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -128,7 +129,7 @@ func (z *ZAIProvider) ListModels() ([]Model, error) {
 }
 
 // Call makes a non-streaming API call to Z.ai
-func (z *ZAIProvider) Call(model string, prompt string) (*Response, error) {
+func (z *ZAIProvider) Call(ctx context.Context, model string, prompt string) (*Response, error) {
 	if !z.IsAuthenticated() {
 		return nil, fmt.Errorf("provider not authenticated")
 	}
@@ -230,7 +231,7 @@ func (z *ZAIProvider) Call(model string, prompt string) (*Response, error) {
 }
 
 // Stream makes a streaming API call to Z.ai
-func (z *ZAIProvider) Stream(model string, prompt string) (<-chan string, error) {
+func (z *ZAIProvider) Stream(ctx context.Context, model string, prompt string) (<-chan string, error) {
 	if !z.IsAuthenticated() {
 		return nil, fmt.Errorf("provider not authenticated")
 	}

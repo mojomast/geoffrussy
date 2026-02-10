@@ -3,6 +3,7 @@ package provider
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -192,7 +193,7 @@ func (o *OpenAIProvider) ListModels() ([]Model, error) {
 }
 
 // Call makes a synchronous API call to OpenAI
-func (o *OpenAIProvider) Call(model string, prompt string) (*Response, error) {
+func (o *OpenAIProvider) Call(ctx context.Context, model string, prompt string) (*Response, error) {
 	if !o.IsAuthenticated() {
 		return nil, fmt.Errorf("provider not authenticated")
 	}
@@ -313,7 +314,7 @@ func (o *OpenAIProvider) Call(model string, prompt string) (*Response, error) {
 }
 
 // Stream makes a streaming API call to OpenAI
-func (o *OpenAIProvider) Stream(model string, prompt string) (<-chan string, error) {
+func (o *OpenAIProvider) Stream(ctx context.Context, model string, prompt string) (<-chan string, error) {
 	if !o.IsAuthenticated() {
 		return nil, fmt.Errorf("provider not authenticated")
 	}

@@ -2,6 +2,7 @@ package provider
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -132,7 +133,7 @@ func (r *RequestyProvider) ListModels() ([]Model, error) {
 }
 
 // Call makes a synchronous API call to Requesty.ai
-func (r *RequestyProvider) Call(model string, prompt string) (*Response, error) {
+func (r *RequestyProvider) Call(ctx context.Context, model string, prompt string) (*Response, error) {
 	if !r.IsAuthenticated() {
 		return nil, fmt.Errorf("provider not authenticated")
 	}
@@ -250,7 +251,7 @@ func (r *RequestyProvider) Call(model string, prompt string) (*Response, error) 
 }
 
 // Stream makes a streaming API call to Requesty.ai
-func (r *RequestyProvider) Stream(model string, prompt string) (<-chan string, error) {
+func (r *RequestyProvider) Stream(ctx context.Context, model string, prompt string) (<-chan string, error) {
 	if !r.IsAuthenticated() {
 		return nil, fmt.Errorf("provider not authenticated")
 	}

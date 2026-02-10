@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"time"
@@ -148,7 +149,7 @@ func (b *Bridge) ValidateModel(providerName, modelName string) error {
 }
 
 // Call makes a non-streaming API call using the specified provider and model
-func (b *Bridge) Call(providerName, model, prompt string) (*Response, error) {
+func (b *Bridge) Call(ctx context.Context, providerName, model, prompt string) (*Response, error) {
 	provider, err := b.GetProvider(providerName)
 	if err != nil {
 		return nil, err
@@ -169,7 +170,7 @@ func (b *Bridge) Call(providerName, model, prompt string) (*Response, error) {
 	}
 
 	// Make the call
-	resp, err := provider.Call(model, prompt)
+	resp, err := provider.Call(ctx, model, prompt)
 	if err != nil {
 		return nil, err
 	}
@@ -181,7 +182,7 @@ func (b *Bridge) Call(providerName, model, prompt string) (*Response, error) {
 }
 
 // Stream makes a streaming API call using the specified provider and model
-func (b *Bridge) Stream(providerName, model, prompt string) (<-chan string, error) {
+func (b *Bridge) Stream(ctx context.Context, providerName, model, prompt string) (<-chan string, error) {
 	provider, err := b.GetProvider(providerName)
 	if err != nil {
 		return nil, err
@@ -202,7 +203,7 @@ func (b *Bridge) Stream(providerName, model, prompt string) (<-chan string, erro
 	}
 
 	// Make the streaming call
-	ch, err := provider.Stream(model, prompt)
+	ch, err := provider.Stream(ctx, model, prompt)
 	if err != nil {
 		return nil, err
 	}

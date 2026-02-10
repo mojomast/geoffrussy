@@ -1,6 +1,7 @@
 package design
 
 import (
+	"context"
 	"fmt"
 	"testing"
 	"time"
@@ -34,7 +35,7 @@ func (m *MockProvider) DiscoverModels() ([]provider.Model, error) {
 	return []provider.Model{}, nil
 }
 
-func (m *MockProvider) Call(model string, prompt string) (*provider.Response, error) {
+func (m *MockProvider) Call(ctx context.Context, model string, prompt string) (*provider.Response, error) {
 	return &provider.Response{
 		Content:      m.response,
 		TokensInput:  100,
@@ -44,7 +45,7 @@ func (m *MockProvider) Call(model string, prompt string) (*provider.Response, er
 	}, nil
 }
 
-func (m *MockProvider) Stream(model string, prompt string) (<-chan string, error) {
+func (m *MockProvider) Stream(ctx context.Context, model string, prompt string) (<-chan string, error) {
 	ch := make(chan string, 1)
 	ch <- m.response
 	close(ch)
@@ -552,7 +553,7 @@ func (m *MockProviderWithRetry) DiscoverModels() ([]provider.Model, error) {
 	return []provider.Model{}, nil
 }
 
-func (m *MockProviderWithRetry) Call(model string, prompt string) (*provider.Response, error) {
+func (m *MockProviderWithRetry) Call(ctx context.Context, model string, prompt string) (*provider.Response, error) {
 	if m.callCount >= len(m.responses) {
 		m.callCount++
 		return &provider.Response{
@@ -563,10 +564,10 @@ func (m *MockProviderWithRetry) Call(model string, prompt string) (*provider.Res
 			Provider:     "mock-retry",
 		}, nil
 	}
-	
+
 	response := m.responses[m.callCount]
 	m.callCount++
-	
+
 	return &provider.Response{
 		Content:      response,
 		TokensInput:  100,
@@ -576,7 +577,7 @@ func (m *MockProviderWithRetry) Call(model string, prompt string) (*provider.Res
 	}, nil
 }
 
-func (m *MockProviderWithRetry) Stream(model string, prompt string) (<-chan string, error) {
+func (m *MockProviderWithRetry) Stream(ctx context.Context, model string, prompt string) (<-chan string, error) {
 	ch := make(chan string, 1)
 	if m.callCount < len(m.responses) {
 		ch <- m.responses[m.callCount]
@@ -728,7 +729,7 @@ func TestGenerateArchitecture_RetryLogic(t *testing.T) {
 
 	t.Run("Success on second attempt after malformed JSON", func(t *testing.T) {
 		malformedJSON := `This is not JSON at all, just plain text`
-		
+
 		mockProvider := &MockProviderWithRetry{
 			responses: []string{malformedJSON, validJSON},
 			callCount: 0,
@@ -752,7 +753,7 @@ func TestGenerateArchitecture_RetryLogic(t *testing.T) {
 	t.Run("Success on third attempt after two failures", func(t *testing.T) {
 		malformedJSON1 := `{"invalid": "json", "missing": "required fields"}`
 		malformedJSON2 := `{"system_overview": "", "components": []}`
-		
+
 		mockProvider := &MockProviderWithRetry{
 			responses: []string{malformedJSON1, malformedJSON2, validJSON},
 			callCount: 0,
@@ -775,7 +776,7 @@ func TestGenerateArchitecture_RetryLogic(t *testing.T) {
 
 	t.Run("Failure after exhausting retries", func(t *testing.T) {
 		malformedJSON := `This is not valid JSON`
-		
+
 		mockProvider := &MockProviderWithRetry{
 			responses: []string{malformedJSON, malformedJSON, malformedJSON},
 			callCount: 0,
@@ -804,7 +805,7 @@ func TestGenerateArchitecture_RetryLogic(t *testing.T) {
 	t.Run("Success with JSON in markdown code fence on retry", func(t *testing.T) {
 		malformedJSON := `Here's the architecture: not valid json`
 		jsonInMarkdown := "```json\n" + validJSON + "\n```"
-		
+
 		mockProvider := &MockProviderWithRetry{
 			responses: []string{malformedJSON, jsonInMarkdown},
 			callCount: 0,
@@ -883,7 +884,7 @@ func TestTruncateString(t *testing.T) {
 	t.Run("Does not truncate short strings", func(t *testing.T) {
 		short := "Hello, World!"
 		result := truncateString(short, 100)
-		
+
 		if result != short {
 			t.Errorf("Expected '%s', got '%s'", short, result)
 		}
@@ -892,7 +893,7 @@ func TestTruncateString(t *testing.T) {
 	t.Run("Truncates long strings", func(t *testing.T) {
 		long := "This is a very long string that should be truncated"
 		result := truncateString(long, 10)
-		
+
 		if len(result) != 13 { // 10 chars + "..."
 			t.Errorf("Expected length 13, got %d", len(result))
 		}
@@ -909,7 +910,7 @@ func TestTruncateString(t *testing.T) {
 	t.Run("Handles exact length", func(t *testing.T) {
 		exact := "Exactly10!"
 		result := truncateString(exact, 10)
-		
+
 		if result != exact {
 			t.Errorf("Expected '%s', got '%s'", exact, result)
 		}

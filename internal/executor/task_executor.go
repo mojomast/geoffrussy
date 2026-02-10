@@ -185,7 +185,7 @@ func (te *TaskExecutor) ExecuteTask(taskID string) error {
 
 	// Call LLM to generate code
 	startTime := time.Now()
-	response, err := te.provider.Call(modelName, prompt)
+	response, err := te.provider.Call(context.TODO(), modelName, prompt)
 	duration := time.Since(startTime)
 
 	if err != nil {

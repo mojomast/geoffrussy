@@ -2,6 +2,7 @@ package provider
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -132,7 +133,7 @@ func (f *FirmwareProvider) ListModels() ([]Model, error) {
 }
 
 // Call makes a synchronous API call to Firmware.ai
-func (f *FirmwareProvider) Call(model string, prompt string) (*Response, error) {
+func (f *FirmwareProvider) Call(ctx context.Context, model string, prompt string) (*Response, error) {
 	if !f.IsAuthenticated() {
 		return nil, fmt.Errorf("provider not authenticated")
 	}
@@ -241,7 +242,7 @@ func (f *FirmwareProvider) Call(model string, prompt string) (*Response, error) 
 }
 
 // Stream makes a streaming API call to Firmware.ai
-func (f *FirmwareProvider) Stream(model string, prompt string) (<-chan string, error) {
+func (f *FirmwareProvider) Stream(ctx context.Context, model string, prompt string) (<-chan string, error) {
 	if !f.IsAuthenticated() {
 		return nil, fmt.Errorf("provider not authenticated")
 	}

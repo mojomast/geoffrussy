@@ -3,6 +3,7 @@ package provider
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -135,7 +136,7 @@ func (a *AnthropicProvider) ListModels() ([]Model, error) {
 }
 
 // Call makes a non-streaming API call to Anthropic
-func (a *AnthropicProvider) Call(model string, prompt string) (*Response, error) {
+func (a *AnthropicProvider) Call(ctx context.Context, model string, prompt string) (*Response, error) {
 	if !a.IsAuthenticated() {
 		return nil, fmt.Errorf("provider not authenticated")
 	}
@@ -236,7 +237,7 @@ func (a *AnthropicProvider) Call(model string, prompt string) (*Response, error)
 }
 
 // Stream makes a streaming API call to Anthropic
-func (a *AnthropicProvider) Stream(model string, prompt string) (<-chan string, error) {
+func (a *AnthropicProvider) Stream(ctx context.Context, model string, prompt string) (<-chan string, error) {
 	if !a.IsAuthenticated() {
 		return nil, fmt.Errorf("provider not authenticated")
 	}

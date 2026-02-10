@@ -1,6 +1,7 @@
 package interview
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"path/filepath"
@@ -374,7 +375,7 @@ func (m *MockProvider) DiscoverModels() ([]provider.Model, error) {
 	return []provider.Model{}, nil
 }
 
-func (m *MockProvider) Call(model string, prompt string) (*provider.Response, error) {
+func (m *MockProvider) Call(ctx context.Context, model string, prompt string) (*provider.Response, error) {
 	m.callCount++
 
 	// Return predefined responses based on prompt content
@@ -400,7 +401,7 @@ func (m *MockProvider) Call(model string, prompt string) (*provider.Response, er
 	}, nil
 }
 
-func (m *MockProvider) Stream(model string, prompt string) (<-chan string, error) {
+func (m *MockProvider) Stream(ctx context.Context, model string, prompt string) (<-chan string, error) {
 	ch := make(chan string, 1)
 	ch <- "Mock stream response"
 	close(ch)

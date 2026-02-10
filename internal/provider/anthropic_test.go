@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -134,7 +135,7 @@ func TestAnthropicProvider_Call(t *testing.T) {
 	provider.Authenticate("test-api-key")
 
 	// Make API call
-	resp, err := provider.Call("claude-3-haiku-20240307", "Hello")
+	resp, err := provider.Call(context.TODO(), "claude-3-haiku-20240307", "Hello")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -202,7 +203,7 @@ func TestAnthropicProvider_Stream(t *testing.T) {
 	provider.Authenticate("test-api-key")
 
 	// Make streaming call
-	ch, err := provider.Stream("claude-3-haiku-20240307", "Hello")
+	ch, err := provider.Stream(context.TODO(), "claude-3-haiku-20240307", "Hello")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -356,7 +357,7 @@ func TestAnthropicProvider_CallError(t *testing.T) {
 	provider.SetMaxRetries(0) // Don't retry for this test
 
 	// Make API call
-	_, err := provider.Call("claude-3-haiku-20240307", "Hello")
+	_, err := provider.Call(context.TODO(), "claude-3-haiku-20240307", "Hello")
 	if err == nil {
 		t.Error("expected error, got nil")
 	}

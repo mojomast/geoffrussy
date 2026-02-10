@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -144,7 +145,7 @@ func TestKimiProvider_Call(t *testing.T) {
 	provider.Authenticate("test-api-key")
 
 	// Make API call
-	resp, err := provider.Call("moonshot-v1-8k", "Hello")
+	resp, err := provider.Call(context.TODO(), "moonshot-v1-8k", "Hello")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -212,7 +213,7 @@ func TestKimiProvider_Stream(t *testing.T) {
 	provider.Authenticate("test-api-key")
 
 	// Make streaming call
-	ch, err := provider.Stream("moonshot-v1-8k", "Hello")
+	ch, err := provider.Stream(context.TODO(), "moonshot-v1-8k", "Hello")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -400,7 +401,7 @@ func TestKimiProvider_CallError(t *testing.T) {
 	provider.SetMaxRetries(0) // Don't retry for this test
 
 	// Make API call
-	_, err := provider.Call("moonshot-v1-8k", "Hello")
+	_, err := provider.Call(context.TODO(), "moonshot-v1-8k", "Hello")
 	if err == nil {
 		t.Error("expected error, got nil")
 	}

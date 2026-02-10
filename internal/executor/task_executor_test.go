@@ -1,6 +1,7 @@
 package executor
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -13,17 +14,19 @@ import (
 // mockProvider implements provider.Provider for testing
 type mockProvider struct{}
 
-func (m *mockProvider) Name() string                                                { return "mock" }
-func (m *mockProvider) Authenticate(apiKey string) error                            { return nil }
-func (m *mockProvider) IsAuthenticated() bool                                       { return true }
-func (m *mockProvider) ListModels() ([]provider.Model, error)                       { return nil, nil }
-func (m *mockProvider) DiscoverModels() ([]provider.Model, error)                   { return nil, nil }
-func (m *mockProvider) Stream(model string, prompt string) (<-chan string, error)   { return nil, nil }
-func (m *mockProvider) GetRateLimitInfo() (*provider.RateLimitInfo, error)          { return nil, nil }
-func (m *mockProvider) GetQuotaInfo() (*provider.QuotaInfo, error)                  { return nil, nil }
-func (m *mockProvider) SupportsCodingPlan() bool                                    { return false }
+func (m *mockProvider) Name() string                              { return "mock" }
+func (m *mockProvider) Authenticate(apiKey string) error          { return nil }
+func (m *mockProvider) IsAuthenticated() bool                     { return true }
+func (m *mockProvider) ListModels() ([]provider.Model, error)     { return nil, nil }
+func (m *mockProvider) DiscoverModels() ([]provider.Model, error) { return nil, nil }
+func (m *mockProvider) Stream(ctx context.Context, model string, prompt string) (<-chan string, error) {
+	return nil, nil
+}
+func (m *mockProvider) GetRateLimitInfo() (*provider.RateLimitInfo, error) { return nil, nil }
+func (m *mockProvider) GetQuotaInfo() (*provider.QuotaInfo, error)         { return nil, nil }
+func (m *mockProvider) SupportsCodingPlan() bool                           { return false }
 
-func (m *mockProvider) Call(model string, prompt string) (*provider.Response, error) {
+func (m *mockProvider) Call(ctx context.Context, model string, prompt string) (*provider.Response, error) {
 	return &provider.Response{
 		Content:      `{"explanation":"test","files":[]}`,
 		TokensInput:  10,
@@ -261,7 +264,7 @@ func TestTaskExecutor_AuditLogging(t *testing.T) {
 
 // contains checks if a string contains a substring
 func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(substr) == 0 || 
+	return len(s) >= len(substr) && (s == substr || len(substr) == 0 ||
 		(len(s) > 0 && len(substr) > 0 && containsHelper(s, substr)))
 }
 
