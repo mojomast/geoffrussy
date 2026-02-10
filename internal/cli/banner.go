@@ -1,8 +1,15 @@
 package cli
 
-// Banner returns the Geoffrussy ASCII art banner
+import (
+	"strings"
+
+	"github.com/charmbracelet/lipgloss"
+	"github.com/lucasb-eyer/go-colorful"
+)
+
+// Banner returns the Geoffrussy ASCII art banner with a horizontal color gradient
 func Banner() string {
-	return `
+	bannerText := `
   /$$$$$$                       /$$$$$$   /$$$$$$                                                
  /$$__  $$                     /$$__  $$ /$$__  $$                                               
 | $$  \__/  /$$$$$$   /$$$$$$ | $$  \__/| $$  \__//$$$$$$  /$$   /$$  /$$$$$$$ /$$$$$$$ /$$   /$$
@@ -15,4 +22,56 @@ func Banner() string {
                                                                                        |  $$$$$$/
                                                                                         \______/  
 `
+
+	// Define gradient colors: cyan (#3CADFF) to purple (#BA3CFF)
+	// Using hardcoded valid hex values, so errors can be safely ignored
+	startColor, _ := colorful.Hex("#3CADFF")
+	endColor, _ := colorful.Hex("#BA3CFF")
+
+	// Split banner into lines
+	lines := strings.Split(bannerText, "\n")
+
+	// Find the maximum line width for gradient calculation
+	maxWidth := 0
+	for _, line := range lines {
+		if len(line) > maxWidth {
+			maxWidth = len(line)
+		}
+	}
+
+	// Build the gradient banner
+	var result strings.Builder
+
+	for lineIdx, line := range lines {
+		for i, char := range line {
+			if char == ' ' {
+				// Don't color spaces, just add them
+				result.WriteRune(char)
+			} else {
+				// Calculate gradient position based on character position relative to max width
+				var t float64
+				if maxWidth <= 1 {
+					t = 0
+				} else {
+					t = float64(i) / float64(maxWidth-1)
+				}
+
+				// Blend colors
+				gradientColor := startColor.BlendLuv(endColor, t)
+
+				// Apply color to character and reset immediately after
+				coloredChar := lipgloss.NewStyle().
+					Foreground(lipgloss.Color(gradientColor.Hex())).
+					Render(string(char))
+
+				result.WriteString(coloredChar)
+			}
+		}
+		// Add newline after each line except the last to avoid extra trailing newlines
+		if lineIdx < len(lines)-1 {
+			result.WriteRune('\n')
+		}
+	}
+
+	return result.String()
 }
