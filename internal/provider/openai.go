@@ -219,7 +219,7 @@ func (o *OpenAIProvider) Call(ctx context.Context, model string, prompt string) 
 	var resp *http.Response
 	err = o.RetryWithBackoff(func() error {
 		// Create a new request for each retry attempt
-		req, reqErr := http.NewRequest("POST", o.baseURL+"/chat/completions", bytes.NewBuffer(jsonData))
+		req, reqErr := http.NewRequestWithContext(ctx, "POST", o.baseURL+"/chat/completions", bytes.NewBuffer(jsonData))
 		if reqErr != nil {
 			return fmt.Errorf("failed to create request: %w", reqErr)
 		}
@@ -335,7 +335,7 @@ func (o *OpenAIProvider) Stream(ctx context.Context, model string, prompt string
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	req, err := http.NewRequest("POST", o.baseURL+"/chat/completions", bytes.NewBuffer(jsonData))
+	req, err := http.NewRequestWithContext(ctx, "POST", o.baseURL+"/chat/completions", bytes.NewBuffer(jsonData))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}

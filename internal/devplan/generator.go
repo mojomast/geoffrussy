@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mojomast/geoffrussy/internal/common"
 	"github.com/mojomast/geoffrussy/internal/design"
 	"github.com/mojomast/geoffrussy/internal/logging"
 	"github.com/mojomast/geoffrussy/internal/provider"
@@ -162,7 +163,7 @@ func (g *Generator) buildPhasesPrompt(architecture *design.Architecture, intervi
 
 CRITICAL OUTPUT RULES:
 1. Return ONLY a valid JSON array.
-2. Do NOT include markdown code fences (no ` + "```json" + ` or ` + "```" + `).
+2. The response must be strict JSON syntax.
 3. Do NOT include commentary or prose before/after JSON.
 4. Each phase must include 3-5 tasks and concrete acceptance criteria.
 5. Keep dependency IDs consistent and acyclic.
@@ -244,43 +245,13 @@ func (g *Generator) parsePhasesResponse(response string) ([]Phase, error) {
 		}
 	}
 
-	// Handle Markdown code blocks
-	if strings.Contains(jsonContent, "```json") {
-		parts := strings.Split(jsonContent, "```json")
-		if len(parts) > 1 {
-			jsonContent = parts[1]
-		}
-		parts = strings.Split(jsonContent, "```")
-		if len(parts) > 0 {
-			jsonContent = parts[0]
-		}
-	} else if strings.Contains(jsonContent, "```") {
-		// Handle generic code blocks
-		parts := strings.Split(jsonContent, "```")
-		if len(parts) > 1 {
-			jsonContent = parts[1]
-		}
-	}
-
-	// Find JSON array start and end
-	startIdx := strings.Index(jsonContent, "[")
-	endIdx := strings.LastIndex(jsonContent, "]")
-
-	if startIdx != -1 && endIdx != -1 && endIdx > startIdx {
-		jsonContent = jsonContent[startIdx : endIdx+1]
-	}
-
-	jsonContent = strings.TrimSpace(jsonContent)
-
-	err := json.Unmarshal([]byte(jsonContent), &phases)
-	if err != nil {
+	if err := common.ParseJSON(jsonContent, &phases); err != nil {
 		// Log the raw output for debugging
 		g.logger.Error("Failed to parse phases JSON",
 			"error", err,
 			"raw_content", response,
-			"extracted_json", jsonContent,
 		)
-		return nil, fmt.Errorf("failed to parse AI response as JSON: %w. Check logs for raw output", err)
+		return nil, fmt.Errorf("failed to parse AI response as JSON: %w", err)
 	}
 
 	// Post-process parsed phases

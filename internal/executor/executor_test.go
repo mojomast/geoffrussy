@@ -2,7 +2,6 @@ package executor
 
 import (
 	"context"
-	"fmt"
 	"testing"
 	"time"
 
@@ -34,7 +33,12 @@ func (m *mockExecutorProvider) Call(ctx context.Context, model string, prompt st
 }
 
 func (m *mockExecutorProvider) Stream(ctx context.Context, model string, prompt string) (<-chan string, error) {
-	return nil, fmt.Errorf("not implemented")
+	ch := make(chan string, 1)
+	go func() {
+		defer close(ch)
+		ch <- `{"explanation":"ok","files":[]}`
+	}()
+	return ch, nil
 }
 
 func (m *mockExecutorProvider) GetRateLimitInfo() (*provider.RateLimitInfo, error) { return nil, nil }
@@ -681,7 +685,28 @@ func (m *mockProviderWithMultipleFiles) Call(ctx context.Context, model string, 
 }
 
 func (m *mockProviderWithMultipleFiles) Stream(ctx context.Context, model string, prompt string) (<-chan string, error) {
-	return nil, fmt.Errorf("not implemented")
+	ch := make(chan string, 1)
+	go func() {
+		defer close(ch)
+		ch <- `{
+			"explanation": "Creating test files",
+			"files": [
+				{
+					"path": "good-file.txt",
+					"content": "This file should be written successfully"
+				},
+				{
+					"path": "../bad-file.txt",
+					"content": "This file should fail path validation"
+				},
+				{
+					"path": "another-good-file.txt",
+					"content": "This file should also be written successfully"
+				}
+			]
+		}`
+	}()
+	return ch, nil
 }
 
 func (m *mockProviderWithMultipleFiles) GetRateLimitInfo() (*provider.RateLimitInfo, error) {

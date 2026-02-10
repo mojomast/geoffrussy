@@ -20,7 +20,12 @@ func (m *mockProvider) IsAuthenticated() bool                     { return true 
 func (m *mockProvider) ListModels() ([]provider.Model, error)     { return nil, nil }
 func (m *mockProvider) DiscoverModels() ([]provider.Model, error) { return nil, nil }
 func (m *mockProvider) Stream(ctx context.Context, model string, prompt string) (<-chan string, error) {
-	return nil, nil
+	ch := make(chan string, 1)
+	go func() {
+		defer close(ch)
+		ch <- `{"explanation":"test","files":[]}`
+	}()
+	return ch, nil
 }
 func (m *mockProvider) GetRateLimitInfo() (*provider.RateLimitInfo, error) { return nil, nil }
 func (m *mockProvider) GetQuotaInfo() (*provider.QuotaInfo, error)         { return nil, nil }
@@ -71,7 +76,7 @@ func TestTaskExecutor_PathSanitization(t *testing.T) {
 	sendUpdate := func(update TaskUpdate) {}
 
 	// Create task executor
-	te := NewTaskExecutor(store, mockProv, sendUpdate, "test-model")
+	te := NewTaskExecutor(context.Background(), store, mockProv, sendUpdate, "test-model")
 
 	// Verify that the task executor has security components initialized
 	if te.pathSanitizer == nil {
@@ -207,7 +212,7 @@ func TestTaskExecutor_AuditLogging(t *testing.T) {
 	sendUpdate := func(update TaskUpdate) {}
 
 	// Create task executor
-	te := NewTaskExecutor(store, mockProv, sendUpdate, "test-model")
+	te := NewTaskExecutor(context.Background(), store, mockProv, sendUpdate, "test-model")
 	defer te.auditLogger.Close()
 
 	// Test valid file write
