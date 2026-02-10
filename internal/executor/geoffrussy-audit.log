@@ -19,3 +19,6 @@
 [2026-02-10T00:55:21Z] [AUDIT] [FILE_OPERATION] operation="write" path="/home/mojo/projects/geoffrussy/geoffrussy/internal/executor/good-file.txt" status=success
 [2026-02-10T00:55:21Z] [SECURITY] [PATH_REJECTION] path="../bad-file.txt" reason="path '../bad-file.txt' is outside project root '/home/mojo/projects/geoffrussy/geoffrussy/internal/executor'"
 [2026-02-10T00:55:21Z] [AUDIT] [FILE_OPERATION] operation="write" path="/home/mojo/projects/geoffrussy/geoffrussy/internal/executor/another-good-file.txt" status=success
+[2026-02-10T01:01:05Z] [AUDIT] [FILE_OPERATION] operation="write" path="/home/mojo/projects/geoffrussy/geoffrussy/internal/executor/good-file.txt" status=success
+[2026-02-10T01:01:05Z] [SECURITY] [PATH_REJECTION] path="../bad-file.txt" reason="path '../bad-file.txt' is outside project root '/home/mojo/projects/geoffrussy/geoffrussy/internal/executor'"
+[2026-02-10T01:01:05Z] [AUDIT] [FILE_OPERATION] operation="write" path="/home/mojo/projects/geoffrussy/geoffrussy/internal/executor/another-good-file.txt" status=success
