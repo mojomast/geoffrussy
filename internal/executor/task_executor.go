@@ -431,7 +431,7 @@ func (te *TaskExecutor) writeFile(file File) error {
 	return te.writeFileSafe(file)
 }
 
-// writeFileSafe validates the file path and writes the file with audit logging
+// writeFileSafe validates the file path and content, then writes the file with audit logging
 func (te *TaskExecutor) writeFileSafe(file File) error {
 	// Validate path using PathSanitizer before writing
 	safePath, err := te.pathSanitizer.ValidatePath(file.Path)
@@ -444,6 +444,19 @@ func (te *TaskExecutor) writeFileSafe(file File) error {
 			"task_id", te.taskID,
 			"phase_id", te.phaseID)
 		return fmt.Errorf("path validation failed for '%s': %w", file.Path, err)
+	}
+
+	// Validate file content: must be valid UTF-8, max 1MB
+	iv := security.NewInputValidator()
+	if err := iv.ValidateFileContent(file.Content, 1048576); err != nil {
+		te.auditLogger.LogFileOperation("write", safePath, false)
+		te.logger.Warn("file content validation failed",
+			"file_path", safePath,
+			"error", err,
+			"content_size", len(file.Content),
+			"task_id", te.taskID,
+			"phase_id", te.phaseID)
+		return fmt.Errorf("file content validation failed for '%s': %w", safePath, err)
 	}
 
 	te.logger.Debug("path validated successfully",

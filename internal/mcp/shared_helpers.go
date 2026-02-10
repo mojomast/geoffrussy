@@ -6,8 +6,48 @@ import (
 	"strings"
 
 	"github.com/mojomast/geoffrussy/internal/config"
+	"github.com/mojomast/geoffrussy/internal/security"
 	"github.com/mojomast/geoffrussy/internal/state"
 )
+
+// inputValidator is a package-level InputValidator instance shared across all MCP handlers.
+var inputValidator = security.NewInputValidator()
+
+// validateProjectPath validates the projectPath argument using InputValidator.
+// It checks for null bytes, control characters, and invalid UTF-8.
+func validateProjectPath(projectPath string) error {
+	if err := inputValidator.ValidateFilePath(projectPath); err != nil {
+		return fmt.Errorf("invalid project path: %w", err)
+	}
+	// Ensure it's an absolute path
+	if !filepath.IsAbs(projectPath) {
+		return fmt.Errorf("project path must be absolute, got: %s", projectPath)
+	}
+	return nil
+}
+
+// validateTextInput validates a free-text input (e.g. answers, guidance, descriptions).
+// It checks the content is valid UTF-8 and within the specified size limit.
+// maxSize of 0 means no limit.
+func validateTextInput(name, value string, maxSize int) error {
+	if err := inputValidator.ValidateFileContent(value, maxSize); err != nil {
+		return fmt.Errorf("invalid %s: %w", name, err)
+	}
+	return nil
+}
+
+// validateIdentifier validates a short identifier string (e.g. taskId, phaseId, questionId).
+// Identifiers must not contain null bytes, control characters, or path separators.
+func validateIdentifier(name, value string) error {
+	if err := inputValidator.ValidateFilePath(value); err != nil {
+		return fmt.Errorf("invalid %s: %w", name, err)
+	}
+	// Identifiers should not contain path separators to prevent path injection
+	if strings.Contains(value, "/") || strings.Contains(value, "\\") {
+		return fmt.Errorf("invalid %s: must not contain path separators", name)
+	}
+	return nil
+}
 
 func openStateStore(projectPath string) (*state.Store, error) {
 	dbPath := filepath.Join(projectPath, ".geoffrussy", "state.db")

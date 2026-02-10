@@ -80,6 +80,9 @@ func (h *InterviewHandlers) handleRunInterview(ctx context.Context, args map[str
 	if err != nil {
 		return ErrorResult(err.Error()), nil
 	}
+	if err := validateProjectPath(projectPath); err != nil {
+		return ErrorResult(err.Error()), nil
+	}
 
 	model, _ := ValidateAndGetString(args, "model", false)
 	resume, _ := ValidateAndGetBool(args, "resume", false, false)
@@ -139,14 +142,24 @@ func (h *InterviewHandlers) handleSubmitInterviewAnswer(ctx context.Context, arg
 	if err != nil {
 		return ErrorResult(err.Error()), nil
 	}
+	if err := validateProjectPath(projectPath); err != nil {
+		return ErrorResult(err.Error()), nil
+	}
 
 	questionID, err := ValidateAndGetString(args, "questionId", true)
 	if err != nil {
 		return ErrorResult(err.Error()), nil
 	}
+	if err := validateIdentifier("questionId", questionID); err != nil {
+		return ErrorResult(err.Error()), nil
+	}
 
 	answer, err := ValidateAndGetString(args, "answer", true)
 	if err != nil {
+		return ErrorResult(err.Error()), nil
+	}
+	// Validate answer text: max 50KB, must be valid UTF-8
+	if err := validateTextInput("answer", answer, 51200); err != nil {
 		return ErrorResult(err.Error()), nil
 	}
 

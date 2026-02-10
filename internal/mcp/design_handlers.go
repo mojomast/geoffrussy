@@ -2,9 +2,11 @@ package mcp
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/mojomast/geoffrussy/internal/config"
@@ -81,6 +83,9 @@ func (h *DesignHandlers) regenerateDesignTool() Tool {
 func (h *DesignHandlers) handleGenerateDesign(ctx context.Context, args map[string]interface{}) (*CallToolResult, error) {
 	projectPath, err := ValidateAndGetString(args, "projectPath", true)
 	if err != nil {
+		return ErrorResult(err.Error()), nil
+	}
+	if err := validateProjectPath(projectPath); err != nil {
 		return ErrorResult(err.Error()), nil
 	}
 
@@ -160,18 +165,19 @@ func (h *DesignHandlers) handleRegenerateDesign(ctx context.Context, args map[st
 	if err != nil {
 		return ErrorResult(err.Error()), nil
 	}
+	if err := validateProjectPath(projectPath); err != nil {
+		return ErrorResult(err.Error()), nil
+	}
 
 	guidance, _ := ValidateAndGetString(args, "guidance", false)
-	// preserveComponents, _ := ValidateAndGetBool(args, "preserveComponents", false, true)
+	preserveComponents, _ := ValidateAndGetBool(args, "preserveComponents", false, true)
 
-	// For now, we will just re-run generation with guidance appended to prompts if possible,
-	// or just re-run generation if the generator doesn't support full refinement context yet.
-	// The current generator has RefineArchitecture but it's per section.
-	// To support full regeneration with guidance, we might need to modify the prompt in GenerateArchitecture
-	// or use a new method. Since I can't modify Generator easily, I will just re-run GenerateArchitecture
-	// but maybe append guidance to interview data temporarily? Or just warn that guidance is limited.
-
-	// Actually, let's just use GenerateArchitecture for now.
+	// Validate guidance text if provided (max 50KB)
+	if guidance != "" {
+		if err := validateTextInput("guidance", guidance, 51200); err != nil {
+			return ErrorResult(err.Error()), nil
+		}
+	}
 
 	store, err := openStateStore(projectPath)
 	if err != nil {
@@ -185,24 +191,47 @@ func (h *DesignHandlers) handleRegenerateDesign(ctx context.Context, args map[st
 		return ErrorResult("Interview data not found"), nil
 	}
 
-	if guidance != "" {
-		// Append guidance to problem statement or create a new field if possible
-		// Since we can't change the struct, we append it to ProblemStatement temporarily for the prompt
-		interviewData.ProblemStatement += "\n\nAdditional Guidance: " + guidance
-	}
-
 	prov, modelName, err := initProviderForStage(h.configManager, "design.refine", "")
 	if err != nil {
 		return ErrorResult(fmt.Sprintf("Failed to initialize provider: %v", err)), nil
 	}
 
 	generator := design.NewGenerator(prov, modelName)
-	arch, err := generator.GenerateArchitecture(interviewData)
-	if err != nil {
-		return ErrorResult(fmt.Sprintf("Failed to regenerate: %v", err)), nil
+
+	var arch *design.Architecture
+	var refinedSections []string
+
+	if preserveComponents && guidance != "" {
+		// Incremental refinement: load existing architecture and refine only
+		// sections relevant to the guidance instead of full regeneration.
+		arch, err = loadExistingArchitecture(projectPath, projectID)
+		if err != nil {
+			// Fall back to full regeneration if no existing architecture
+			return h.fullRegenerate(generator, interviewData, guidance, projectPath, projectID, store)
+		}
+
+		// Determine which sections the guidance targets
+		sections := identifyTargetSections(guidance, generator.ListRefinableSections())
+		if len(sections) == 0 {
+			// Guidance doesn't match specific sections; refine system_overview as default
+			sections = []string{"system_overview"}
+		}
+
+		// Refine each identified section
+		for _, section := range sections {
+			arch, err = generator.RefineArchitecture(arch, section, guidance)
+			if err != nil {
+				return ErrorResult(fmt.Sprintf("Failed to refine section '%s': %v", section, err)), nil
+			}
+			refinedSections = append(refinedSections, section)
+		}
+	} else {
+		// Full regeneration (original behavior)
+		result, callErr := h.fullRegenerate(generator, interviewData, guidance, projectPath, projectID, store)
+		return result, callErr
 	}
 
-	// Save
+	// Save the refined architecture
 	archPath := filepath.Join(projectPath, ".geoffrussy", "architecture.json")
 	jsonStr, err := generator.ExportJSON(arch)
 	if err != nil {
@@ -231,7 +260,147 @@ func (h *DesignHandlers) handleRegenerateDesign(ctx context.Context, args map[st
 		return ErrorResult(fmt.Sprintf("Failed to update project stage: %v", err)), nil
 	}
 
-	return SuccessResult("🏗️ Architecture Regenerated with guidance."), nil
+	summary := fmt.Sprintf("Architecture incrementally refined.\nSections updated: %s\nUnchanged sections were preserved.", strings.Join(refinedSections, ", "))
+	return SuccessResult(summary), nil
+}
+
+// fullRegenerate performs a complete architecture regeneration with optional guidance.
+func (h *DesignHandlers) fullRegenerate(generator *design.Generator, interviewData *state.InterviewData, guidance, projectPath, projectID string, store *state.Store) (*CallToolResult, error) {
+	if guidance != "" {
+		interviewData.ProblemStatement += "\n\nAdditional Guidance: " + guidance
+	}
+
+	arch, err := generator.GenerateArchitecture(interviewData)
+	if err != nil {
+		return ErrorResult(fmt.Sprintf("Failed to regenerate: %v", err)), nil
+	}
+
+	archPath := filepath.Join(projectPath, ".geoffrussy", "architecture.json")
+	jsonStr, err := generator.ExportJSON(arch)
+	if err != nil {
+		return ErrorResult(fmt.Sprintf("Failed to export: %v", err)), nil
+	}
+	if err := writeArchitectureJSON(archPath, jsonStr); err != nil {
+		return ErrorResult(fmt.Sprintf("Failed to save: %v", err)), nil
+	}
+
+	mdContent, err := generator.ExportMarkdown(arch)
+	if err != nil {
+		return ErrorResult(fmt.Sprintf("Failed to export markdown: %v", err)), nil
+	}
+
+	stateArch := &state.Architecture{
+		ProjectID: projectID,
+		Content:   mdContent,
+		CreatedAt: time.Now(),
+	}
+
+	if err := store.SaveArchitecture(projectID, stateArch); err != nil {
+		return ErrorResult(fmt.Sprintf("Failed to save architecture to store: %v", err)), nil
+	}
+
+	if err := store.UpdateProjectStage(projectID, state.StageDesign); err != nil {
+		return ErrorResult(fmt.Sprintf("Failed to update project stage: %v", err)), nil
+	}
+
+	return SuccessResult("Architecture fully regenerated with guidance."), nil
+}
+
+// loadExistingArchitecture loads the architecture from the JSON file on disk.
+func loadExistingArchitecture(projectPath, projectID string) (*design.Architecture, error) {
+	archPath := filepath.Join(projectPath, ".geoffrussy", "architecture.json")
+	data, err := os.ReadFile(archPath)
+	if err != nil {
+		return nil, fmt.Errorf("no existing architecture found: %w", err)
+	}
+
+	var arch design.Architecture
+	if err := json.Unmarshal(data, &arch); err != nil {
+		return nil, fmt.Errorf("failed to parse existing architecture: %w", err)
+	}
+
+	if arch.ProjectID == "" {
+		arch.ProjectID = projectID
+	}
+
+	return &arch, nil
+}
+
+// identifyTargetSections determines which architecture sections are relevant to the guidance.
+// It matches keywords in the guidance against known section names.
+func identifyTargetSections(guidance string, allSections []string) []string {
+	lower := strings.ToLower(guidance)
+
+	// Map of keywords to section names
+	keywordMap := map[string]string{
+		"overview":      "system_overview",
+		"system":        "system_overview",
+		"component":     "components",
+		"service":       "components",
+		"technology":    "technology_rationale",
+		"tech":          "technology_rationale",
+		"rationale":     "technology_rationale",
+		"scale":         "scaling_strategy",
+		"scaling":       "scaling_strategy",
+		"performance":   "scaling_strategy",
+		"cache":         "scaling_strategy",
+		"load":          "scaling_strategy",
+		"api":           "api_contract",
+		"endpoint":      "api_contract",
+		"rest":          "api_contract",
+		"websocket":     "api_contract",
+		"database":      "database_schema",
+		"schema":        "database_schema",
+		"table":         "database_schema",
+		"sql":           "database_schema",
+		"security":      "security",
+		"auth":          "security",
+		"encrypt":       "security",
+		"audit":         "security",
+		"observability": "observability",
+		"logging":       "observability",
+		"metric":        "observability",
+		"tracing":       "observability",
+		"monitor":       "observability",
+		"deploy":        "deployment",
+		"deployment":    "deployment",
+		"staging":       "deployment",
+		"production":    "deployment",
+		"kubernetes":    "deployment",
+		"docker":        "deployment",
+		"risk":          "risks",
+		"mitigation":    "risks",
+	}
+
+	// Also allow exact section name matches
+	sectionSet := make(map[string]bool)
+	for _, s := range allSections {
+		sectionSet[s] = true
+	}
+
+	matched := make(map[string]bool)
+
+	// Check for exact section names in guidance
+	for _, section := range allSections {
+		if strings.Contains(lower, strings.ReplaceAll(section, "_", " ")) || strings.Contains(lower, section) {
+			matched[section] = true
+		}
+	}
+
+	// Check for keyword matches
+	for keyword, section := range keywordMap {
+		if strings.Contains(lower, keyword) {
+			if sectionSet[section] {
+				matched[section] = true
+			}
+		}
+	}
+
+	var result []string
+	for section := range matched {
+		result = append(result, section)
+	}
+	return result
 }
 
 func writeArchitectureJSON(path, content string) error {

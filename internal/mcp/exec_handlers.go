@@ -118,9 +118,15 @@ func (h *ExecHandlers) handleExecutePhase(ctx context.Context, args map[string]i
 	if err != nil {
 		return ErrorResult(err.Error()), nil
 	}
+	if err := validateProjectPath(projectPath); err != nil {
+		return ErrorResult(err.Error()), nil
+	}
 
 	phaseID, err := ValidateAndGetString(args, "phaseId", true)
 	if err != nil {
+		return ErrorResult(err.Error()), nil
+	}
+	if err := validateIdentifier("phaseId", phaseID); err != nil {
 		return ErrorResult(err.Error()), nil
 	}
 
@@ -182,9 +188,15 @@ func (h *ExecHandlers) handleExecuteTask(ctx context.Context, args map[string]in
 	if err != nil {
 		return ErrorResult(err.Error()), nil
 	}
+	if err := validateProjectPath(projectPath); err != nil {
+		return ErrorResult(err.Error()), nil
+	}
 
 	taskID, err := ValidateAndGetString(args, "taskId", true)
 	if err != nil {
+		return ErrorResult(err.Error()), nil
+	}
+	if err := validateIdentifier("taskId", taskID); err != nil {
 		return ErrorResult(err.Error()), nil
 	}
 
@@ -236,9 +248,15 @@ func (h *ExecHandlers) handleGetTaskOutput(ctx context.Context, args map[string]
 	if err != nil {
 		return ErrorResult(err.Error()), nil
 	}
+	if err := validateProjectPath(projectPath); err != nil {
+		return ErrorResult(err.Error()), nil
+	}
 
 	taskID, err := ValidateAndGetString(args, "taskId", true)
 	if err != nil {
+		return ErrorResult(err.Error()), nil
+	}
+	if err := validateIdentifier("taskId", taskID); err != nil {
 		return ErrorResult(err.Error()), nil
 	}
 
@@ -268,9 +286,15 @@ func (h *ExecHandlers) handleHandleBlocker(ctx context.Context, args map[string]
 	if err != nil {
 		return ErrorResult(err.Error()), nil
 	}
+	if err := validateProjectPath(projectPath); err != nil {
+		return ErrorResult(err.Error()), nil
+	}
 
 	taskID, err := ValidateAndGetString(args, "taskId", true)
 	if err != nil {
+		return ErrorResult(err.Error()), nil
+	}
+	if err := validateIdentifier("taskId", taskID); err != nil {
 		return ErrorResult(err.Error()), nil
 	}
 
@@ -309,6 +333,10 @@ func (h *ExecHandlers) handleHandleBlocker(ctx context.Context, args map[string]
 		modification, _ := ValidateAndGetString(args, "modification", false)
 		if modification == "" {
 			return ErrorResult("Modification description required for 'modify' action"), nil
+		}
+		// Validate modification text (max 10KB to prevent abuse)
+		if err := validateTextInput("modification", modification, 10240); err != nil {
+			return ErrorResult(err.Error()), nil
 		}
 
 		task, err := store.GetTask(taskID)

@@ -124,6 +124,9 @@ func (h *SimpleToolHandlers) handleGetStatus(ctx context.Context, args map[strin
 	if err != nil {
 		return ErrorResult(err.Error()), nil
 	}
+	if err := validateProjectPath(projectPath); err != nil {
+		return ErrorResult(err.Error()), nil
+	}
 
 	// Open state store
 	dbPath := filepath.Join(projectPath, ".geoffrussy", "state.db")
@@ -166,6 +169,9 @@ func (h *SimpleToolHandlers) handleGetStatus(ctx context.Context, args map[strin
 func (h *SimpleToolHandlers) handleGetStats(ctx context.Context, args map[string]interface{}) (*CallToolResult, error) {
 	projectPath, err := ValidateAndGetString(args, "projectPath", true)
 	if err != nil {
+		return ErrorResult(err.Error()), nil
+	}
+	if err := validateProjectPath(projectPath); err != nil {
 		return ErrorResult(err.Error()), nil
 	}
 
@@ -221,6 +227,9 @@ func (h *SimpleToolHandlers) handleListPhases(ctx context.Context, args map[stri
 	if err != nil {
 		return ErrorResult(err.Error()), nil
 	}
+	if err := validateProjectPath(projectPath); err != nil {
+		return ErrorResult(err.Error()), nil
+	}
 
 	// Open state store
 	dbPath := filepath.Join(projectPath, ".geoffrussy", "state.db")
@@ -269,9 +278,16 @@ func (h *SimpleToolHandlers) handleCreateCheckpoint(ctx context.Context, args ma
 	if err != nil {
 		return ErrorResult(err.Error()), nil
 	}
+	if err := validateProjectPath(projectPath); err != nil {
+		return ErrorResult(err.Error()), nil
+	}
 
 	name, err := ValidateAndGetString(args, "name", true)
 	if err != nil {
+		return ErrorResult(err.Error()), nil
+	}
+	// Validate checkpoint name: max 255 chars, valid UTF-8
+	if err := validateTextInput("checkpoint name", name, 255); err != nil {
 		return ErrorResult(err.Error()), nil
 	}
 
@@ -305,6 +321,9 @@ func (h *SimpleToolHandlers) handleCreateCheckpoint(ctx context.Context, args ma
 func (h *SimpleToolHandlers) handleListCheckpoints(ctx context.Context, args map[string]interface{}) (*CallToolResult, error) {
 	projectPath, err := ValidateAndGetString(args, "projectPath", true)
 	if err != nil {
+		return ErrorResult(err.Error()), nil
+	}
+	if err := validateProjectPath(projectPath); err != nil {
 		return ErrorResult(err.Error()), nil
 	}
 

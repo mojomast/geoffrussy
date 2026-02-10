@@ -67,6 +67,9 @@ func (h *PlanHandlers) handleCreateDevPlan(ctx context.Context, args map[string]
 	if err != nil {
 		return ErrorResult(err.Error()), nil
 	}
+	if err := validateProjectPath(projectPath); err != nil {
+		return ErrorResult(err.Error()), nil
+	}
 
 	model, _ := ValidateAndGetString(args, "model", false)
 
