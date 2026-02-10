@@ -1,6 +1,6 @@
 # geoffrussy
 
-Geoffrussy is an AI-driven software delivery orchestrator for real projects. It guides work through a staged pipeline, persists state locally, supports many model providers, and can run through CLI or MCP for autonomous agents.
+Geoffrussy is a Go 1.24 AI-driven software delivery orchestrator that guides projects through a staged pipeline (interview → design → plan → review → develop). It uses SQLite (via `mattn/go-sqlite3`, requires CGO), Cobra for CLI, Bubbletea for TUI, and supports 16 AI providers via an OpenAI-compatible interface pattern. Geoffrussy persists state locally, supports many model providers, and can run through CLI or MCP for autonomous agents.
 
 Pipeline:
 
