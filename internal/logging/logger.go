@@ -7,15 +7,38 @@ import (
 	"strings"
 )
 
+// Pre-compiled regex patterns for sensitive data detection.
+// These are compiled once at package init time for performance,
+// since SanitizeSensitive is now called on every log attribute.
+var (
+	sensitivePatterns = []*regexp.Regexp{
+		regexp.MustCompile(`sk-[a-zA-Z0-9]{20,}`),                                          // OpenAI style keys
+		regexp.MustCompile(`api[_-]?key[_-]?[a-zA-Z0-9]{20,}`),                             // Generic API keys
+		regexp.MustCompile(`Bearer\s+[a-zA-Z0-9\-._~+/]+=*`),                               // Bearer tokens
+		regexp.MustCompile(`[a-zA-Z0-9]{32,}`),                                             // Long alphanumeric strings (likely keys)
+		regexp.MustCompile(`AIza[a-zA-Z0-9\-_]{35}`),                                       // Google API keys
+		regexp.MustCompile(`[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`), // UUIDs
+	}
+	sensitiveEnvVarPattern = regexp.MustCompile(`(?i)(api[_-]?key|token|secret|password)\s*[:=]\s*[^\s,;]+`)
+)
+
 // Logger wraps slog.Logger to provide structured logging throughout the application
 type Logger struct {
 	slog *slog.Logger
 }
 
-// NewLogger creates a new Logger with the specified level and output writer
+// NewLogger creates a new Logger with the specified level and output writer.
+// All string attribute values are automatically scrubbed for sensitive data
+// (API keys, tokens, passwords) before being written to the output.
 func NewLogger(level slog.Level, output io.Writer) *Logger {
 	handler := slog.NewJSONHandler(output, &slog.HandlerOptions{
 		Level: level,
+		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
+			if a.Value.Kind() == slog.KindString {
+				a.Value = slog.StringValue(SanitizeSensitive(a.Value.String()))
+			}
+			return a
+		},
 	})
 	return &Logger{
 		slog: slog.New(handler),
@@ -49,29 +72,17 @@ func (l *Logger) With(args ...any) *Logger {
 	}
 }
 
-// SanitizeSensitive redacts sensitive information like API keys from log output
-// It replaces API keys and other sensitive patterns with [REDACTED]
+// SanitizeSensitive redacts sensitive information like API keys from log output.
+// It replaces API keys and other sensitive patterns with [REDACTED].
+// Uses pre-compiled package-level regexes for performance.
 func SanitizeSensitive(value string) string {
-	// Pattern for API keys (common formats)
-	// Matches: sk-..., api_key_..., Bearer ..., etc.
-	patterns := []string{
-		`sk-[a-zA-Z0-9]{20,}`,                    // OpenAI style keys
-		`api[_-]?key[_-]?[a-zA-Z0-9]{20,}`,       // Generic API keys
-		`Bearer\s+[a-zA-Z0-9\-._~+/]+=*`,         // Bearer tokens
-		`[a-zA-Z0-9]{32,}`,                       // Long alphanumeric strings (likely keys)
-		`AIza[a-zA-Z0-9\-_]{35}`,                 // Google API keys
-		`[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`, // UUIDs (often used as keys)
-	}
-
 	result := value
-	for _, pattern := range patterns {
-		re := regexp.MustCompile(pattern)
+	for _, re := range sensitivePatterns {
 		result = re.ReplaceAllString(result, "[REDACTED]")
 	}
 
 	// Also redact common environment variable patterns
-	envVarPattern := regexp.MustCompile(`(?i)(api[_-]?key|token|secret|password)\s*[:=]\s*[^\s,;]+`)
-	result = envVarPattern.ReplaceAllStringFunc(result, func(match string) string {
+	result = sensitiveEnvVarPattern.ReplaceAllStringFunc(result, func(match string) string {
 		parts := strings.SplitN(match, ":", 2)
 		if len(parts) == 2 {
 			return parts[0] + ": [REDACTED]"

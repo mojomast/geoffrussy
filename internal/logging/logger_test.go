@@ -403,3 +403,88 @@ func TestLogger_ContextualLogging(t *testing.T) {
 		assert.Equal(t, "task-456", entry["task_id"])
 	}
 }
+
+func TestLogger_AutomaticScrubbing(t *testing.T) {
+	t.Run("ScrubsAPIKeyInAttribute", func(t *testing.T) {
+		var buf bytes.Buffer
+		logger := NewLogger(slog.LevelInfo, &buf)
+
+		// Pass a raw API key as an attribute value - should be automatically redacted
+		logger.Info("API call",
+			"api_key", "sk-1234567890abcdefghijklmnopqrstuvwxyz",
+			"provider", "openai",
+		)
+
+		output := buf.String()
+		assert.Contains(t, output, "[REDACTED]")
+		assert.NotContains(t, output, "sk-1234567890abcdefghijklmnopqrstuvwxyz")
+		assert.Contains(t, output, "openai")
+	})
+
+	t.Run("ScrubsBearerTokenInAttribute", func(t *testing.T) {
+		var buf bytes.Buffer
+		logger := NewLogger(slog.LevelInfo, &buf)
+
+		logger.Info("Request sent",
+			"authorization", "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test",
+		)
+
+		output := buf.String()
+		assert.Contains(t, output, "[REDACTED]")
+		assert.NotContains(t, output, "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9")
+	})
+
+	t.Run("ScrubsInMessageText", func(t *testing.T) {
+		var buf bytes.Buffer
+		logger := NewLogger(slog.LevelInfo, &buf)
+
+		// The message itself also goes through ReplaceAttr as slog.KindString
+		logger.Info("Using key sk-abcdefghij1234567890klmnopqr for request")
+
+		output := buf.String()
+		assert.NotContains(t, output, "sk-abcdefghij1234567890klmnopqr")
+		assert.Contains(t, output, "[REDACTED]")
+	})
+
+	t.Run("PreservesNonSensitiveAttributes", func(t *testing.T) {
+		var buf bytes.Buffer
+		logger := NewLogger(slog.LevelInfo, &buf)
+
+		logger.Info("Processing task",
+			"task_id", "task-123",
+			"phase", "develop",
+			"tokens", 500,
+		)
+
+		output := buf.String()
+		assert.Contains(t, output, "task-123")
+		assert.Contains(t, output, "develop")
+		assert.Contains(t, output, "500")
+	})
+
+	t.Run("ScrubsWithContextLogger", func(t *testing.T) {
+		var buf bytes.Buffer
+		logger := NewLogger(slog.LevelInfo, &buf)
+
+		// Even contextual loggers (via With) should scrub
+		contextLogger := logger.With("secret_key", "sk-contextkey12345678901234567890abc")
+		contextLogger.Info("doing work")
+
+		output := buf.String()
+		assert.NotContains(t, output, "sk-contextkey12345678901234567890abc")
+		assert.Contains(t, output, "[REDACTED]")
+	})
+
+	t.Run("ScrubsEnvVarPatterns", func(t *testing.T) {
+		var buf bytes.Buffer
+		logger := NewLogger(slog.LevelInfo, &buf)
+
+		logger.Info("Config loaded",
+			"config_line", "API_KEY=super_secret_value_123",
+		)
+
+		output := buf.String()
+		assert.NotContains(t, output, "super_secret_value_123")
+		assert.Contains(t, output, "[REDACTED]")
+	})
+}
