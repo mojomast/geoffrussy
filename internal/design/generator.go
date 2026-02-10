@@ -292,7 +292,7 @@ func (g *Generator) buildArchitecturePrompt(interviewData *state.InterviewData) 
 
 CRITICAL OUTPUT RULES:
 1. Return ONLY valid JSON matching the schema below.
-2. Do NOT include markdown code fences (no ` + "```json" + ` or ` + "```" + `).
+2. The response MUST BE strict JSON.
 3. Do NOT include any text outside the JSON object.
 4. Ensure all required fields are present.
 5. Make recommendations concrete and implementation-ready.

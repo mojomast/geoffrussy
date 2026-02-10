@@ -1,10 +1,10 @@
 package design
 
 import (
-	"encoding/json"
 	"fmt"
-	"regexp"
 	"strings"
+
+	"github.com/mojomast/geoffrussy/internal/common"
 )
 
 // ArchitectureJSON represents the JSON schema for architecture parsing from LLM responses
@@ -348,20 +348,9 @@ func ConvertToArchitecture(jsonArch *ArchitectureJSON, projectID string) *Archit
 func parseArchitectureJSON(response string, projectID string) (*Architecture, error) {
 	var archData ArchitectureJSON
 
-	// Try direct JSON parsing first
-	err := json.Unmarshal([]byte(response), &archData)
-	if err != nil {
-		// Try extracting JSON from markdown code fences
-		cleaned := extractJSONFromMarkdown(response)
-		if cleaned == "" {
-			return nil, fmt.Errorf("failed to parse architecture JSON: %w", err)
-		}
-
-		// Try parsing the extracted JSON
-		err = json.Unmarshal([]byte(cleaned), &archData)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse extracted JSON: %w", err)
-		}
+	// Use common parser
+	if err := common.ParseJSON(response, &archData); err != nil {
+		return nil, fmt.Errorf("failed to parse architecture JSON: %w", err)
 	}
 
 	// Validate all required fields are present
@@ -379,21 +368,9 @@ func parseArchitectureWithFallback(response string, projectID string) (*Architec
 	var archData ArchitectureJSON
 	var validationErrors []string
 
-	// Try direct JSON parsing first
-	err := json.Unmarshal([]byte(response), &archData)
-	if err != nil {
-		// Try extracting JSON from markdown code fences
-		cleaned := extractJSONFromMarkdown(response)
-		if cleaned == "" {
-			// Complete failure to parse
-			return nil, nil, fmt.Errorf("failed to parse architecture JSON: %w", err)
-		}
-
-		// Try parsing the extracted JSON
-		err = json.Unmarshal([]byte(cleaned), &archData)
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to parse extracted JSON: %w", err)
-		}
+	// Use common parser
+	if err := common.ParseJSON(response, &archData); err != nil {
+		return nil, nil, fmt.Errorf("failed to parse architecture JSON: %w", err)
 	}
 
 	// Validate and collect errors without failing immediately
@@ -450,29 +427,3 @@ func validateArchitectureJSONPartial(arch *ArchitectureJSON) []string {
 	return errors
 }
 
-// extractJSONFromMarkdown extracts JSON content from markdown code fences
-// Supports both ```json and ``` code fences
-func extractJSONFromMarkdown(content string) string {
-	// Try to find JSON in markdown code fences
-	// Pattern 1: ```json ... ```
-	jsonPattern := "```json\\s*\\n([\\s\\S]*?)\\n```"
-	re := regexp.MustCompile(jsonPattern)
-	matches := re.FindStringSubmatch(content)
-	if len(matches) > 1 {
-		return strings.TrimSpace(matches[1])
-	}
-
-	// Pattern 2: ``` ... ``` (generic code fence)
-	genericPattern := "```\\s*\\n([\\s\\S]*?)\\n```"
-	re = regexp.MustCompile(genericPattern)
-	matches = re.FindStringSubmatch(content)
-	if len(matches) > 1 {
-		extracted := strings.TrimSpace(matches[1])
-		// Verify it looks like JSON (starts with { or [)
-		if strings.HasPrefix(extracted, "{") || strings.HasPrefix(extracted, "[") {
-			return extracted
-		}
-	}
-
-	return ""
-}

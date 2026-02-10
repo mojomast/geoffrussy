@@ -169,7 +169,7 @@ func (o *OllamaProvider) Call(ctx context.Context, model string, prompt string) 
 			return fmt.Errorf("failed to marshal request: %w", err)
 		}
 
-		httpReq, err := http.NewRequest("POST", o.baseURL+"/api/chat", bytes.NewBuffer(jsonData))
+		httpReq, err := http.NewRequestWithContext(ctx, "POST", o.baseURL+"/api/chat", bytes.NewBuffer(jsonData))
 		if err != nil {
 			return fmt.Errorf("failed to create request: %w", err)
 		}
@@ -260,7 +260,7 @@ func (o *OllamaProvider) Stream(ctx context.Context, model string, prompt string
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	httpReq, err := http.NewRequest("POST", o.baseURL+"/api/chat", bytes.NewBuffer(jsonData))
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", o.baseURL+"/api/chat", bytes.NewBuffer(jsonData))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}

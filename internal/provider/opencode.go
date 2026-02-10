@@ -126,7 +126,7 @@ func (o *OpenCodeProvider) Call(ctx context.Context, model string, prompt string
 	var response *Response
 	err := o.RetryWithBackoff(func() error {
 		// Use opencode run command
-		cmd := exec.Command(o.opencodeCmd, "run", "--model", model, "--prompt", prompt, "--no-stream")
+		cmd := exec.CommandContext(ctx, o.opencodeCmd, "run", "--model", model, "--prompt", prompt, "--no-stream")
 
 		var stdout, stderr bytes.Buffer
 		cmd.Stdout = &stdout
@@ -186,7 +186,7 @@ func (o *OpenCodeProvider) Stream(ctx context.Context, model string, prompt stri
 	}
 
 	// Use opencode run command with streaming
-	cmd := exec.Command(o.opencodeCmd, "run", "--model", model, "--prompt", prompt, "--stream")
+	cmd := exec.CommandContext(ctx, o.opencodeCmd, "run", "--model", model, "--prompt", prompt, "--stream")
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {

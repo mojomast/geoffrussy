@@ -161,7 +161,7 @@ func (a *AnthropicProvider) Call(ctx context.Context, model string, prompt strin
 			return fmt.Errorf("failed to marshal request: %w", err)
 		}
 
-		httpReq, err := http.NewRequest("POST", a.baseURL+"/messages", bytes.NewBuffer(jsonData))
+		httpReq, err := http.NewRequestWithContext(ctx, "POST", a.baseURL+"/messages", bytes.NewBuffer(jsonData))
 		if err != nil {
 			return fmt.Errorf("failed to create request: %w", err)
 		}
@@ -260,7 +260,7 @@ func (a *AnthropicProvider) Stream(ctx context.Context, model string, prompt str
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	httpReq, err := http.NewRequest("POST", a.baseURL+"/messages", bytes.NewBuffer(jsonData))
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", a.baseURL+"/messages", bytes.NewBuffer(jsonData))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}

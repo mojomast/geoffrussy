@@ -105,7 +105,7 @@ func (e *Executor) ExecuteProject(projectID string, startPhaseID string, stopAft
 // ExecutePhase executes all tasks in a phase with error aggregation
 func (e *Executor) ExecutePhase(phaseID string) error {
 	// Get phase from store
-	phase, err := e.store.GetPhase(phaseID)
+	phase, err := e.store.GetPhaseWithContext(e.ctx, phaseID)
 	if err != nil {
 		return fmt.Errorf("failed to get phase: %w", err)
 	}
@@ -207,13 +207,13 @@ func (e *Executor) ExecuteTask(taskID string) error {
 	}
 
 	// Get task from store
-	task, err := e.store.GetTask(taskID)
+	task, err := e.store.GetTaskWithContext(e.ctx, taskID)
 	if err != nil {
 		return fmt.Errorf("failed to get task: %w", err)
 	}
 
 	// Update task status to in_progress
-	if err := e.store.UpdateTaskStatus(taskID, state.TaskInProgress); err != nil {
+	if err := e.store.UpdateTaskStatusWithContext(e.ctx, taskID, state.TaskInProgress); err != nil {
 		return fmt.Errorf("failed to update task status: %w", err)
 	}
 
@@ -228,13 +228,13 @@ func (e *Executor) ExecuteTask(taskID string) error {
 
 	// Execute the task using the provider
 	// Use TaskExecutor to actually generate code and write files
-	taskExecutor := NewTaskExecutor(e.store, e.provider, e.sendUpdate, e.modelName)
+	taskExecutor := NewTaskExecutor(e.ctx, e.store, e.provider, e.sendUpdate, e.modelName)
 	if err := taskExecutor.ExecuteTask(taskID); err != nil {
 		return fmt.Errorf("failed to execute task: %w", err)
 	}
 
 	// Update task status to completed
-	if err := e.store.UpdateTaskStatus(taskID, state.TaskCompleted); err != nil {
+	if err := e.store.UpdateTaskStatusWithContext(e.ctx, taskID, state.TaskCompleted); err != nil {
 		return fmt.Errorf("failed to update task status: %w", err)
 	}
 

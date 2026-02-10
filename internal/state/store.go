@@ -1,6 +1,7 @@
 package state
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -76,13 +77,25 @@ func (s *Store) open() error {
 // baseDelay is the initial delay in milliseconds
 // maxRetries is the maximum number of retry attempts (0 means infinite retries)
 func executeWithRetry(db *sql.DB, baseDelay int, maxRetries int, fn func(*sql.Tx) error) error {
+	return executeWithRetryContext(context.Background(), db, baseDelay, maxRetries, fn)
+}
+
+// executeWithRetryContext executes a transaction with exponential backoff and context cancellation
+func executeWithRetryContext(ctx context.Context, db *sql.DB, baseDelay int, maxRetries int, fn func(*sql.Tx) error) error {
 	const maxDelay = 5000 // Maximum delay in milliseconds
 
 	delay := baseDelay
 	retries := 0
 
 	for {
-		tx, err := db.Begin()
+		// Check context cancellation
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
+		tx, err := db.BeginTx(ctx, nil)
 		if err != nil {
 			return fmt.Errorf("failed to begin transaction: %w", err)
 		}
@@ -104,7 +117,11 @@ func executeWithRetry(db *sql.DB, baseDelay int, maxRetries int, fn func(*sql.Tx
 				return fmt.Errorf("max retries (%d) exceeded: %w", maxRetries, err)
 			}
 
-			time.Sleep(time.Duration(delay) * time.Millisecond)
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(time.Duration(delay) * time.Millisecond):
+			}
 
 			// Exponential backoff: delay = baseDelay * 2^retries, but cap at maxDelay
 			delay = baseDelay * (1 << retries)
@@ -311,13 +328,18 @@ func (s *Store) CreateProject(project *Project) error {
 
 // GetProject retrieves a project by ID
 func (s *Store) GetProject(id string) (*Project, error) {
+	return s.GetProjectWithContext(context.Background(), id)
+}
+
+// GetProjectWithContext retrieves a project by ID with context
+func (s *Store) GetProjectWithContext(ctx context.Context, id string) (*Project, error) {
 	query := `
 		SELECT id, name, created_at, current_stage, current_phase_id
 		FROM projects
 		WHERE id = ?
 	`
 	var project Project
-	err := s.db.QueryRow(query, id).Scan(
+	err := s.db.QueryRowContext(ctx, query, id).Scan(
 		&project.ID,
 		&project.Name,
 		&project.CreatedAt,
@@ -443,13 +465,18 @@ func (s *Store) SaveInterviewData(projectID string, data *InterviewData) error {
 
 // GetInterviewData retrieves interview data for a project
 func (s *Store) GetInterviewData(projectID string) (*InterviewData, error) {
+	return s.GetInterviewDataWithContext(context.Background(), projectID)
+}
+
+// GetInterviewDataWithContext retrieves interview data for a project with context
+func (s *Store) GetInterviewDataWithContext(ctx context.Context, projectID string) (*InterviewData, error) {
 	query := `
 		SELECT data
 		FROM interview_data
 		WHERE project_id = ?
 	`
 	var jsonData string
-	err := s.db.QueryRow(query, projectID).Scan(&jsonData)
+	err := s.db.QueryRowContext(ctx, query, projectID).Scan(&jsonData)
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("interview data not found for project: %s", projectID)
 	}
@@ -487,13 +514,18 @@ func (s *Store) SaveArchitecture(projectID string, arch *Architecture) error {
 
 // GetArchitecture retrieves architecture for a project
 func (s *Store) GetArchitecture(projectID string) (*Architecture, error) {
+	return s.GetArchitectureWithContext(context.Background(), projectID)
+}
+
+// GetArchitectureWithContext retrieves architecture for a project with context
+func (s *Store) GetArchitectureWithContext(ctx context.Context, projectID string) (*Architecture, error) {
 	query := `
 		SELECT project_id, content, created_at
 		FROM architectures
 		WHERE project_id = ?
 	`
 	var arch Architecture
-	err := s.db.QueryRow(query, projectID).Scan(
+	err := s.db.QueryRowContext(ctx, query, projectID).Scan(
 		&arch.ProjectID,
 		&arch.Content,
 		&arch.CreatedAt,
@@ -543,13 +575,18 @@ func (s *Store) SavePhase(phase *Phase) error {
 
 // GetPhase retrieves a phase by ID
 func (s *Store) GetPhase(id string) (*Phase, error) {
+	return s.GetPhaseWithContext(context.Background(), id)
+}
+
+// GetPhaseWithContext retrieves a phase by ID with context
+func (s *Store) GetPhaseWithContext(ctx context.Context, id string) (*Phase, error) {
 	query := `
 		SELECT id, project_id, number, title, content, status, created_at, started_at, completed_at
 		FROM phases
 		WHERE id = ?
 	`
 	var phase Phase
-	err := s.db.QueryRow(query, id).Scan(
+	err := s.db.QueryRowContext(ctx, query, id).Scan(
 		&phase.ID,
 		&phase.ProjectID,
 		&phase.Number,
@@ -687,6 +724,11 @@ func (s *Store) DeletePhase(id string) error {
 
 // SaveTask saves a task
 func (s *Store) SaveTask(task *Task) error {
+	return s.SaveTaskWithContext(context.Background(), task)
+}
+
+// SaveTaskWithContext saves a task with context
+func (s *Store) SaveTaskWithContext(ctx context.Context, task *Task) error {
 	query := `
 		INSERT INTO tasks (id, phase_id, number, description, status, started_at, completed_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -697,8 +739,8 @@ func (s *Store) SaveTask(task *Task) error {
 			started_at = excluded.started_at,
 			completed_at = excluded.completed_at
 	`
-	return executeWithRetry(s.db, 100, 3, func(tx *sql.Tx) error {
-		_, err := tx.Exec(query,
+	return executeWithRetryContext(ctx, s.db, 100, 3, func(tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, query,
 			task.ID,
 			task.PhaseID,
 			task.Number,
@@ -716,13 +758,18 @@ func (s *Store) SaveTask(task *Task) error {
 
 // GetTask retrieves a task by ID
 func (s *Store) GetTask(id string) (*Task, error) {
+	return s.GetTaskWithContext(context.Background(), id)
+}
+
+// GetTaskWithContext retrieves a task by ID with context
+func (s *Store) GetTaskWithContext(ctx context.Context, id string) (*Task, error) {
 	query := `
 		SELECT id, phase_id, number, description, status, started_at, completed_at
 		FROM tasks
 		WHERE id = ?
 	`
 	var task Task
-	err := s.db.QueryRow(query, id).Scan(
+	err := s.db.QueryRowContext(ctx, query, id).Scan(
 		&task.ID,
 		&task.PhaseID,
 		&task.Number,
@@ -742,6 +789,11 @@ func (s *Store) GetTask(id string) (*Task, error) {
 
 // UpdateTaskStatus updates the status of a task
 func (s *Store) UpdateTaskStatus(id string, status TaskStatus) error {
+	return s.UpdateTaskStatusWithContext(context.Background(), id, status)
+}
+
+// UpdateTaskStatusWithContext updates the status of a task with context
+func (s *Store) UpdateTaskStatusWithContext(ctx context.Context, id string, status TaskStatus) error {
 	now := time.Now()
 	var query string
 	var args []interface{}
@@ -770,7 +822,7 @@ func (s *Store) UpdateTaskStatus(id string, status TaskStatus) error {
 		args = []interface{}{status, id}
 	}
 
-	result, err := s.db.Exec(query, args...)
+	result, err := s.db.ExecContext(ctx, query, args...)
 	if err != nil {
 		return fmt.Errorf("failed to update task status: %w", err)
 	}

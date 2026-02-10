@@ -2,7 +2,6 @@ package executor
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
@@ -10,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mojomast/geoffrussy/internal/common"
 	"github.com/mojomast/geoffrussy/internal/logging"
 	"github.com/mojomast/geoffrussy/internal/provider"
 	"github.com/mojomast/geoffrussy/internal/security"
@@ -34,7 +34,7 @@ type TaskExecutor struct {
 }
 
 // NewTaskExecutor creates a new task executor that actually implements tasks
-func NewTaskExecutor(store *state.Store, prov provider.Provider, sendUpdateFn SendUpdateFunc, modelName string) *TaskExecutor {
+func NewTaskExecutor(ctx context.Context, store *state.Store, prov provider.Provider, sendUpdateFn SendUpdateFunc, modelName string) *TaskExecutor {
 	// Get current working directory as project root
 	projectRoot, err := os.Getwd()
 	if err != nil {
@@ -62,11 +62,16 @@ func NewTaskExecutor(store *state.Store, prov provider.Provider, sendUpdateFn Se
 	// Initialize structured logger
 	logger := logging.NewLogger(slog.LevelInfo, os.Stdout)
 
+	// Ensure context is not nil
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	return &TaskExecutor{
 		store:         store,
 		provider:      prov,
 		modelName:     modelName,
-		ctx:           context.Background(),
+		ctx:           ctx,
 		sendUpdate:    sendUpdateFn,
 		pathSanitizer: pathSanitizer,
 		auditLogger:   auditLogger,
@@ -104,7 +109,7 @@ func (te *TaskExecutor) ExecuteTask(taskID string) error {
 	te.taskID = taskID
 
 	// Get task from store
-	task, err := te.store.GetTask(taskID)
+	task, err := te.store.GetTaskWithContext(te.ctx, taskID)
 	if err != nil {
 		te.logger.Error("failed to get task",
 			"task_id", taskID,
@@ -113,7 +118,7 @@ func (te *TaskExecutor) ExecuteTask(taskID string) error {
 	}
 
 	// Get phase to understand context
-	phase, err := te.store.GetPhase(task.PhaseID)
+	phase, err := te.store.GetPhaseWithContext(te.ctx, task.PhaseID)
 	if err != nil {
 		te.logger.Error("failed to get phase",
 			"task_id", taskID,
@@ -126,7 +131,7 @@ func (te *TaskExecutor) ExecuteTask(taskID string) error {
 	te.phaseID = phase.ID
 
 	// Get project
-	project, err := te.store.GetProject(phase.ProjectID)
+	project, err := te.store.GetProjectWithContext(te.ctx, phase.ProjectID)
 	if err != nil {
 		te.logger.Error("failed to get project",
 			"task_id", taskID,
@@ -148,7 +153,7 @@ func (te *TaskExecutor) ExecuteTask(taskID string) error {
 		"phase_title", phase.Title)
 
 	// Get interview data for context
-	interviewData, err := te.store.GetInterviewData(project.ID)
+	interviewData, err := te.store.GetInterviewDataWithContext(te.ctx, project.ID)
 	if err != nil {
 		contextLogger.Error("failed to get interview data",
 			"error", err)
@@ -156,7 +161,7 @@ func (te *TaskExecutor) ExecuteTask(taskID string) error {
 	}
 
 	// Get architecture for context
-	architecture, err := te.store.GetArchitecture(project.ID)
+	architecture, err := te.store.GetArchitectureWithContext(te.ctx, project.ID)
 	if err != nil {
 		contextLogger.Error("failed to get architecture",
 			"error", err)
@@ -183,15 +188,12 @@ func (te *TaskExecutor) ExecuteTask(taskID string) error {
 	contextLogger.Info("calling LLM for code generation",
 		"model", modelName)
 
-	// Call LLM to generate code
+	// Call LLM to generate code using streaming
 	startTime := time.Now()
-	response, err := te.provider.Call(context.TODO(), modelName, prompt)
-	duration := time.Since(startTime)
-
+	streamChan, err := te.provider.Stream(te.ctx, modelName, prompt)
 	if err != nil {
 		contextLogger.Error("LLM call failed",
 			"model", modelName,
-			"duration_ms", duration.Milliseconds(),
 			"error", err)
 		te.sendUpdate(TaskUpdate{
 			TaskID:    taskID,
@@ -204,23 +206,54 @@ func (te *TaskExecutor) ExecuteTask(taskID string) error {
 		return fmt.Errorf("failed to call LLM: %w", err)
 	}
 
+	// Accumulate response
+	var responseBuilder strings.Builder
+	var lastUpdate time.Time
+
+	// Stream processing loop
+	for chunk := range streamChan {
+		responseBuilder.WriteString(chunk)
+
+		// Update TUI periodically to avoid spamming (e.g. every 500ms)
+		if time.Since(lastUpdate) > 500*time.Millisecond {
+			contentLen := responseBuilder.Len()
+			te.sendUpdate(TaskUpdate{
+				TaskID:    taskID,
+				PhaseID:   phase.ID,
+				Type:      TaskProgress,
+				Content:   fmt.Sprintf("Generating code... (%d chars received)", contentLen),
+				Timestamp: time.Now(),
+			})
+			lastUpdate = time.Now()
+		}
+
+		// Check for context cancellation
+		select {
+		case <-te.ctx.Done():
+			return fmt.Errorf("task execution cancelled: %w", te.ctx.Err())
+		default:
+		}
+	}
+
+	fullResponse := responseBuilder.String()
+	duration := time.Since(startTime)
+
 	contextLogger.Info("LLM call completed",
 		"model", modelName,
-		"tokens_input", response.TokensInput,
-		"tokens_output", response.TokensOutput,
+		"response_length", len(fullResponse),
 		"duration_ms", duration.Milliseconds())
 
 	te.sendUpdate(TaskUpdate{
 		TaskID:    taskID,
 		PhaseID:   phase.ID,
 		Type:      TaskProgress,
-		Content:   fmt.Sprintf("LLM responded with %d tokens", response.TokensInput+response.TokensOutput),
+		Content:   fmt.Sprintf("LLM response complete (%d chars)", len(fullResponse)),
 		Timestamp: time.Now(),
 	})
 
 	// Parse response
 	var codeResp CodeGenerationResponse
-	if err := json.Unmarshal([]byte(response.Content), &codeResp); err != nil {
+	if err := common.ParseJSON(fullResponse, &codeResp); err != nil {
 		// If JSON parsing fails, treat as entire response as code
 		contextLogger.Warn("JSON parsing failed, treating response as markdown",
 			"error", err)
@@ -232,11 +265,11 @@ func (te *TaskExecutor) ExecuteTask(taskID string) error {
 			Timestamp: time.Now(),
 		})
 		codeResp = CodeGenerationResponse{
-			Explanation: response.Content,
+			Explanation: fullResponse,
 			Files: []File{
 				{
 					Path:    "output.md",
-					Content: response.Content,
+					Content: fullResponse,
 				},
 			},
 		}
@@ -433,6 +466,13 @@ func (te *TaskExecutor) writeFile(file File) error {
 
 // writeFileSafe validates the file path and content, then writes the file with audit logging
 func (te *TaskExecutor) writeFileSafe(file File) error {
+	// Check context
+	select {
+	case <-te.ctx.Done():
+		return te.ctx.Err()
+	default:
+	}
+
 	// Validate path using PathSanitizer before writing
 	safePath, err := te.pathSanitizer.ValidatePath(file.Path)
 	if err != nil {
