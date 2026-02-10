@@ -87,7 +87,8 @@ func runDevelop(cmd *cobra.Command, args []string) error {
 
 	// 4. Initialize Components
 	interviewEngine := interview.NewEngine(store, prov, modelName)
-	devplanGenerator := devplan.NewGenerator(prov, modelName)
+	// Pass nil cache for now; cache wiring can be added later
+	devplanGenerator := devplan.NewGenerator(prov, modelName, nil)
 
 	// We initialize these even if not strictly used by current Executor implementation
 	// to ensure all components are ready for the "full implementation" context.

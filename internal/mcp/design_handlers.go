@@ -118,7 +118,8 @@ func (h *DesignHandlers) handleGenerateDesign(ctx context.Context, args map[stri
 		return ErrorResult(fmt.Sprintf("Failed to initialize provider: %v", err)), nil
 	}
 
-	generator := design.NewGenerator(prov, modelName)
+	// Pass nil cache for now; caching can be wired later when a CacheStore is available
+	generator := design.NewGenerator(prov, modelName, nil)
 
 	arch, err := generator.GenerateArchitecture(interviewData)
 	if err != nil {
@@ -196,7 +197,8 @@ func (h *DesignHandlers) handleRegenerateDesign(ctx context.Context, args map[st
 		return ErrorResult(fmt.Sprintf("Failed to initialize provider: %v", err)), nil
 	}
 
-	generator := design.NewGenerator(prov, modelName)
+	// Pass nil cache for now; caching can be wired later when a CacheStore is available
+	generator := design.NewGenerator(prov, modelName, nil)
 
 	var arch *design.Architecture
 	var refinedSections []string

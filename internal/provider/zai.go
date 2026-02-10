@@ -146,7 +146,7 @@ func (z *ZAIProvider) Call(ctx context.Context, model string, prompt string) (*R
 				},
 			},
 			Temperature: 0.7,
-			MaxTokens:   4096,
+			MaxTokens:   8192,
 		}
 
 		jsonData, err := json.Marshal(req)
@@ -246,7 +246,7 @@ func (z *ZAIProvider) Stream(ctx context.Context, model string, prompt string) (
 		},
 		Stream:      true,
 		Temperature: 0.7,
-		MaxTokens:   4096,
+		MaxTokens:   8192,
 	}
 
 	jsonData, err := json.Marshal(req)

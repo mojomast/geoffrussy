@@ -104,7 +104,7 @@ func (h *PlanHandlers) handleCreateDevPlan(ctx context.Context, args map[string]
 		return ErrorResult(fmt.Sprintf("Failed to initialize provider: %v", err)), nil
 	}
 
-	generator := devplan.NewGenerator(prov, modelName)
+	generator := devplan.NewGenerator(prov, modelName, nil)
 
 	phases, err := generator.GeneratePhases(&designArch, interviewData)
 	if err != nil {

@@ -42,6 +42,17 @@ test-integration:
 	@echo "Running integration tests..."
 	$(GO) test -v -tags=integration ./test/integration/...
 
+## test-pipeline: Run full pipeline integration test with ZAI provider
+test-pipeline:
+	@echo "Running full pipeline test with ZAI provider (glm-4.7)..."
+	@echo "This will use real API calls and may take several minutes..."
+	INTEGRATION_TEST=1 $(GO) test -v -tags=integration -run TestFullPipelineZAI ./test/integration/... -timeout 10m
+
+## test-pipeline-simple: Run simple devplan execution test
+test-pipeline-simple:
+	@echo "Running simple devplan test..."
+	INTEGRATION_TEST=1 $(GO) test -v -tags=integration -run TestSimpleDevPlanExecution ./test/integration/... -timeout 5m
+
 ## clean: Remove build artifacts
 clean:
 	@echo "Cleaning..."
