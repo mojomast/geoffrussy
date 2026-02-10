@@ -85,6 +85,23 @@ var migrations = []Migration{
 			CREATE INDEX IF NOT EXISTS idx_rate_limits_provider ON rate_limits(provider);
 		`,
 	},
+	{
+		Version:     3,
+		Description: "Add cache table",
+		Up: `
+			CREATE TABLE IF NOT EXISTS cache (
+				key TEXT PRIMARY KEY,
+				value TEXT NOT NULL,
+				created_at TIMESTAMP NOT NULL,
+				expires_at TIMESTAMP
+			);
+
+			CREATE INDEX IF NOT EXISTS idx_cache_expires_at ON cache(expires_at);
+		`,
+		Down: `
+			DROP TABLE IF EXISTS cache;
+		`,
+	},
 }
 
 // MigrationManager handles database migrations

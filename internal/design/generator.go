@@ -2,26 +2,41 @@ package design
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log/slog"
+	"os"
 	"strings"
 	"time"
 
+	"github.com/mojomast/geoffrussy/internal/logging"
 	"github.com/mojomast/geoffrussy/internal/provider"
 	"github.com/mojomast/geoffrussy/internal/state"
 )
+
+// CacheStore interface for caching AI responses
+type CacheStore interface {
+	GetCache(key string) (string, error)
+	SetCache(key string, value string, ttl time.Duration) error
+}
 
 // Generator generates system architecture from interview data
 type Generator struct {
 	provider provider.Provider
 	model    string
+	cache    CacheStore
+	logger   *logging.Logger
 }
 
 // NewGenerator creates a new design generator
-func NewGenerator(provider provider.Provider, model string) *Generator {
+func NewGenerator(provider provider.Provider, model string, cache CacheStore) *Generator {
 	return &Generator{
 		provider: provider,
 		model:    model,
+		cache:    cache,
+		logger:   logging.NewLogger(slog.LevelInfo, os.Stdout),
 	}
 }
 
@@ -189,6 +204,24 @@ func (g *Generator) GenerateArchitecture(interviewData *state.InterviewData) (*A
 
 	// Create the architecture prompt
 	prompt := g.buildArchitecturePrompt(interviewData)
+	cacheKey := g.generateCacheKey(prompt)
+
+	var content string
+
+	// Check cache
+	if g.cache != nil {
+		cached, err := g.cache.GetCache(cacheKey)
+		if err == nil && cached != "" {
+			// Verify cached content is valid
+			arch, parseErr := parseArchitectureJSON(cached, interviewData.ProjectID)
+			if parseErr == nil {
+				g.logger.Info("Using cached architecture design")
+				arch.CreatedAt = time.Now()
+				return arch, nil
+			}
+			g.logger.Warn("Cached architecture invalid, regenerating", "error", parseErr)
+		}
+	}
 
 	// Try to generate and parse architecture with retry logic
 	maxRetries := 2
@@ -200,22 +233,33 @@ func (g *Generator) GenerateArchitecture(interviewData *state.InterviewData) (*A
 		if err != nil {
 			return nil, fmt.Errorf("failed to generate architecture: %w", err)
 		}
+		content = response.Content
 
 		// Try to parse the response using JSON parsing
-		architecture, err := parseArchitectureJSON(response.Content, interviewData.ProjectID)
+		architecture, err := parseArchitectureJSON(content, interviewData.ProjectID)
 		if err == nil {
-			// Success! Set additional fields and return
+			// Success! Cache response and return
+			if g.cache != nil {
+				if err := g.cache.SetCache(cacheKey, content, 7*24*time.Hour); err != nil {
+					g.logger.Warn("Failed to cache response", "error", err)
+				}
+			}
 			architecture.CreatedAt = time.Now()
 			return architecture, nil
 		}
 
-		// Parsing failed, save the error
+		// Parsing failed, log it and save the error
+		g.logger.Warn("Failed to parse architecture JSON",
+			"attempt", attempt+1,
+			"error", err,
+			"raw_content", content,
+		)
 		lastErr = err
 
 		// If we've exhausted retries, try graceful degradation
 		if attempt >= maxRetries {
 			// Try parsing with fallback for partial architecture
-			fallbackArch, warnings, parseErr := parseArchitectureWithFallback(response.Content, interviewData.ProjectID)
+			fallbackArch, warnings, parseErr := parseArchitectureWithFallback(content, interviewData.ProjectID)
 			if parseErr == nil && fallbackArch != nil {
 				// Return partial architecture with warnings
 				fallbackArch.CreatedAt = time.Now()
@@ -225,11 +269,21 @@ func (g *Generator) GenerateArchitecture(interviewData *state.InterviewData) (*A
 		}
 
 		// Create a clarification prompt for retry
-		prompt = g.buildClarificationPrompt(response.Content, err)
+		prompt = g.buildClarificationPrompt(content, err)
 	}
 
 	// All retries exhausted and fallback failed
-	return nil, fmt.Errorf("failed to parse architecture after %d attempts: %w", maxRetries+1, lastErr)
+	g.logger.Error("Failed to generate valid architecture after retries",
+		"error", lastErr,
+		"last_content", content,
+	)
+	return nil, fmt.Errorf("failed to parse architecture after %d attempts: %w. Check logs for raw output", maxRetries+1, lastErr)
+}
+
+// generateCacheKey generates a cache key for a prompt
+func (g *Generator) generateCacheKey(prompt string) string {
+	hash := sha256.Sum256([]byte(prompt + g.model))
+	return hex.EncodeToString(hash[:])
 }
 
 // buildArchitecturePrompt creates the prompt for architecture generation
@@ -237,11 +291,11 @@ func (g *Generator) buildArchitecturePrompt(interviewData *state.InterviewData) 
 	prompt := `You are an expert software architect. Based on the following project requirements, generate a comprehensive system architecture.
 
 CRITICAL OUTPUT RULES:
-- Return ONLY valid JSON matching the schema below
-- Do NOT include markdown code fences (no ` + "```json" + ` or ` + "```" + `)
-- Do NOT include any text outside the JSON object
-- Ensure all required fields are present
-- Make recommendations concrete and implementation-ready
+1. Return ONLY valid JSON matching the schema below.
+2. Do NOT include markdown code fences (no ` + "```json" + ` or ` + "```" + `).
+3. Do NOT include any text outside the JSON object.
+4. Ensure all required fields are present.
+5. Make recommendations concrete and implementation-ready.
 
 PROJECT INFORMATION:
 Problem Statement: ` + interviewData.ProblemStatement + `

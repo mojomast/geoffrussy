@@ -107,7 +107,7 @@ func handlePlanGeneration(store *state.Store, cfgMgr *config.Manager, projectID 
 	fmt.Printf("   Using model: %s\n", modelName)
 	printProviderUsageSnapshot(providerName, prov)
 
-	generator := devplan.NewGenerator(prov, modelName)
+	generator := devplan.NewGenerator(prov, modelName, store)
 
 	phases, err := generator.GeneratePhases(designArch, interviewData)
 	if err != nil {
@@ -201,7 +201,7 @@ func handlePlanManipulation(store *state.Store, projectID string) error {
 	}
 
 	// Create generator (needed for manipulation methods)
-	generator := devplan.NewGenerator(nil, "")
+	generator := devplan.NewGenerator(nil, "", store)
 
 	if planMerge != "" {
 		return executeMerge(store, generator, phases, projectID, planMerge)

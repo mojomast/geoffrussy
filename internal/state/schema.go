@@ -143,4 +143,14 @@ CREATE INDEX IF NOT EXISTS idx_rate_limits_provider ON rate_limits(provider);
 CREATE INDEX IF NOT EXISTS idx_quotas_provider ON quotas(provider);
 CREATE INDEX IF NOT EXISTS idx_blockers_task_id ON blockers(task_id);
 CREATE INDEX IF NOT EXISTS idx_checkpoints_project_id ON checkpoints(project_id);
+
+-- Cache table
+CREATE TABLE IF NOT EXISTS cache (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    created_at TIMESTAMP NOT NULL,
+    expires_at TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_cache_expires_at ON cache(expires_at);
 `
