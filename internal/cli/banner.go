@@ -48,11 +48,13 @@ func Banner() string {
 				// Don't color spaces, just add them
 				result.WriteRune(char)
 			} else {
-				// Calculate gradient position based on character position relative to max width
-				t := float64(i) / float64(maxWidth-1)
-				if maxWidth <= 1 {
-					t = 0
-				}
+			// Calculate gradient position based on character position relative to max width
+			var t float64
+			if maxWidth <= 1 {
+				t = 0
+			} else {
+				t = float64(i) / float64(maxWidth-1)
+			}
 
 				// Blend colors
 				gradientColor := startColor.BlendLuv(endColor, t)
