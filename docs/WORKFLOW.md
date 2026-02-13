@@ -31,11 +31,27 @@ Status and ops:
 
 ## Stage Transition Notes
 
+- Interview uses AI-driven conversation by default (`--mode=chat`). The AI guides users through project essence, technical constraints, integrations, and scope. Use `--mode=guided` for traditional structured questions.
 - Interview completion persists session and advances stage to `design`.
 - Design generation/regeneration writes architecture to disk and DB, then sets stage `design`.
 - Plan generation persists phases/tasks and sets stage `plan`; current phase is set to first phase.
 - Review marks stage `review` and can apply improvements.
 - Develop sets stage `develop`, tracks current phase, and auto-promotes to `complete` when all tasks are done and unblocked.
+
+## Interview Flow
+
+The interview phase now features an interactive AI-driven conversation:
+
+1. AI greets user and asks about their project idea
+2. Natural back-and-forth gathers requirements across 4 areas:
+   - Project Essence (problem, users, value proposition)
+   - Technical Constraints (stack, performance, scale)
+   - Integration Points (APIs, database, authentication)
+   - Scope Definition (MVP features, timeline)
+3. AI detects when sufficient information is gathered
+4. Structured summary is generated for design phase
+
+Sessions are persisted and can be resumed with `--resume`.
 
 ## MCP Parity
 

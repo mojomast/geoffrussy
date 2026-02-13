@@ -2,6 +2,30 @@
 
 Geoffrussy uses Bubble Tea/Bubbles/Lip Gloss for terminal UX.
 
+## Interview TUI (`interview`)
+
+The interview command uses an interactive chat-based TUI by default (`--tui=true`).
+
+Keys:
+
+- `enter` send message
+- `ctrl+s` show conversation summary
+- `ctrl+d` finish interview early
+- `ctrl+b` back to chat (from summary)
+- `?` toggle key help
+- `ctrl+c`/`esc` quit (saves session)
+- `up/down`, `j/k` scroll chat history
+
+The interview TUI shows:
+
+- scrollable conversation history
+- user messages (👤) and AI responses (🤖)
+- real-time typing input
+- conversation summary with topics covered
+- session persistence on exit
+
+Use `geoffrussy interview --tui=false` for simple readline mode.
+
 ## Execution Monitor (`develop`)
 
 Interactive monitor appears during `geoffrussy develop`.
