@@ -29,9 +29,7 @@ func init() {
 	rootCmd = &cobra.Command{
 		Use:   "geoffrussy",
 		Short: "Geoffrussy - AI-powered development orchestration platform",
-		Long: Banner() + `
-
-Geoffrussy is a next-generation AI-powered development orchestration platform
+		Long: `Geoffrussy is a next-generation AI-powered development orchestration platform
 that reimagines human-AI collaboration on software projects.
 
 The system prioritizes deep project understanding through a multi-stage iterative
@@ -39,10 +37,8 @@ pipeline: Interview → Architecture Design → DevPlan Generation → Phase Rev
 		Version: version,
 		RunE:    runRootWithResumeCheck,
 		PersistentPreRun: func(cmd *cobra.Command, args []string) {
-			// Don't print banner for help commands or MCP server
-			if !argsContains(args, "--help") && !argsContains(args, "-h") && cmd.Name() != "mcp-server" {
-				fmt.Print(Banner())
-				fmt.Println()
+			if cmd.Name() != "mcp-server" && cmd.Name() != "version" && cmd.Name() != "__complete" {
+				BannerAnimated()
 			}
 		},
 	}
@@ -69,15 +65,6 @@ pipeline: Interview → Architecture Design → DevPlan Generation → Phase Rev
 	rootCmd.AddCommand(resumeCmd)
 	rootCmd.AddCommand(navigateCmd)
 	rootCmd.AddCommand(mcpCmd)
-}
-
-func argsContains(args []string, s string) bool {
-	for _, arg := range args {
-		if arg == s {
-			return true
-		}
-	}
-	return false
 }
 
 var versionCmd = &cobra.Command{

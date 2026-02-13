@@ -1,14 +1,68 @@
 package cli
 
 import (
+	"fmt"
 	"strings"
+	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/lucasb-eyer/go-colorful"
 )
 
-// Banner returns the Geoffrussy ASCII art banner with a horizontal color gradient
-func Banner() string {
+type bannerModel struct {
+	lines       []string
+	currentLine int
+	lineVisible []bool
+	done        bool
+	startTime   time.Time
+}
+
+type tickMsg time.Time
+
+func doTick() tea.Cmd {
+	return tea.Tick(time.Millisecond*40, func(t time.Time) tea.Msg {
+		return tickMsg(t)
+	})
+}
+
+func (m bannerModel) Init() tea.Cmd {
+	return tea.Batch(
+		doTick(),
+	)
+}
+
+func (m bannerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg.(type) {
+	case tickMsg:
+		if m.currentLine < len(m.lines) {
+			m.lineVisible[m.currentLine] = true
+			m.currentLine++
+			return m, doTick()
+		}
+		m.done = true
+		return m, tea.Quit
+	}
+	return m, nil
+}
+
+func (m bannerModel) View() string {
+	var sb strings.Builder
+	for i, line := range m.lines {
+		if m.lineVisible[i] {
+			sb.WriteString(line)
+			if i < len(m.lines)-1 {
+				sb.WriteString("\r\n")
+			}
+		}
+	}
+	if !m.done {
+		sb.WriteString("\033[K")
+	}
+	return sb.String()
+}
+
+func bannerLines() []string {
 	bannerText := `
   /$$$$$$                       /$$$$$$   /$$$$$$                                                
  /$$__  $$                     /$$__  $$ /$$__  $$                                               
@@ -23,15 +77,10 @@ func Banner() string {
                                                                                         \______/  
 `
 
-	// Define gradient colors: cyan (#3CADFF) to purple (#BA3CFF)
-	// Using hardcoded valid hex values, so errors can be safely ignored
 	startColor, _ := colorful.Hex("#3CADFF")
 	endColor, _ := colorful.Hex("#BA3CFF")
 
-	// Split banner into lines
 	lines := strings.Split(bannerText, "\n")
-
-	// Find the maximum line width for gradient calculation
 	maxWidth := 0
 	for _, line := range lines {
 		if len(line) > maxWidth {
@@ -39,39 +88,57 @@ func Banner() string {
 		}
 	}
 
-	// Build the gradient banner
-	var result strings.Builder
-
-	for lineIdx, line := range lines {
+	var coloredLines []string
+	for _, line := range lines {
+		var result strings.Builder
 		for i, char := range line {
 			if char == ' ' {
-				// Don't color spaces, just add them
 				result.WriteRune(char)
 			} else {
-				// Calculate gradient position based on character position relative to max width
 				var t float64
 				if maxWidth <= 1 {
 					t = 0
 				} else {
 					t = float64(i) / float64(maxWidth-1)
 				}
-
-				// Blend colors
 				gradientColor := startColor.BlendLuv(endColor, t)
-
-				// Apply color to character and reset immediately after
 				coloredChar := lipgloss.NewStyle().
 					Foreground(lipgloss.Color(gradientColor.Hex())).
 					Render(string(char))
-
 				result.WriteString(coloredChar)
 			}
 		}
-		// Add newline after each line except the last to avoid extra trailing newlines
-		if lineIdx < len(lines)-1 {
-			result.WriteRune('\n')
-		}
+		coloredLines = append(coloredLines, result.String())
 	}
 
-	return result.String()
+	return coloredLines
+}
+
+func Banner() string {
+	return strings.Join(bannerLines(), "\n")
+}
+
+func BannerAnimated() {
+	lines := bannerLines()
+	lineVisible := make([]bool, len(lines))
+
+	model := bannerModel{
+		lines:       lines,
+		currentLine: 0,
+		lineVisible: lineVisible,
+		done:        false,
+		startTime:   time.Now(),
+	}
+
+	fmt.Print("\033[?25l")
+	defer fmt.Print("\033[?25h")
+
+	fmt.Print("\r\033[K")
+
+	p := tea.NewProgram(model, tea.WithoutRenderer())
+	if _, err := p.Run(); err != nil {
+		fmt.Print(Banner())
+	}
+
+	fmt.Print("\r\n")
 }
